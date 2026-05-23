@@ -1,0 +1,98 @@
+- main [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]: AI
+      - generic [ref=e7]:
+        - strong [ref=e8]: AI Web
+        - generic [ref=e9]: Robot Control
+    - navigation [ref=e10]:
+      - button "대시보드" [ref=e11] [cursor=pointer]
+      - button "로봇" [ref=e12] [cursor=pointer]
+      - button "임무" [ref=e13] [cursor=pointer]
+      - button "Live 관제" [ref=e14] [cursor=pointer]
+      - button "녹화" [ref=e15] [cursor=pointer]
+      - button "시스템" [ref=e16] [cursor=pointer]
+  - generic [ref=e17]:
+    - generic [ref=e18]:
+      - generic [ref=e19]:
+        - paragraph [ref=e20]: Control Center P0
+        - heading "로봇 관제 통합 시연" [level=1] [ref=e21]
+      - generic [ref=e22]:
+        - generic [ref=e23]: 연결됨
+        - button "새로고침" [ref=e24] [cursor=pointer]
+    - generic [ref=e25]:
+      - article [ref=e26]:
+        - text: 진행 임무
+        - strong [ref=e27]: 0건
+        - paragraph [ref=e28]: 임무를 시작하면 Live 관제가 활성화됩니다.
+      - article [ref=e29]:
+        - text: 로봇 상태
+        - strong [ref=e30]: 미등록
+        - paragraph [ref=e31]: 먼저 로봇 등록값을 발급하세요.
+      - article [ref=e32]:
+        - text: 영상 송출
+        - strong [ref=e33]: 대기
+        - paragraph [ref=e34]: Android Mock 연결 후 표시됩니다.
+      - article [ref=e35]:
+        - text: 녹화 청크
+        - strong [ref=e36]: 0개
+        - paragraph [ref=e37]: 진행 임무 기준으로 생성됩니다.
+    - generic [ref=e38]:
+      - article [ref=e39]:
+        - generic [ref=e40]:
+          - heading "운용 패널" [level=2] [ref=e41]
+          - generic [ref=e42]: 임무 없음
+        - generic [ref=e43]:
+          - generic [ref=e44]:
+            - generic [ref=e45]: Live 상태
+            - strong [ref=e46]: disconnected
+          - generic [ref=e47]:
+            - generic [ref=e48]: 로봇
+            - strong [ref=e49]: 미등록
+          - generic [ref=e50]:
+            - generic [ref=e51]: 센서 CO
+            - strong [ref=e52]: "- ppm"
+          - generic [ref=e53]:
+            - generic [ref=e54]: GPS
+            - strong [ref=e55]: GPS 대기
+          - generic [ref=e56]:
+            - generic [ref=e57]: 최근 녹화
+            - strong [ref=e58]: 대기
+        - article [ref=e59]:
+          - generic [ref=e60]:
+            - heading "연결 상태" [level=2] [ref=e61]
+            - generic [ref=e62]: 1/4
+          - generic [ref=e63]:
+            - generic [ref=e64]:
+              - generic [ref=e65]: 관제 API
+              - strong [ref=e66]: 정상
+              - generic [ref=e67]: health ok
+            - generic [ref=e68]:
+              - generic [ref=e69]: 로봇
+              - strong [ref=e70]: 미등록
+              - generic [ref=e71]: 등록 필요
+            - generic [ref=e72]:
+              - generic [ref=e73]: WebRTC
+              - strong [ref=e74]: 연결 안 됨
+              - generic [ref=e75]: 송출 대기
+            - generic [ref=e76]:
+              - generic [ref=e77]: 위치
+              - strong [ref=e78]: GPS 대기
+              - generic [ref=e79]: GPS 대기
+        - article [ref=e80]:
+          - generic [ref=e81]:
+            - heading "녹화 저장" [level=2] [ref=e82]
+            - generic [ref=e83]: 대기
+          - paragraph [ref=e84]: 진행 중인 임무가 시작되면 저장 청크가 생성됩니다.
+        - button "Live 연결" [disabled] [ref=e85]
+      - article [ref=e86]:
+        - generic [ref=e87]:
+          - heading "위치" [level=2] [ref=e88]
+          - generic [ref=e89]: GPS 대기
+        - generic [ref=e91]: GPS 대기
+        - generic [ref=e92]:
+          - generic [ref=e93]: Lat -
+          - generic [ref=e94]: Lng -
+        - generic [ref=e95]:
+          - generic [ref=e96]: 위치 미수신
+          - generic [ref=e97]: 오차 -

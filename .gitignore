@@ -1,0 +1,10 @@
+.DS_Store
+.runtime/
+apps/server/.runtime/
+
+apps/web/node_modules/
+apps/web/dist/
+apps/android-robot/.gradle/
+apps/android-robot/build/
+apps/android-robot/app/build/
+.playwright-mcp

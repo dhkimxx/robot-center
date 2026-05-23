@@ -1,0 +1,634 @@
+package store
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"robot-center/apps/server/internal/domain"
+)
+
+type MemoryStore struct {
+	mu sync.RWMutex
+
+	serverURL string
+
+	robotSeq   int
+	missionSeq int
+
+	robotsByCode map[string]domain.Robot
+	tokensByCode map[string]string
+	tokenHashes  map[string]string
+
+	missionsByCode        map[string]domain.Mission
+	streamingByRobotCode  map[string]domain.StreamingStatus
+	telemetryByMissionID  map[string][]domain.TelemetrySnapshot
+	sensorsByMissionID    map[string][]domain.SensorReading
+	recordingChunksByID   map[string]domain.RecordingChunk
+	recordingChunkKeyToID map[string]string
+}
+
+func NewMemoryStore(serverURL string) *MemoryStore {
+	return &MemoryStore{
+		serverURL:             serverURL,
+		robotsByCode:          map[string]domain.Robot{},
+		tokensByCode:          map[string]string{},
+		tokenHashes:           map[string]string{},
+		missionsByCode:        map[string]domain.Mission{},
+		streamingByRobotCode:  map[string]domain.StreamingStatus{},
+		telemetryByMissionID:  map[string][]domain.TelemetrySnapshot{},
+		sensorsByMissionID:    map[string][]domain.SensorReading{},
+		recordingChunksByID:   map[string]domain.RecordingChunk{},
+		recordingChunkKeyToID: map[string]string{},
+	}
+}
+
+func (s *MemoryStore) CreateRobot(_ context.Context, input CreateRobotInput) (domain.Robot, domain.RobotConnectionInfo, error) {
+	if input.DisplayName == "" {
+		return domain.Robot{}, domain.RobotConnectionInfo{}, errors.New("displayName is required")
+	}
+
+	now := time.Now().UTC()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.robotSeq++
+	robotCode := fmt.Sprintf("robot-%03d", s.robotSeq)
+	token := "rb_p0_" + randomHex(18)
+	robot := domain.Robot{
+		ID:          "rob_" + randomHex(12),
+		RobotCode:   robotCode,
+		DisplayName: input.DisplayName,
+		ModelName:   input.ModelName,
+		Status:      "offline",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	s.robotsByCode[robotCode] = robot
+	s.tokensByCode[robotCode] = token
+	s.tokenHashes[robotCode] = hashToken(token)
+
+	return robot, domain.RobotConnectionInfo{
+		ServerURL:  s.serverURL,
+		RobotCode:  robotCode,
+		RobotToken: token,
+	}, nil
+}
+
+func (s *MemoryStore) ListRobots(_ context.Context) ([]domain.Robot, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	robots := make([]domain.Robot, 0, len(s.robotsByCode))
+	for _, robot := range s.robotsByCode {
+		robots = append(robots, robot)
+	}
+	sort.Slice(robots, func(i, j int) bool {
+		return robots[i].RobotCode < robots[j].RobotCode
+	})
+	return robots, nil
+}
+
+func (s *MemoryStore) UpdateRobot(_ context.Context, robotCode string, input UpdateRobotInput) (domain.Robot, error) {
+	if input.DisplayName == "" {
+		return domain.Robot{}, errors.New("displayName is required")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	robot, ok := s.robotsByCode[robotCode]
+	if !ok {
+		return domain.Robot{}, ErrNotFound
+	}
+	robot.DisplayName = input.DisplayName
+	robot.ModelName = input.ModelName
+	robot.UpdatedAt = time.Now().UTC()
+	s.robotsByCode[robotCode] = robot
+	return robot, nil
+}
+
+func (s *MemoryStore) ArchiveRobot(_ context.Context, robotCode string) (domain.Robot, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	robot, ok := s.robotsByCode[robotCode]
+	if !ok {
+		return domain.Robot{}, ErrNotFound
+	}
+	for _, mission := range s.missionsByCode {
+		if missionHasRobotCode(mission, robotCode) && (mission.Status == "ready" || mission.Status == "active") {
+			return domain.Robot{}, ErrInvalidState
+		}
+	}
+	robot.Status = "offline"
+	robot.UpdatedAt = time.Now().UTC()
+	delete(s.robotsByCode, robotCode)
+	delete(s.tokensByCode, robotCode)
+	delete(s.tokenHashes, robotCode)
+	return robot, nil
+}
+
+func (s *MemoryStore) GetRobotConnectionInfo(_ context.Context, robotCode string) (domain.RobotConnectionInfo, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if _, ok := s.robotsByCode[robotCode]; !ok {
+		return domain.RobotConnectionInfo{}, ErrNotFound
+	}
+	token := s.tokensByCode[robotCode]
+	return domain.RobotConnectionInfo{
+		ServerURL:  s.serverURL,
+		RobotCode:  robotCode,
+		RobotToken: token,
+	}, nil
+}
+
+func (s *MemoryStore) RotateRobotConnectionToken(_ context.Context, robotCode string) (domain.RobotConnectionInfo, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, ok := s.robotsByCode[robotCode]; !ok {
+		return domain.RobotConnectionInfo{}, ErrNotFound
+	}
+	token := "rb_p0_" + randomHex(18)
+	s.tokensByCode[robotCode] = token
+	s.tokenHashes[robotCode] = hashToken(token)
+	return domain.RobotConnectionInfo{
+		ServerURL:  s.serverURL,
+		RobotCode:  robotCode,
+		RobotToken: token,
+	}, nil
+}
+
+func (s *MemoryStore) CreateMission(_ context.Context, input CreateMissionInput) (domain.Mission, error) {
+	if input.Name == "" {
+		return domain.Mission{}, errors.New("name is required")
+	}
+	if input.MissionType == "" {
+		return domain.Mission{}, errors.New("missionType is required")
+	}
+
+	now := time.Now().UTC()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	robotCodes := normalizeMissionRobotCodes(input)
+	for _, robotCode := range robotCodes {
+		if _, ok := s.robotsByCode[robotCode]; !ok {
+			return domain.Mission{}, fmt.Errorf("robotCode %s not found", robotCode)
+		}
+	}
+
+	s.missionSeq++
+	missionCode := fmt.Sprintf("mission-%03d", s.missionSeq)
+	mission := domain.Mission{
+		ID:          "mis_" + randomHex(12),
+		MissionCode: missionCode,
+		Name:        input.Name,
+		MissionType: input.MissionType,
+		Status:      "ready",
+		SiteNote:    input.SiteNote,
+		RobotCode:   firstString(robotCodes),
+		RobotCodes:  append([]string(nil), robotCodes...),
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	s.missionsByCode[missionCode] = mission
+	return mission, nil
+}
+
+func (s *MemoryStore) ListMissions(_ context.Context) ([]domain.Mission, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	missions := make([]domain.Mission, 0, len(s.missionsByCode))
+	for _, mission := range s.missionsByCode {
+		missions = append(missions, copyMission(mission))
+	}
+	sort.Slice(missions, func(i, j int) bool {
+		return missions[i].CreatedAt.After(missions[j].CreatedAt)
+	})
+	return missions, nil
+}
+
+func (s *MemoryStore) StartMission(_ context.Context, missionCode string) (domain.Mission, error) {
+	now := time.Now().UTC()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	mission, ok := s.missionsByCode[missionCode]
+	if !ok {
+		return domain.Mission{}, ErrNotFound
+	}
+	if mission.Status != "ready" {
+		return domain.Mission{}, ErrInvalidState
+	}
+	mission.Status = "active"
+	mission.StartedAt = &now
+	mission.UpdatedAt = now
+	s.missionsByCode[missionCode] = mission
+
+	for _, robotCode := range missionRobotCodes(mission) {
+		robot := s.robotsByCode[robotCode]
+		robot.Status = "assigned"
+		robot.UpdatedAt = now
+		s.robotsByCode[robotCode] = robot
+	}
+
+	return copyMission(mission), nil
+}
+
+func (s *MemoryStore) EndMission(_ context.Context, missionCode string) (domain.Mission, error) {
+	now := time.Now().UTC()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	mission, ok := s.missionsByCode[missionCode]
+	if !ok {
+		return domain.Mission{}, ErrNotFound
+	}
+	if mission.Status != "active" {
+		return domain.Mission{}, ErrInvalidState
+	}
+	mission.Status = "ended"
+	mission.EndedAt = &now
+	mission.UpdatedAt = now
+	s.missionsByCode[missionCode] = mission
+	for _, robotCode := range missionRobotCodes(mission) {
+		robot := s.robotsByCode[robotCode]
+		if robot.Status != "offline" {
+			robot.Status = "online"
+			robot.UpdatedAt = now
+			s.robotsByCode[robotCode] = robot
+		}
+	}
+	return copyMission(mission), nil
+}
+
+func (s *MemoryStore) ApplyHeartbeat(_ context.Context, input HeartbeatInput, bearerToken string) (domain.Robot, error) {
+	now := time.Now().UTC()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.authorizedLocked(input.RobotCode, bearerToken) {
+		return domain.Robot{}, ErrUnauthorized
+	}
+	robot, ok := s.robotsByCode[input.RobotCode]
+	if !ok {
+		return domain.Robot{}, ErrNotFound
+	}
+	status := input.State
+	if status == "" {
+		status = "online"
+	}
+	robot.Status = status
+	robot.LastSeenAt = &now
+	robot.UpdatedAt = now
+	s.robotsByCode[input.RobotCode] = robot
+	return robot, nil
+}
+
+func (s *MemoryStore) FindActiveMissionForRobot(_ context.Context, robotCode string, bearerToken string) (domain.Mission, bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if !s.authorizedLocked(robotCode, bearerToken) {
+		return domain.Mission{}, false, ErrUnauthorized
+	}
+	if _, ok := s.robotsByCode[robotCode]; !ok {
+		return domain.Mission{}, false, ErrNotFound
+	}
+
+	for _, mission := range s.missionsByCode {
+		if missionHasRobotCode(mission, robotCode) && mission.Status == "active" {
+			return copyMission(mission), true, nil
+		}
+	}
+	return domain.Mission{}, false, nil
+}
+
+func (s *MemoryStore) ApplyStreamingStatus(_ context.Context, status domain.StreamingStatus, bearerToken string) (domain.Robot, error) {
+	now := time.Now().UTC()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.authorizedLocked(status.RobotCode, bearerToken) {
+		return domain.Robot{}, ErrUnauthorized
+	}
+	robot, ok := s.robotsByCode[status.RobotCode]
+	if !ok {
+		return domain.Robot{}, ErrNotFound
+	}
+	robot.Status = status.Status
+	robot.LastStreamingAt = &now
+	robot.UpdatedAt = now
+	s.robotsByCode[status.RobotCode] = robot
+	s.streamingByRobotCode[status.RobotCode] = status
+	return robot, nil
+}
+
+func (s *MemoryStore) ListStreamingStatuses(_ context.Context) ([]domain.StreamingStatus, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	statuses := make([]domain.StreamingStatus, 0, len(s.streamingByRobotCode))
+	for _, status := range s.streamingByRobotCode {
+		statuses = append(statuses, status)
+	}
+	sort.Slice(statuses, func(i, j int) bool {
+		return statuses[i].RobotCode < statuses[j].RobotCode
+	})
+	return statuses, nil
+}
+
+func (s *MemoryStore) SaveTelemetry(_ context.Context, snapshot domain.TelemetrySnapshot) (domain.TelemetrySnapshot, error) {
+	now := time.Now().UTC()
+	if snapshot.ID == "" {
+		snapshot.ID = "tel_" + randomHex(12)
+	}
+	if snapshot.ReceivedAt.IsZero() {
+		snapshot.ReceivedAt = now
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	items := append(s.telemetryByMissionID[snapshot.MissionID], snapshot)
+	s.telemetryByMissionID[snapshot.MissionID] = trimTelemetry(items)
+	return snapshot, nil
+}
+
+func (s *MemoryStore) ListTelemetry(_ context.Context, missionID string) ([]domain.TelemetrySnapshot, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	items := append([]domain.TelemetrySnapshot(nil), s.telemetryByMissionID[missionID]...)
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].ReceivedAt.After(items[j].ReceivedAt)
+	})
+	return items, nil
+}
+
+func (s *MemoryStore) SaveSensorReading(_ context.Context, reading domain.SensorReading) (domain.SensorReading, error) {
+	now := time.Now().UTC()
+	if reading.ID == "" {
+		reading.ID = "sen_" + randomHex(12)
+	}
+	if reading.ReceivedAt.IsZero() {
+		reading.ReceivedAt = now
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	items := append(s.sensorsByMissionID[reading.MissionID], reading)
+	s.sensorsByMissionID[reading.MissionID] = trimSensors(items)
+	return reading, nil
+}
+
+func (s *MemoryStore) ListSensorReadings(_ context.Context, missionID string) ([]domain.SensorReading, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	items := append([]domain.SensorReading(nil), s.sensorsByMissionID[missionID]...)
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].ReceivedAt.After(items[j].ReceivedAt)
+	})
+	return items, nil
+}
+
+func (s *MemoryStore) FindRecordingTarget(_ context.Context, missionCode string, robotCode string) (RecordingTarget, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	mission, ok := s.missionsByCode[missionCode]
+	if !ok {
+		return RecordingTarget{}, ErrNotFound
+	}
+	if robotCode == "" {
+		robotCode = firstString(missionRobotCodes(mission))
+	}
+	if !missionHasRobotCode(mission, robotCode) {
+		return RecordingTarget{}, ErrInvalidState
+	}
+	robot, ok := s.robotsByCode[robotCode]
+	if !ok {
+		return RecordingTarget{}, ErrNotFound
+	}
+	mission.RobotCode = robotCode
+	return RecordingTarget{
+		Mission:   copyMission(mission),
+		RobotID:   robot.ID,
+		RobotCode: robotCode,
+	}, nil
+}
+
+func (s *MemoryStore) FindOrCreateRecordingSession(_ context.Context, missionID string, robotID string, _ int, _ time.Time) (string, error) {
+	return fmt.Sprintf("session-%s-%s", missionID, robotID), nil
+}
+
+func (s *MemoryStore) FindRecordingChunk(_ context.Context, recordingSessionID string, chunkIndex int) (domain.RecordingChunk, bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for _, chunk := range s.recordingChunksByID {
+		if chunk.RecordingSessionID == recordingSessionID && chunk.ChunkIndex == chunkIndex {
+			return chunk, true, nil
+		}
+	}
+	return domain.RecordingChunk{}, false, nil
+}
+
+func (s *MemoryStore) CreateRecordingChunk(_ context.Context, input CreateRecordingChunkInput) (domain.RecordingChunk, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	chunkKey := fmt.Sprintf("%s|%s|%d", input.MissionCode, input.RobotCode, input.Window.Index)
+	if chunkID := s.recordingChunkKeyToID[chunkKey]; chunkID != "" {
+		return s.recordingChunksByID[chunkID], nil
+	}
+	chunk := domain.RecordingChunk{
+		ID:                 "rec_" + randomHex(12),
+		RecordingSessionID: input.RecordingSessionID,
+		MissionID:          input.MissionID,
+		MissionCode:        input.MissionCode,
+		RobotCode:          input.RobotCode,
+		ChunkIndex:         input.Window.Index,
+		Status:             "recording",
+		StartedAt:          input.Window.StartedAt,
+		EndedAt:            input.Window.EndedAt,
+		DurationSeconds:    input.Window.DurationSeconds,
+		ManifestObjectKey:  input.MediaObjectKeys["manifest"],
+		MediaObjectKeys:    input.MediaObjectKeys,
+		AvailableFileTypes: map[string]bool{},
+		CreatedAt:          input.CreatedAt,
+		UpdatedAt:          input.UpdatedAt,
+	}
+	s.recordingChunkKeyToID[chunkKey] = chunk.ID
+	s.recordingChunksByID[chunk.ID] = chunk
+	return chunk, nil
+}
+
+func (s *MemoryStore) MarkRecordingChunkUploaded(_ context.Context, chunkID string, _ RecordingUploadMetadata) (domain.RecordingChunk, error) {
+	now := time.Now().UTC()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	chunk, ok := s.recordingChunksByID[chunkID]
+	if !ok {
+		return domain.RecordingChunk{}, ErrNotFound
+	}
+	chunk.Status = "uploaded"
+	if chunk.AvailableFileTypes == nil {
+		chunk.AvailableFileTypes = map[string]bool{}
+	}
+	chunk.AvailableFileTypes["manifest"] = true
+	chunk.UpdatedAt = now
+	s.recordingChunksByID[chunk.ID] = chunk
+	return chunk, nil
+}
+
+func (s *MemoryStore) MarkRecordingFileUploaded(_ context.Context, chunkID string, fileType string, _ RecordingUploadMetadata) (domain.RecordingChunk, error) {
+	now := time.Now().UTC()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	chunk, ok := s.recordingChunksByID[chunkID]
+	if !ok {
+		return domain.RecordingChunk{}, ErrNotFound
+	}
+	if chunk.AvailableFileTypes == nil {
+		chunk.AvailableFileTypes = map[string]bool{}
+	}
+	chunk.AvailableFileTypes[fileType] = true
+	chunk.UpdatedAt = now
+	s.recordingChunksByID[chunk.ID] = chunk
+	return chunk, nil
+}
+
+func (s *MemoryStore) ListRecordingChunks(_ context.Context) ([]domain.RecordingChunk, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	chunks := make([]domain.RecordingChunk, 0, len(s.recordingChunksByID))
+	for _, chunk := range s.recordingChunksByID {
+		chunks = append(chunks, chunk)
+	}
+	sort.Slice(chunks, func(i, j int) bool {
+		if chunks[i].StartedAt.Equal(chunks[j].StartedAt) {
+			return chunks[i].MissionCode < chunks[j].MissionCode
+		}
+		return chunks[i].StartedAt.After(chunks[j].StartedAt)
+	})
+	return chunks, nil
+}
+
+func (s *MemoryStore) RecordingTargets(_ context.Context) ([]domain.Mission, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	targets := make([]domain.Mission, 0)
+	for _, mission := range s.missionsByCode {
+		if mission.Status != "active" {
+			continue
+		}
+		for _, robotCode := range missionRobotCodes(mission) {
+			target := copyMission(mission)
+			target.RobotCode = robotCode
+			targets = append(targets, target)
+		}
+	}
+	sort.Slice(targets, func(i, j int) bool {
+		return targets[i].MissionCode < targets[j].MissionCode
+	})
+	return targets, nil
+}
+
+func normalizeMissionRobotCodes(input CreateMissionInput) []string {
+	codes := make([]string, 0, len(input.RobotCodes)+1)
+	if strings.TrimSpace(input.RobotCode) != "" {
+		codes = append(codes, input.RobotCode)
+	}
+	codes = append(codes, input.RobotCodes...)
+	return normalizeRobotCodes(codes)
+}
+
+func normalizeRobotCodes(codes []string) []string {
+	seen := map[string]struct{}{}
+	normalized := make([]string, 0, len(codes))
+	for _, code := range codes {
+		trimmed := strings.TrimSpace(code)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		normalized = append(normalized, trimmed)
+	}
+	return normalized
+}
+
+func copyMission(mission domain.Mission) domain.Mission {
+	mission.RobotCodes = append([]string(nil), mission.RobotCodes...)
+	return mission
+}
+
+func missionHasRobotCode(mission domain.Mission, robotCode string) bool {
+	robotCode = strings.TrimSpace(robotCode)
+	if robotCode == "" {
+		return false
+	}
+	for _, assignedRobotCode := range missionRobotCodes(mission) {
+		if assignedRobotCode == robotCode {
+			return true
+		}
+	}
+	return false
+}
+
+func missionRobotCodes(mission domain.Mission) []string {
+	if len(mission.RobotCodes) > 0 {
+		return mission.RobotCodes
+	}
+	if strings.TrimSpace(mission.RobotCode) == "" {
+		return nil
+	}
+	return []string{strings.TrimSpace(mission.RobotCode)}
+}
+
+func firstString(values []string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	return values[0]
+}
+
+func trimTelemetry(items []domain.TelemetrySnapshot) []domain.TelemetrySnapshot {
+	if len(items) <= 300 {
+		return items
+	}
+	return append([]domain.TelemetrySnapshot(nil), items[len(items)-300:]...)
+}
+
+func trimSensors(items []domain.SensorReading) []domain.SensorReading {
+	if len(items) <= 300 {
+		return items
+	}
+	return append([]domain.SensorReading(nil), items[len(items)-300:]...)
+}
+
+func (s *MemoryStore) authorizedLocked(robotCode string, bearerToken string) bool {
+	if robotCode == "" || bearerToken == "" {
+		return false
+	}
+	return s.tokenHashes[robotCode] == hashToken(bearerToken)
+}

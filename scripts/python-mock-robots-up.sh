@@ -1,0 +1,319 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/dev-common.sh"
+
+MOCK_SESSION_PREFIX="robot-center-pyrobot"
+PYTHON_MOCK_DIR="$ROOT_DIR/apps/mock-robot-python"
+PYTHON_VENV_DIR="$ROOT_DIR/.runtime/python-mock-robot-venv"
+BUNDLED_PYTHON="/Users/dhkim/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3"
+if [[ -z "${PYTHON_BIN:-}" ]]; then
+  if [[ -x "$BUNDLED_PYTHON" ]]; then
+    PYTHON_BIN="$BUNDLED_PYTHON"
+  else
+    PYTHON_BIN="$(command -v python3)"
+  fi
+fi
+APP_SERVER_URL="${APP_SERVER_URL:-http://127.0.0.1:$APP_PORT}"
+MOCK_ROBOT_COUNT="${MOCK_ROBOT_COUNT:-2}"
+MOCK_SHARED_MISSION="${MOCK_SHARED_MISSION:-1}"
+MOCK_MISSION_CODE="${MOCK_MISSION_CODE:-}"
+MOCK_ROOM_ID="${MOCK_ROOM_ID:-}"
+MOCK_RGB_WIDTH="${MOCK_RGB_WIDTH:-1280}"
+MOCK_RGB_HEIGHT="${MOCK_RGB_HEIGHT:-720}"
+MOCK_THERMAL_WIDTH="${MOCK_THERMAL_WIDTH:-640}"
+MOCK_THERMAL_HEIGHT="${MOCK_THERMAL_HEIGHT:-480}"
+MOCK_FPS="${MOCK_FPS:-15}"
+
+json_get() {
+  local code="$1"
+  shift
+  /usr/bin/python3 -c "$code" "$@"
+}
+
+ensure_python_venv() {
+  if [[ -x "$PYTHON_VENV_DIR/bin/python" ]]; then
+    if ! "$PYTHON_VENV_DIR/bin/python" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' >/dev/null 2>&1; then
+      rm -rf "$PYTHON_VENV_DIR"
+    fi
+  fi
+  if [[ ! -x "$PYTHON_VENV_DIR/bin/python" ]]; then
+    "$PYTHON_BIN" -m venv "$PYTHON_VENV_DIR"
+  fi
+  printf 'python: %s\n' "$("$PYTHON_VENV_DIR/bin/python" --version)"
+  "$PYTHON_VENV_DIR/bin/python" -m pip install --upgrade pip >/dev/null
+  "$PYTHON_VENV_DIR/bin/python" -m pip install -r "$PYTHON_MOCK_DIR/requirements.txt"
+}
+
+ensure_robot_count() {
+  local robot_count
+  robot_count="$(curl -fsS "$APP_SERVER_URL/api/robots" | json_get 'import json,sys; print(len(json.load(sys.stdin).get("robots", [])))')"
+  while (( robot_count < MOCK_ROBOT_COUNT )); do
+    curl -fsS -X POST "$APP_SERVER_URL/api/robots" \
+      -H 'Content-Type: application/json' \
+      -d '{"displayName":"Python Mock Robot","modelName":"Python Mock"}' >/dev/null
+    robot_count=$((robot_count + 1))
+  done
+}
+
+robot_code_at() {
+  local index="$1"
+  curl -fsS "$APP_SERVER_URL/api/robots" | json_get '
+import json,sys
+index = int(sys.argv[1])
+robots = sorted(json.load(sys.stdin).get("robots", []), key=lambda item: item.get("robotCode", ""))
+print(robots[index]["robotCode"])
+' "$index"
+}
+
+connection_token_for() {
+  local robot_code="$1"
+  curl -fsS "$APP_SERVER_URL/api/robots/$robot_code/connection-info" | json_get '
+import json,sys
+print(json.load(sys.stdin)["connectionInfo"]["robotToken"])
+'
+}
+
+active_mission_for_robot() {
+  local robot_code="$1"
+  curl -fsS "$APP_SERVER_URL/api/missions" | json_get '
+import json,sys
+robot_code = sys.argv[1]
+missions = json.load(sys.stdin).get("missions", [])
+for mission in missions:
+    if mission.get("robotCode") == robot_code and mission.get("status") == "active":
+        print(mission["missionCode"])
+        break
+' "$robot_code"
+}
+
+ready_mission_for_robot() {
+  local robot_code="$1"
+  curl -fsS "$APP_SERVER_URL/api/missions" | json_get '
+import json,sys
+robot_code = sys.argv[1]
+missions = json.load(sys.stdin).get("missions", [])
+for mission in missions:
+    if mission.get("robotCode") == robot_code and mission.get("status") == "ready":
+        print(mission["missionCode"])
+        break
+' "$robot_code"
+}
+
+mission_field() {
+  local field="$1"
+  json_get '
+import json,sys
+field = sys.argv[1]
+value = json.load(sys.stdin).get(field, "")
+print("" if value is None else value)
+' "$field"
+}
+
+select_shared_mission() {
+  local mission_code="$1"
+  shift || true
+  curl -fsS "$APP_SERVER_URL/api/missions" | json_get '
+import json,sys
+mission_code = sys.argv[1]
+required_robot_codes = set(sys.argv[2:])
+missions = json.load(sys.stdin).get("missions", [])
+candidate = None
+if mission_code:
+    candidate = next((mission for mission in missions if mission.get("missionCode") == mission_code), None)
+else:
+    for status in ("active", "ready"):
+        for mission in missions:
+            if mission.get("status") != status:
+                continue
+            robot_codes = set(mission.get("robotCodes") or [])
+            if mission.get("robotCode"):
+                robot_codes.add(mission.get("robotCode"))
+            if required_robot_codes.issubset(robot_codes):
+                candidate = mission
+                break
+        if candidate is not None:
+            break
+if candidate is not None:
+    print(json.dumps(candidate))
+' "$mission_code" "$@"
+}
+
+create_shared_mission() {
+  local robot_codes=("$@")
+  local payload
+  payload="$(json_get '
+import json,sys
+robot_codes = [code for code in sys.argv[1:] if code]
+print(json.dumps({
+    "name": "Python Multi-Robot Mock Demo",
+    "missionType": "mountain_rescue",
+    "siteNote": "created by python mock script for shared mission room",
+    "robotCode": robot_codes[0] if robot_codes else "",
+    "robotCodes": robot_codes,
+}))
+' "${robot_codes[@]}")"
+  curl -fsS -X POST "$APP_SERVER_URL/api/missions" \
+    -H 'Content-Type: application/json' \
+    -d "$payload" \
+    | json_get 'import json,sys; print(json.dumps(json.load(sys.stdin)["mission"]))'
+}
+
+start_mission_payload() {
+  local mission_code="$1"
+  curl -fsS -X POST "$APP_SERVER_URL/api/missions/$mission_code/start" \
+    | json_get 'import json,sys; print(json.dumps(json.load(sys.stdin)["mission"]))'
+}
+
+ensure_shared_active_mission() {
+  local robot_codes=("$@")
+  local mission_payload
+  mission_payload="$(select_shared_mission "$MOCK_MISSION_CODE" "${robot_codes[@]}")"
+  if [[ -z "$mission_payload" ]]; then
+    mission_payload="$(create_shared_mission "${robot_codes[@]}")"
+  fi
+
+  local mission_status
+  mission_status="$(printf '%s' "$mission_payload" | mission_field status)"
+  local mission_code
+  mission_code="$(printf '%s' "$mission_payload" | mission_field missionCode)"
+  case "$mission_status" in
+    active)
+      printf '%s\n' "$mission_payload"
+      ;;
+    ready)
+      start_mission_payload "$mission_code"
+      ;;
+    *)
+      printf 'shared mission %s is not startable: %s\n' "$mission_code" "$mission_status" >&2
+      return 1
+      ;;
+  esac
+}
+
+rtc_field() {
+  local field="$1"
+  json_get '
+import json,sys
+payload = json.load(sys.stdin)
+field = sys.argv[1]
+if field == "signalingUrl":
+    print(payload.get("signalingUrl", ""))
+    raise SystemExit
+servers = payload.get("iceServers", [])
+server = servers[0] if servers else {}
+if field == "turnUrl":
+    urls = server.get("urls", [])
+    if isinstance(urls, str):
+        print(urls)
+    elif urls:
+        print(urls[0])
+    else:
+        print("")
+elif field == "turnUsername":
+    print(server.get("username", ""))
+elif field == "turnPassword":
+    print(server.get("credential", ""))
+' "$field"
+}
+
+ensure_active_mission_for_robot() {
+  local robot_code="$1"
+  local active_mission_code
+  active_mission_code="$(active_mission_for_robot "$robot_code")"
+  if [[ -n "$active_mission_code" ]]; then
+    printf '%s\n' "$active_mission_code"
+    return
+  fi
+
+  local ready_mission_code
+  ready_mission_code="$(ready_mission_for_robot "$robot_code")"
+  if [[ -z "$ready_mission_code" ]]; then
+    ready_mission_code="$(curl -fsS -X POST "$APP_SERVER_URL/api/missions" \
+      -H 'Content-Type: application/json' \
+      -d '{"name":"Python Mock Demo","missionType":"mountain_rescue","siteNote":"created by python mock script","robotCode":"'"$robot_code"'"}' \
+      | json_get 'import json,sys; print(json.load(sys.stdin)["mission"]["missionCode"])')"
+  fi
+  curl -fsS -X POST "$APP_SERVER_URL/api/missions/$ready_mission_code/start" >/dev/null
+  printf '%s\n' "$ready_mission_code"
+}
+
+start_mock_robot() {
+  local index="$1"
+  local robot_code="$2"
+  local robot_token="$3"
+  local mission_id="${4:-}"
+  local mission_code="${5:-}"
+  local room_id="${6:-}"
+  local signaling_url="${7:-}"
+  local turn_url="${8:-}"
+  local turn_username="${9:-}"
+  local turn_password="${10:-}"
+  local session_name
+  local mission_args=""
+  if [[ -n "$mission_id" ]]; then
+    mission_args="--mission-id '$mission_id' --mission-code '$mission_code' --room-id '$room_id' --signaling-url '$signaling_url' --turn-url '$turn_url' --turn-username '$turn_username' --turn-password '$turn_password'"
+  fi
+  session_name="$(printf '%s-%03d' "$MOCK_SESSION_PREFIX" "$((index + 1))")"
+  start_screen_session "$session_name" "cd '$PYTHON_MOCK_DIR' && \
+'$PYTHON_VENV_DIR/bin/python' mock_robot.py \
+  --server-url '$APP_SERVER_URL' \
+  --robot-code '$robot_code' \
+  --robot-token '$robot_token' \
+  --rgb-width '$MOCK_RGB_WIDTH' \
+  --rgb-height '$MOCK_RGB_HEIGHT' \
+  --thermal-width '$MOCK_THERMAL_WIDTH' \
+  --thermal-height '$MOCK_THERMAL_HEIGHT' \
+  --fps '$MOCK_FPS' \
+  $mission_args"
+}
+
+wait_for_http "$APP_SERVER_URL/healthz" "app-server"
+ensure_python_venv
+ensure_robot_count
+
+printf 'starting python mock robots against %s\n' "$APP_SERVER_URL"
+shared_mission_id=""
+shared_mission_code=""
+shared_room_id=""
+shared_signaling_url=""
+shared_turn_url=""
+shared_turn_username=""
+shared_turn_password=""
+if [[ "$MOCK_SHARED_MISSION" == "1" ]]; then
+  shared_robot_codes=()
+  for index in $(seq 0 "$((MOCK_ROBOT_COUNT - 1))"); do
+    shared_robot_codes+=("$(robot_code_at "$index")")
+  done
+  shared_mission_payload="$(ensure_shared_active_mission "${shared_robot_codes[@]}")"
+  shared_mission_id="$(printf '%s' "$shared_mission_payload" | mission_field id)"
+  if [[ -z "$shared_mission_id" ]]; then
+    shared_mission_id="$(printf '%s' "$shared_mission_payload" | mission_field missionId)"
+  fi
+  shared_mission_code="$(printf '%s' "$shared_mission_payload" | mission_field missionCode)"
+  shared_room_id="${MOCK_ROOM_ID:-$shared_mission_code}"
+  rtc_payload="$(curl -fsS "$APP_SERVER_URL/api/rtc-config")"
+  shared_signaling_url="$(printf '%s' "$rtc_payload" | rtc_field signalingUrl)"
+  shared_turn_url="$(printf '%s' "$rtc_payload" | rtc_field turnUrl)"
+  shared_turn_username="$(printf '%s' "$rtc_payload" | rtc_field turnUsername)"
+  shared_turn_password="$(printf '%s' "$rtc_payload" | rtc_field turnPassword)"
+  printf 'shared mission: %s / room %s\n' "$shared_mission_code" "$shared_room_id"
+fi
+
+for index in $(seq 0 "$((MOCK_ROBOT_COUNT - 1))"); do
+  robot_code="$(robot_code_at "$index")"
+  robot_token="$(connection_token_for "$robot_code")"
+  if [[ "$MOCK_SHARED_MISSION" == "1" ]]; then
+    mission_code="$shared_mission_code"
+    start_mock_robot "$index" "$robot_code" "$robot_token" "$shared_mission_id" "$shared_mission_code" "$shared_room_id" "$shared_signaling_url" "$shared_turn_url" "$shared_turn_username" "$shared_turn_password"
+  else
+    mission_code="$(ensure_active_mission_for_robot "$robot_code")"
+    start_mock_robot "$index" "$robot_code" "$robot_token"
+  fi
+  printf '  %s -> %s\n' "$robot_code" "$mission_code"
+done
+
+printf '\nready\n'
+printf 'UI: http://%s:%s\n' "$(detect_host_ip)" "$APP_PORT"
+printf 'status: %s\n' "$ROOT_DIR/scripts/dev-status.sh"
+printf 'logs: screen -r %s-001 / screen -r %s-002\n' "$MOCK_SESSION_PREFIX" "$MOCK_SESSION_PREFIX"

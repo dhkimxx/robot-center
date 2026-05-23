@@ -1,0 +1,131 @@
+name: robot-center
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-robot_center}
+      POSTGRES_USER: ${POSTGRES_USER:-robot_center}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-robot_center}
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ../db/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-robot_center} -d ${POSTGRES_DB:-robot_center}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: quay.io/minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "${MINIO_API_HOST_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_HOST_PORT:-9001}:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  turn:
+    image: coturn/coturn:4.6.3
+    profiles:
+      - docker-turn
+    command:
+      - -n
+      - --log-file=stdout
+      - --lt-cred-mech
+      - --fingerprint
+      - --realm=${TURN_REALM:-robot-center.local}
+      - --user=${TURN_USERNAME:-robot}:${TURN_PASSWORD:-robot-pass}
+      - --listening-ip=0.0.0.0
+      - --external-ip=${TURN_DOCKER_EXTERNAL_IP:-127.0.0.1}
+      - --min-port=${TURN_RELAY_MIN_PORT:-49160}
+      - --max-port=${TURN_RELAY_MAX_PORT:-49180}
+      - --allow-loopback-peers
+      - --no-cli
+      - --no-tls
+      - --no-dtls
+    ports:
+      - "${TURN_HOST_PORT:-3478}:3478/tcp"
+      - "${TURN_HOST_PORT:-3478}:3478/udp"
+      - "${TURN_RELAY_MIN_PORT:-49160}-${TURN_RELAY_MAX_PORT:-49180}:${TURN_RELAY_MIN_PORT:-49160}-${TURN_RELAY_MAX_PORT:-49180}/tcp"
+      - "${TURN_RELAY_MIN_PORT:-49160}-${TURN_RELAY_MAX_PORT:-49180}:${TURN_RELAY_MIN_PORT:-49160}-${TURN_RELAY_MAX_PORT:-49180}/udp"
+
+  app-server:
+    build:
+      context: ../apps/server
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      APP_SERVER_HTTP_ADDR: ":8080"
+      APP_SERVER_PUBLIC_URL: ${APP_SERVER_PUBLIC_URL:-http://localhost:8080}
+      WEB_STATIC_DIR: /app/web
+      RECORDER_WORKER_URL: http://recorder-worker:8082
+      STORE_DRIVER: postgres
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-robot_center}
+      POSTGRES_USER: ${POSTGRES_USER:-robot_center}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-robot_center}
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_BUCKET: ${MINIO_BUCKET:-robot-center}
+      TURN_URL: ${TURN_URL:-turn:127.0.0.1:3478?transport=udp}
+      TURN_USERNAME: ${TURN_USERNAME:-robot}
+      TURN_PASSWORD: ${TURN_PASSWORD:-robot-pass}
+      SFU_WS_URL: ${SFU_WS_URL:-ws://localhost:8080/sfu/ws}
+    command: ["/app/app-server"]
+    ports:
+      - "${APP_SERVER_HOST_PORT:-8080}:8080"
+    volumes:
+      - ../apps/web/dist:/app/web:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/app/app-server", "-healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  recorder-worker:
+    build:
+      context: ../apps/server
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      RECORDER_WORKER_HTTP_ADDR: ":8082"
+      RECORDER_WORKER_POLL_INTERVAL: ${RECORDER_WORKER_POLL_INTERVAL:-5s}
+      RECORDING_CHUNK_DURATION: ${RECORDING_CHUNK_DURATION:-10m}
+      APP_SERVER_PUBLIC_URL: http://app-server:8080
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-robot_center}
+      POSTGRES_USER: ${POSTGRES_USER:-robot_center}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-robot_center}
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_BUCKET: ${MINIO_BUCKET:-robot-center}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      SFU_WS_URL: ${SFU_WS_URL:-ws://app-server:8080/sfu/ws}
+      TURN_URL: ${TURN_URL:-turn:127.0.0.1:3478?transport=udp}
+      TURN_USERNAME: ${TURN_USERNAME:-robot}
+      TURN_PASSWORD: ${TURN_PASSWORD:-robot-pass}
+    command: ["/app/recorder-worker"]
+    ports:
+      - "${RECORDER_WORKER_HOST_PORT:-8082}:8082"
+    depends_on:
+      app-server:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  minio-data:
