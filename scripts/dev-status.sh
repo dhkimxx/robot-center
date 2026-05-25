@@ -45,10 +45,3 @@ curl -fsS "http://127.0.0.1:$APP_PORT/api/rtc-config" 2>/dev/null | /usr/bin/pyt
 
 printf '\nrecorder subscriber:\n'
 curl -fsS "http://127.0.0.1:$RECORDER_PORT/healthz" 2>/dev/null | /usr/bin/python3 -c 'import json,sys; payload=json.load(sys.stdin); print(json.dumps(payload.get("subscriber", {}), ensure_ascii=False, indent=2))' 2>/dev/null || printf '  unavailable\n'
-
-printf '\nandroid:\n'
-if adb_has_device; then
-  adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp' | sed 's/^/  /' || true
-else
-  printf '  adb device unavailable\n'
-fi

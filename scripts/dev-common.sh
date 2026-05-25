@@ -25,9 +25,6 @@ MINIO_BUCKET="${MINIO_BUCKET:-robot-center-poc}"
 MINIO_ROOT_USER="${MINIO_ROOT_USER:-minioadmin}"
 MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-minioadmin}"
 
-ROBOT_PACKAGE="com.sst.robotcenter.androidrobot"
-ROBOT_ACTIVITY="com.sst.robotcenter.androidrobot/.MainActivity"
-
 detect_host_ip() {
   if [[ -n "${HOST_IP:-}" ]]; then
     printf '%s\n' "$HOST_IP"
@@ -109,9 +106,12 @@ stop_python_mock_sessions() {
 start_screen_session() {
   local session_name="$1"
   local command="$2"
+  local log_file="$ROOT_DIR/.runtime/$session_name.log"
 
   stop_screen_session "$session_name"
-  screen -dmS "$session_name" bash -lc "$command"
+  mkdir -p "$ROOT_DIR/.runtime"
+  : > "$log_file"
+  screen -dmS "$session_name" bash -lc "$command >> '$log_file' 2>&1"
 }
 
 wait_for_http() {
@@ -129,8 +129,4 @@ wait_for_http() {
 
   printf '%s not ready: %s\n' "$label" "$url" >&2
   return 1
-}
-
-adb_has_device() {
-  command -v adb >/dev/null 2>&1 && adb get-state >/dev/null 2>&1
 }

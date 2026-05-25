@@ -159,6 +159,39 @@ print(json.dumps({
     | json_get 'import json,sys; print(json.dumps(json.load(sys.stdin)["mission"]))'
 }
 
+end_conflicting_active_missions() {
+  local robot_codes=("$@")
+  local mission_codes
+  mission_codes="$(curl -fsS "$APP_SERVER_URL/api/missions" | json_get '
+import json,sys
+required_robot_codes = set(sys.argv[1:])
+missions = json.load(sys.stdin).get("missions", [])
+conflicting = []
+for mission in missions:
+    if mission.get("status") != "active":
+        continue
+    mission_robot_codes = set(mission.get("robotCodes") or [])
+    if mission.get("robotCode"):
+        mission_robot_codes.add(mission.get("robotCode"))
+    if not mission_robot_codes.intersection(required_robot_codes):
+        continue
+    if required_robot_codes.issubset(mission_robot_codes):
+        continue
+    mission_code = mission.get("missionCode")
+    if mission_code:
+        conflicting.append(mission_code)
+print("\n".join(sorted(set(conflicting))))
+' "${robot_codes[@]}")"
+  if [[ -z "$mission_codes" ]]; then
+    return
+  fi
+  while IFS= read -r mission_code; do
+    [[ -z "$mission_code" ]] && continue
+    printf 'ending conflicting active mission: %s\n' "$mission_code"
+    curl -fsS -X POST "$APP_SERVER_URL/api/missions/$mission_code/end" >/dev/null
+  done <<<"$mission_codes"
+}
+
 start_mission_payload() {
   local mission_code="$1"
   curl -fsS -X POST "$APP_SERVER_URL/api/missions/$mission_code/start" \
@@ -285,6 +318,7 @@ if [[ "$MOCK_SHARED_MISSION" == "1" ]]; then
   for index in $(seq 0 "$((MOCK_ROBOT_COUNT - 1))"); do
     shared_robot_codes+=("$(robot_code_at "$index")")
   done
+  end_conflicting_active_missions "${shared_robot_codes[@]}"
   shared_mission_payload="$(ensure_shared_active_mission "${shared_robot_codes[@]}")"
   shared_mission_id="$(printf '%s' "$shared_mission_payload" | mission_field id)"
   if [[ -z "$shared_mission_id" ]]; then

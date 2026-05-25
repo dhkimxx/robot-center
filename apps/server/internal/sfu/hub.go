@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"sort"
 	"strings"
 	"time"
 
@@ -118,6 +117,13 @@ func (h *Hub) handleSignal(sender *peer, message signalMessage) {
 			}
 			return
 		}
+	case "select-robot":
+		if isSubscriberRole(sender.role) {
+			if err := h.handleSubscriberRobotSelection(sender, message.Payload); err != nil {
+				log.Printf("sfu subscriber selection failed room=%s peer=%s: %v", sender.roomID, sender.id, err)
+			}
+			return
+		}
 	}
 }
 
@@ -126,12 +132,9 @@ func (h *Hub) handleRobotOffer(sender *peer, payload map[string]any) error {
 	if offerSDP == "" {
 		return fmt.Errorf("offer sdp is empty")
 	}
-	robotCode := strings.TrimSpace(sender.robotCode)
-	if robotCode == "" {
-		robotCode = strings.TrimSpace(payloadString(payload, "robotCode"))
-	}
-	if robotCode == "" {
-		return fmt.Errorf("robotCode is required")
+	robotCode, err := publisherRobotCode(sender, payload)
+	if err != nil {
+		return err
 	}
 
 	peerConnection, err := h.createPeerConnection()
@@ -140,7 +143,7 @@ func (h *Hub) handleRobotOffer(sender *peer, payload map[string]any) error {
 	}
 
 	publisherSession := newPublisherSession(sender.id, robotCode, peerConnection)
-	publisherSession.configureConnection(sender.roomID, h)
+	publisherSession.prepareConnection(sender.roomID, h)
 
 	h.registerPublisherSession(sender.roomID, publisherSession)
 	publisherAccepted := false
@@ -150,7 +153,7 @@ func (h *Hub) handleRobotOffer(sender *peer, payload map[string]any) error {
 		}
 	}()
 
-	localDescription, err := publisherSession.acceptOffer(offerSDP)
+	localDescription, err := publisherSession.answerOffer(offerSDP)
 	if err != nil {
 		_ = peerConnection.Close()
 		return err
@@ -275,34 +278,29 @@ func (h *Hub) ensureSubscriberOffer(roomID string, peerID string) {
 			log.Printf("sfu subscriber peer connection failed room=%s peer=%s: %v", roomID, peerID, err)
 			return
 		}
-		session = newSubscriberSession(peerID, peerConnection)
+		session = newSubscriberSession(peerID, targetPeer.role, targetPeer.robotCode, peerConnection)
 		currentRoom.subscribers[peerID] = session
 		session.configureConnection(roomID, targetPeer)
 	}
 	if session.pendingOffer {
-		session.needsOffer = true
+		session.deferOffer()
 		h.mu.Unlock()
 		return
 	}
 	if session.peerConnection.SignalingState() != webrtc.SignalingStateStable {
-		session.needsOffer = true
+		session.deferOffer()
 		h.mu.Unlock()
 		return
 	}
 
-	offerRequired := h.attachPublishedTracksLocked(currentRoom, session)
-	if h.ensureSubscriberDataChannelsLocked(session) {
-		offerRequired = true
-	}
+	offerRequired := session.beginOffer(currentRoom, h.forwardRTCPToRobot, h.requestKeyFrames)
 	if !offerRequired {
 		h.mu.Unlock()
 		return
 	}
-	session.pendingOffer = true
-	session.needsOffer = false
 	h.mu.Unlock()
 
-	localDescription, err := session.createOffer()
+	localDescription, err := session.createLocalOffer()
 	if err != nil {
 		h.markSubscriberOfferFailed(roomID, peerID, err)
 		return
@@ -311,70 +309,6 @@ func (h *Hub) ensureSubscriberOffer(roomID string, peerID string) {
 		"type": localDescription.Type.String(),
 		"sdp":  localDescription.SDP,
 	})
-}
-
-func (h *Hub) attachPublishedTracksLocked(currentRoom *room, session *subscriberSession) bool {
-	attached := false
-	trackKeys := make([]string, 0)
-	tracksByKey := map[string]*publishedTrack{}
-	for _, publisher := range currentRoom.publishers {
-		for trackKey, publishedTrack := range publisher.publishedTracks {
-			trackKeys = append(trackKeys, trackKey)
-			tracksByKey[trackKey] = publishedTrack
-		}
-	}
-	sort.Strings(trackKeys)
-	for _, trackKey := range trackKeys {
-		if _, ok := session.attachedTracks[trackKey]; ok {
-			continue
-		}
-		publishedTrack := tracksByKey[trackKey]
-		if publishedTrack == nil || publishedTrack.track == nil {
-			continue
-		}
-		sender, err := session.peerConnection.AddTrack(publishedTrack.track)
-		if err != nil {
-			log.Printf("sfu subscriber add track failed room=%s peer=%s track=%s: %v", currentRoom.id, session.peerID, trackKey, err)
-			continue
-		}
-		session.attachedTracks[trackKey] = struct{}{}
-		attached = true
-		go h.forwardSubscriberRTCP(currentRoom.id, trackKey, sender)
-		go h.requestKeyFrames(currentRoom.id, trackKey, 5, time.Second)
-	}
-	return attached
-}
-
-func (h *Hub) ensureSubscriberDataChannelsLocked(session *subscriberSession) bool {
-	created := false
-	for _, label := range []string{"sensor", "telemetry"} {
-		if session.dataChannels[label] != nil {
-			continue
-		}
-		dataChannel, err := session.peerConnection.CreateDataChannel(label, nil)
-		if err != nil {
-			log.Printf("sfu subscriber datachannel create failed peer=%s label=%s: %v", session.peerID, label, err)
-			continue
-		}
-		session.dataChannels[label] = dataChannel
-		created = true
-	}
-	return created
-}
-
-func (h *Hub) forwardSubscriberRTCP(roomID string, trackKey string, sender *webrtc.RTPSender) {
-	buffer := make([]byte, 1500)
-	for {
-		byteCount, _, err := sender.Read(buffer)
-		if err != nil {
-			return
-		}
-		packets, err := rtcp.Unmarshal(buffer[:byteCount])
-		if err != nil {
-			continue
-		}
-		h.forwardRTCPToRobot(roomID, trackKey, packets)
-	}
 }
 
 func (h *Hub) requestKeyFrame(roomID string, trackKey string) {
@@ -475,6 +409,41 @@ func (h *Hub) handleSubscriberAnswer(sender *peer, payload map[string]any) error
 	return nil
 }
 
+func (h *Hub) handleSubscriberRobotSelection(sender *peer, payload map[string]any) error {
+	robotCode := strings.TrimSpace(payloadString(payload, "robotCode"))
+	if robotCode == "" {
+		return fmt.Errorf("robotCode is required")
+	}
+
+	h.mu.Lock()
+	currentRoom := h.rooms[sender.roomID]
+	if currentRoom == nil {
+		h.mu.Unlock()
+		return fmt.Errorf("room is missing")
+	}
+	targetPeer := currentRoom.peers[sender.id]
+	if targetPeer == nil || !isSubscriberRole(targetPeer.role) {
+		h.mu.Unlock()
+		return fmt.Errorf("subscriber peer is missing")
+	}
+	if targetPeer.role == "recorder" {
+		h.mu.Unlock()
+		return nil
+	}
+	targetPeer.robotCode = robotCode
+	if session := currentRoom.subscribers[sender.id]; session != nil {
+		session.selectRobot(robotCode)
+		session.deferOffer()
+	}
+	h.mu.Unlock()
+
+	h.sendServerSignal(sender.roomID, sender.id, "select-robot-ack", map[string]any{
+		"robotCode": robotCode,
+	})
+	go h.ensureSubscriberOffer(sender.roomID, sender.id)
+	return nil
+}
+
 func (h *Hub) handleRemoteCandidate(sender *peer, payload map[string]any) error {
 	candidate := payloadString(payload, "candidate")
 	if candidate == "" {
@@ -523,6 +492,9 @@ func (h *Hub) forwardDataChannelMessage(roomID string, robotCode string, label s
 	}
 	channels := make([]*webrtc.DataChannel, 0, len(currentRoom.subscribers))
 	for _, session := range currentRoom.subscribers {
+		if !session.shouldReceiveRobot(robotCode) {
+			continue
+		}
 		channel := session.dataChannels[label]
 		if channel == nil || channel.ReadyState() != webrtc.DataChannelStateOpen {
 			continue
@@ -612,6 +584,7 @@ func closeSubscriberSession(session *subscriberSession) {
 	session.peerConnection = nil
 	session.dataChannels = map[string]*webrtc.DataChannel{}
 	session.attachedTracks = map[string]struct{}{}
+	session.attachedTrackSenders = map[string]*webrtc.RTPSender{}
 	session.pendingOffer = false
 	session.needsOffer = false
 }

@@ -1,5 +1,7 @@
-# Database Migrations
+# Database Schema
 
-`deploy/docker-compose.yml` mounts this directory into the PostgreSQL container as `/docker-entrypoint-initdb.d`.
+The local PoC schema is created by the Go app at startup through GORM `AutoMigrate`.
 
-The SQL files are applied only when the PostgreSQL data volume is first created. During early P0 development, remove the `postgres-data` volume if the schema needs to be re-applied from scratch.
+Keep this directory for future production-grade SQL migrations only. Do not add local
+bootstrap table DDL here unless it cannot be represented by the app startup migration
+path.

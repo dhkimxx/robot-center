@@ -76,6 +76,87 @@ go vet ./...
 
 Result: passed.
 
+## Second Pass Fixup
+
+Additional risk fixes after review:
+
+- Wrapped `RecordingService.MarkRecordingChunkUploaded` in the service transaction boundary.
+- Wrapped `RecordingService.MarkRecordingFileUploaded` in the service transaction boundary.
+- Added service tests that fail if upload status changes bypass the transaction repository.
+- Fixed `002_recording_chunk_timestamps.sql` to add nullable columns, backfill from `started_at`, then set defaults and `NOT NULL`.
+- Added `003_fix_recording_chunk_timestamps.sql` for already-applied PoC DBs.
+- Applied the timestamp migration to the local PoC DB.
+- Moved SFU subscriber track attach, DataChannel creation, and RTCP read loop into `subscriberSession`.
+
+Verification:
+
+```bash
+cd /Users/dhkim/workspace/sst/robot-center/apps/server
+go test ./...
+go vet ./...
+```
+
+Result: passed.
+
+Runtime verification:
+
+- app-server: ok
+- recorder-worker: ok
+- robot publisher: Python mock `robot-001`
+- mission room: `mission-008`
+- SFU room peers: robot 1, operator 1, recorder 1
+- published tracks: `robot-001:rgb`, `robot-001:thermal`, `robot-001:audio`
+- recorder ICE: connected
+- recorder DataChannels: 2
+- browser/operator UI: connected
+- browser video dimensions: RGB 1280x720, Thermal 640x480
+- DB sample: `mission-008` uploaded chunk has `manifest_object_id` and 5 `storage_objects`
+- DB backfill check: 404 existing recording chunks have `created_at = started_at`
+
+## Operational Fixup
+
+Additional operational fixes:
+
+- Added `scripts/db-migrate.sh` so existing PostgreSQL volumes can receive `db/migrations/*.sql` without dropping data.
+- Wired `scripts/dev-up.sh` to run `scripts/db-migrate.sh` after PostgreSQL starts and before app-server starts.
+- Re-ran migrations against the local PoC DB.
+- Added upload failure tests for `MarkRecordingChunkUploaded` and `MarkRecordingFileUploaded`.
+  - transaction repository error is propagated
+  - transaction is not committed
+  - outside repository is not called
+- Moved more SFU offer responsibility into session helpers:
+  - publisher robot code resolution and local answer generation
+  - subscriber offer deferral/begin logic
+
+Verification:
+
+```bash
+cd /Users/dhkim/workspace/sst/robot-center/apps/server
+go test -count=1 ./...
+go vet ./...
+
+cd /Users/dhkim/workspace/sst/robot-center
+./scripts/db-migrate.sh
+./scripts/dev-status.sh
+```
+
+Runtime result:
+
+- app-server: ok
+- recorder-worker: ok
+- PostgreSQL: healthy
+- MinIO: healthy
+- Python mock robot: `robot-001` running
+- SFU room: `mission-008`
+- SFU peers: robot 1, operator 1, recorder 1
+- published tracks: `robot-001:rgb`, `robot-001:thermal`, `robot-001:audio`
+- recorder ICE: connected
+- recorder DataChannels: 2
+- browser/operator UI: connected
+- browser video dimensions: RGB 1280x720, Thermal 640x480
+- latest DB recording chunk: uploaded, has manifest object, 5 storage objects
+- latest MinIO objects include manifest, RGB MP4, Thermal MP4, sensor JSONL, telemetry JSONL
+
 Checked runtime status:
 
 ```bash
@@ -94,7 +175,7 @@ Observed:
 
 ## Current Runtime Note
 
-After restarting the dev stack with `SKIP_ANDROID=1 ./scripts/dev-up.sh`, the runtime URLs are host-reachable:
+After restarting the dev stack with `./scripts/dev-up.sh`, the runtime URLs are host-reachable:
 
 ```text
 UI:  http://192.168.20.8:18080

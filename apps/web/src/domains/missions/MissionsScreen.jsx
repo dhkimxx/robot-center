@@ -33,9 +33,7 @@ export default function MissionsScreen({
   missionTargets,
   missions,
   onBackToMissionList,
-  onConnectAllMissionTargets,
   onConnectSelectedMissionTarget,
-  onDisconnectAllMissionTargets,
   onDisconnectSelectedMissionTarget,
   onEndMission,
   onOpenCreateMissionModal,
@@ -75,9 +73,7 @@ export default function MissionsScreen({
         mission={controlMission}
         missionTargets={missionTargets}
         onBackToMissionList={onBackToMissionList}
-        onConnectAllMissionTargets={onConnectAllMissionTargets}
         onConnectSelectedMissionTarget={onConnectSelectedMissionTarget}
-        onDisconnectAllMissionTargets={onDisconnectAllMissionTargets}
         onDisconnectSelectedMissionTarget={onDisconnectSelectedMissionTarget}
         onEndMission={onEndMission}
         onOpenRecordings={onOpenRecordings}
@@ -200,9 +196,7 @@ function MissionControlView({
   mission,
   missionTargets,
   onBackToMissionList,
-  onConnectAllMissionTargets,
   onConnectSelectedMissionTarget,
-  onDisconnectAllMissionTargets,
   onDisconnectSelectedMissionTarget,
   onEndMission,
   onOpenRecordings,
@@ -219,7 +213,7 @@ function MissionControlView({
     const session = liveSessions[target.key] ?? createEmptyLiveSession();
     return ["connected", "completed"].includes(session.status);
   }).length;
-  const canConnectMission = mission.status === "active" && missionTargets.length > 0;
+  const canConnectSelectedRobot = mission.status === "active" && Boolean(selectedTarget);
   const missionRoomId = makeMissionRoomId(mission);
 
   return (
@@ -240,13 +234,31 @@ function MissionControlView({
         <div className="mission-command-bar">
           <div>
             <strong>{missionRoomId || mission.missionCode}</strong>
-            <span>{selectedTarget ? `임무 룸 구독 / 선택 ${selectedTarget.robotCode} ${makeLiveStatusLabel(selectedSession.status)} / 연결 ${connectedCount}/${missionTargets.length}대` : "임무에 배정된 로봇이 없습니다."}</span>
+            <span>{selectedTarget ? `선택 ${selectedTarget.robotCode} ${makeLiveStatusLabel(selectedSession.status)} / 연결 ${connectedCount}/${missionTargets.length}대` : "임무에 배정된 로봇이 없습니다."}</span>
           </div>
-          <div className="button-row control-actions">
-            <button type="button" disabled={!canConnectMission || !selectedTarget} onClick={onConnectSelectedMissionTarget}>선택 연결</button>
-            <button type="button" disabled={!canConnectMission} onClick={onConnectAllMissionTargets}>전체 연결</button>
-            <button type="button" disabled={!selectedTarget} onClick={onDisconnectSelectedMissionTarget}>선택 해제</button>
-            <button type="button" disabled={missionTargets.length === 0} onClick={onDisconnectAllMissionTargets}>전체 해제</button>
+          <div className="mission-command-controls">
+            <label className="mission-robot-select-label">
+              <span>관제 로봇</span>
+              <select
+                disabled={missionTargets.length === 0}
+                value={selectedTarget?.key ?? ""}
+                onChange={(event) => setSelectedMissionTargetKey(event.target.value)}
+              >
+                {missionTargets.length === 0 ? (
+                  <option value="">선택 없음</option>
+                ) : (
+                  missionTargets.map((target) => (
+                    <option key={target.key} value={target.key}>
+                      {target.robot?.displayName ?? target.robotCode} / {target.robotCode}
+                    </option>
+                  ))
+                )}
+              </select>
+            </label>
+            <div className="button-row control-actions">
+              <button type="button" disabled={!canConnectSelectedRobot} onClick={onConnectSelectedMissionTarget}>연결</button>
+              <button type="button" disabled={!selectedTarget} onClick={onDisconnectSelectedMissionTarget}>연결 종료</button>
+            </div>
           </div>
         </div>
 

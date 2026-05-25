@@ -3,17 +3,23 @@ package sfu
 import (
 	"fmt"
 	"log"
+	"sort"
+	"strings"
 	"time"
 
+	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v4"
 )
 
-func newSubscriberSession(peerID string, peerConnection *webrtc.PeerConnection) *subscriberSession {
+func newSubscriberSession(peerID string, role string, selectedRobotCode string, peerConnection *webrtc.PeerConnection) *subscriberSession {
 	return &subscriberSession{
-		peerID:         peerID,
-		peerConnection: peerConnection,
-		dataChannels:   map[string]*webrtc.DataChannel{},
-		attachedTracks: map[string]struct{}{},
+		peerID:               peerID,
+		role:                 role,
+		selectedRobotCode:    strings.TrimSpace(selectedRobotCode),
+		peerConnection:       peerConnection,
+		dataChannels:         map[string]*webrtc.DataChannel{},
+		attachedTracks:       map[string]struct{}{},
+		attachedTrackSenders: map[string]*webrtc.RTPSender{},
 	}
 }
 
@@ -26,7 +32,11 @@ func (s *subscriberSession) configureConnection(roomID string, targetPeer *peer)
 	})
 }
 
-func (s *subscriberSession) createOffer() (*webrtc.SessionDescription, error) {
+func (s *subscriberSession) deferOffer() {
+	s.needsOffer = true
+}
+
+func (s *subscriberSession) createLocalOffer() (*webrtc.SessionDescription, error) {
 	offer, err := s.peerConnection.CreateOffer(nil)
 	if err != nil {
 		return nil, err
@@ -45,4 +55,138 @@ func (s *subscriberSession) createOffer() (*webrtc.SessionDescription, error) {
 		return nil, fmt.Errorf("local offer is missing")
 	}
 	return localDescription, nil
+}
+
+func (s *subscriberSession) beginOffer(currentRoom *room, forwardRTCP func(roomID string, trackKey string, packets []rtcp.Packet), requestKeyFrames func(roomID string, trackKey string, count int, interval time.Duration)) bool {
+	s.ensureSelectedRobot(currentRoom)
+	offerRequired := s.attachPublishedTracks(currentRoom, forwardRTCP, requestKeyFrames)
+	if s.ensureDataChannels() {
+		offerRequired = true
+	}
+	if offerRequired {
+		s.pendingOffer = true
+		s.needsOffer = false
+	}
+	return offerRequired
+}
+
+func (s *subscriberSession) selectRobot(robotCode string) {
+	if s.role == "recorder" {
+		return
+	}
+	s.selectedRobotCode = strings.TrimSpace(robotCode)
+}
+
+func (s *subscriberSession) ensureSelectedRobot(currentRoom *room) {
+	if s.role == "recorder" || strings.TrimSpace(s.selectedRobotCode) != "" {
+		return
+	}
+	robotCodes := make([]string, 0, len(currentRoom.publishers))
+	for robotCode := range currentRoom.publishers {
+		robotCodes = append(robotCodes, robotCode)
+	}
+	sort.Strings(robotCodes)
+	if len(robotCodes) > 0 {
+		s.selectedRobotCode = robotCodes[0]
+	}
+}
+
+func (s *subscriberSession) shouldReceiveRobot(robotCode string) bool {
+	if s.role == "recorder" {
+		return true
+	}
+	return strings.TrimSpace(robotCode) != "" && strings.TrimSpace(robotCode) == strings.TrimSpace(s.selectedRobotCode)
+}
+
+func (s *subscriberSession) attachPublishedTracks(currentRoom *room, forwardRTCP func(roomID string, trackKey string, packets []rtcp.Packet), requestKeyFrames func(roomID string, trackKey string, count int, interval time.Duration)) bool {
+	if s.attachedTracks == nil {
+		s.attachedTracks = map[string]struct{}{}
+	}
+	if s.attachedTrackSenders == nil {
+		s.attachedTrackSenders = map[string]*webrtc.RTPSender{}
+	}
+	changed := false
+	trackKeys := make([]string, 0)
+	tracksByKey := map[string]*publishedTrack{}
+	for _, publisher := range currentRoom.publishers {
+		for trackKey, publishedTrack := range publisher.publishedTracks {
+			if publishedTrack == nil || !s.shouldReceiveRobot(publishedTrack.robotCode) {
+				continue
+			}
+			trackKeys = append(trackKeys, trackKey)
+			tracksByKey[trackKey] = publishedTrack
+		}
+	}
+	sort.Strings(trackKeys)
+	desiredTrackKeys := map[string]struct{}{}
+	for _, trackKey := range trackKeys {
+		desiredTrackKeys[trackKey] = struct{}{}
+	}
+
+	for trackKey, sender := range s.attachedTrackSenders {
+		if _, ok := desiredTrackKeys[trackKey]; ok {
+			continue
+		}
+		if sender != nil {
+			if err := s.peerConnection.RemoveTrack(sender); err != nil {
+				log.Printf("sfu subscriber remove track failed room=%s peer=%s track=%s: %v", currentRoom.id, s.peerID, trackKey, err)
+			}
+		}
+		delete(s.attachedTrackSenders, trackKey)
+		delete(s.attachedTracks, trackKey)
+		changed = true
+	}
+
+	for _, trackKey := range trackKeys {
+		if _, ok := s.attachedTracks[trackKey]; ok {
+			continue
+		}
+		publishedTrack := tracksByKey[trackKey]
+		if publishedTrack == nil || publishedTrack.track == nil {
+			continue
+		}
+		sender, err := s.peerConnection.AddTrack(publishedTrack.track)
+		if err != nil {
+			log.Printf("sfu subscriber add track failed room=%s peer=%s track=%s: %v", currentRoom.id, s.peerID, trackKey, err)
+			continue
+		}
+		s.attachedTracks[trackKey] = struct{}{}
+		s.attachedTrackSenders[trackKey] = sender
+		changed = true
+		go s.forwardRTCP(currentRoom.id, trackKey, sender, forwardRTCP)
+		go requestKeyFrames(currentRoom.id, trackKey, 5, time.Second)
+	}
+	return changed
+}
+
+func (s *subscriberSession) ensureDataChannels() bool {
+	created := false
+	for _, label := range []string{"sensor", "telemetry"} {
+		if s.dataChannels[label] != nil {
+			continue
+		}
+		dataChannel, err := s.peerConnection.CreateDataChannel(label, nil)
+		if err != nil {
+			log.Printf("sfu subscriber datachannel create failed peer=%s label=%s: %v", s.peerID, label, err)
+			continue
+		}
+		s.dataChannels[label] = dataChannel
+		created = true
+	}
+	return created
+}
+
+func (s *subscriberSession) forwardRTCP(roomID string, trackKey string, sender *webrtc.RTPSender, forward func(roomID string, trackKey string, packets []rtcp.Packet)) {
+	buffer := make([]byte, 1500)
+	for {
+		byteCount, _, err := sender.Read(buffer)
+		if err != nil {
+			return
+		}
+		packets, err := rtcp.Unmarshal(buffer[:byteCount])
+		if err != nil {
+			continue
+		}
+		forward(roomID, trackKey, packets)
+	}
 }

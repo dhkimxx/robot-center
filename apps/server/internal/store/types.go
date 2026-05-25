@@ -2,6 +2,8 @@ package store
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"robot-center/apps/server/internal/domain"
@@ -12,6 +14,30 @@ var (
 	ErrUnauthorized = errors.New("unauthorized")
 	ErrInvalidState = errors.New("invalid state")
 )
+
+type MissionStartConflict struct {
+	RobotCode         string
+	ActiveMissionCode string
+}
+
+type MissionStartConflictError struct {
+	Conflicts []MissionStartConflict
+}
+
+func (e *MissionStartConflictError) Error() string {
+	if e == nil || len(e.Conflicts) == 0 {
+		return ErrInvalidState.Error()
+	}
+	parts := make([]string, 0, len(e.Conflicts))
+	for _, conflict := range e.Conflicts {
+		parts = append(parts, fmt.Sprintf("%s already active in %s", conflict.RobotCode, conflict.ActiveMissionCode))
+	}
+	return "mission start conflict: " + strings.Join(parts, ", ")
+}
+
+func (e *MissionStartConflictError) Unwrap() error {
+	return ErrInvalidState
+}
 
 type CreateRobotInput struct {
 	DisplayName string

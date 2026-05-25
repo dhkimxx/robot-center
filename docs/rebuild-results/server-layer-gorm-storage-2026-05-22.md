@@ -62,7 +62,7 @@ ok robot-center/apps/server/internal/sfu
 ```
 
 ```bash
-SKIP_WEB_BUILD=1 SKIP_ANDROID=1 ./scripts/dev-up.sh
+SKIP_WEB_BUILD=1 ./scripts/dev-up.sh
 MOCK_ROBOT_COUNT=3 ./scripts/python-mock-robots-up.sh
 ./scripts/dev-status.sh
 ```

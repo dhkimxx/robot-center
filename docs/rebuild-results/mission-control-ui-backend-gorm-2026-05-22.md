@@ -36,7 +36,7 @@ tags: ["rebuild", "ui", "mission-control", "gorm", "webrtc", "verification"]
 ```bash
 cd apps/server && go test ./...
 cd apps/web && npm run build
-SKIP_WEB_BUILD=1 SKIP_ANDROID=1 ./scripts/dev-up.sh
+SKIP_WEB_BUILD=1 ./scripts/dev-up.sh
 MOCK_ROBOT_COUNT=3 ./scripts/python-mock-robots-up.sh
 ./scripts/dev-status.sh
 ```

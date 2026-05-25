@@ -838,6 +838,25 @@ h2 {
   font-weight: 800;
 }
 
+.mission-command-controls {
+  min-width: min(100%, 520px);
+  display: grid;
+  gap: 8px;
+}
+
+.mission-robot-select-label {
+  display: grid;
+  gap: 4px;
+}
+
+.mission-robot-select-label span {
+  margin-top: 0;
+}
+
+.mission-robot-select-label select {
+  min-width: 220px;
+}
+
 .control-actions {
   justify-content: flex-end;
   margin-top: 0;
@@ -1691,6 +1710,11 @@ audio {
   .mission-command-bar {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .mission-command-controls,
+  .mission-robot-select-label select {
+    min-width: 0;
   }
 
   .control-quadrants {

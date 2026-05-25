@@ -28,7 +28,7 @@ npm run build
 cd /Users/dhkim/workspace/sst/robot-center
 python3 -m py_compile apps/mock-robot-python/mock_robot.py
 bash -n scripts/python-mock-robots-up.sh
-SKIP_ANDROID=1 ./scripts/dev-up.sh
+./scripts/dev-up.sh
 MOCK_ROBOT_COUNT=2 MOCK_SHARED_MISSION=1 ./scripts/python-mock-robots-up.sh
 ./scripts/dev-status.sh
 ```

@@ -160,6 +160,16 @@ func (s *PostgresStore) transitionMission(ctx context.Context, missionCode strin
 
 		switch nextStatus {
 		case "active":
+			if err := s.lockMissionRobotsForStart(tx, row.ID); err != nil {
+				return err
+			}
+			conflicts, err := s.findActiveMissionConflictsForStart(tx, row.ID)
+			if err != nil {
+				return err
+			}
+			if len(conflicts) > 0 {
+				return &MissionStartConflictError{Conflicts: conflicts}
+			}
 			if err := tx.Model(&missionRecord{}).
 				Where("id = ?", row.ID).
 				Updates(map[string]any{
@@ -234,6 +244,41 @@ func (s *PostgresStore) transitionMission(ctx context.Context, missionCode strin
 		return domain.Mission{}, err
 	}
 	return mission, nil
+}
+
+func (s *PostgresStore) lockMissionRobotsForStart(tx *gorm.DB, missionID string) error {
+	var robotIDs []string
+	return tx.Raw(`
+		SELECT r.id::text
+		FROM mission_robots mr
+		JOIN robots r ON r.id = mr.robot_id
+		WHERE mr.mission_id = ? AND mr.status != 'removed'
+		ORDER BY r.robot_code
+		FOR UPDATE OF r
+	`, missionID).Scan(&robotIDs).Error
+}
+
+func (s *PostgresStore) findActiveMissionConflictsForStart(tx *gorm.DB, missionID string) ([]MissionStartConflict, error) {
+	var conflicts []MissionStartConflict
+	err := tx.Raw(`
+		SELECT
+			r.robot_code AS robot_code,
+			active_m.mission_code AS active_mission_code
+		FROM mission_robots target_mr
+		JOIN robots r ON r.id = target_mr.robot_id
+		JOIN mission_robots active_mr ON active_mr.robot_id = target_mr.robot_id
+		JOIN missions active_m ON active_m.id = active_mr.mission_id
+		WHERE target_mr.mission_id = ?
+			AND target_mr.status != 'removed'
+			AND active_m.id != ?
+			AND active_m.status = 'active'
+			AND active_mr.status != 'removed'
+		ORDER BY r.robot_code, active_m.started_at DESC, active_m.mission_code
+	`, missionID, missionID).Scan(&conflicts).Error
+	if err != nil {
+		return nil, err
+	}
+	return conflicts, nil
 }
 
 func (s *PostgresStore) listMissionsWithGorm(tx *gorm.DB) ([]domain.Mission, error) {

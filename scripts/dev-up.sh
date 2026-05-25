@@ -15,6 +15,29 @@ printf 'sfu ws url: %s\n' "$SFU_WS_PUBLIC_URL"
 printf 'turn url: %s\n' "$TURN_URL_VALUE"
 printf 'starting postgres/minio...\n'
 docker compose -f "$COMPOSE_FILE" up -d postgres minio
+printf 'waiting for postgres...\n'
+for _ in $(seq 1 60); do
+  if docker compose -f "$COMPOSE_FILE" exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+if ! docker compose -f "$COMPOSE_FILE" exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then
+  printf 'postgres not ready\n' >&2
+  exit 1
+fi
+
+printf 'waiting for minio...\n'
+for _ in $(seq 1 60); do
+  if docker compose -f "$COMPOSE_FILE" exec -T minio mc ready local >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+if ! docker compose -f "$COMPOSE_FILE" exec -T minio mc ready local >/dev/null 2>&1; then
+  printf 'minio not ready\n' >&2
+  exit 1
+fi
 docker compose -f "$COMPOSE_FILE" stop turn >/dev/null 2>&1 || true
 stop_local_processes
 
@@ -84,7 +107,7 @@ printf 'ensuring demo robot and active mission...\n'
 robot_payload="$(curl -fsS 'http://127.0.0.1:'"$APP_PORT"'/api/robots')"
 robot_code="$(printf '%s' "$robot_payload" | /usr/bin/python3 -c 'import json,sys; items=json.load(sys.stdin).get("robots", []); print(items[0]["robotCode"] if items else "")')"
 if [[ -z "$robot_code" ]]; then
-  robot_payload="$(curl -fsS -X POST 'http://127.0.0.1:'"$APP_PORT"'/api/robots' -H 'Content-Type: application/json' -d '{\"displayName\":\"Android Mock Robot\",\"modelName\":\"Android Mock\"}')"
+  robot_payload="$(curl -fsS -X POST 'http://127.0.0.1:'"$APP_PORT"'/api/robots' -H 'Content-Type: application/json' -d '{"displayName":"Bootstrap Robot","modelName":"PoC Bootstrap"}')"
   robot_code="$(printf '%s' "$robot_payload" | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin)["robot"]["robotCode"])')"
 fi
 
@@ -93,42 +116,19 @@ active_mission_code="$(printf '%s' "$mission_payload" | /usr/bin/python3 -c 'imp
 if [[ -z "$active_mission_code" ]]; then
   ready_mission_code="$(printf '%s' "$mission_payload" | /usr/bin/python3 -c 'import json,sys; robot=sys.argv[1]; items=json.load(sys.stdin).get("missions", []); print(next((m["missionCode"] for m in items if m.get("robotCode")==robot and m.get("status")=="ready"), ""))' "$robot_code")"
   if [[ -z "$ready_mission_code" ]]; then
-    mission_payload="$(curl -fsS -X POST 'http://127.0.0.1:'"$APP_PORT"'/api/missions' -H 'Content-Type: application/json' -d '{\"name\":\"P0 Integrated Demo\",\"missionType\":\"mountain_rescue\",\"siteNote\":\"created by dev-up\",\"robotCode\":\"'"$robot_code"'\"}')"
+    mission_payload="$(curl -fsS -X POST 'http://127.0.0.1:'"$APP_PORT"'/api/missions' -H 'Content-Type: application/json' -d '{"name":"P0 Integrated Demo","missionType":"mountain_rescue","siteNote":"created by dev-up","robotCode":"'"$robot_code"'"}')"
     ready_mission_code="$(printf '%s' "$mission_payload" | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin)["mission"]["missionCode"])')"
   fi
   curl -fsS -X POST 'http://127.0.0.1:'"$APP_PORT"'/api/missions/'"$ready_mission_code"'/start' >/dev/null
   active_mission_code="$ready_mission_code"
 fi
 
-connection_payload="$(curl -fsS 'http://127.0.0.1:'"$APP_PORT"'/api/robots/'"$robot_code"'/connection-info')"
-robot_token="$(printf '%s' "$connection_payload" | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin)["connectionInfo"]["robotToken"])')"
 printf 'demo robot: %s\n' "$robot_code"
 printf 'active mission: %s\n' "$active_mission_code"
-
-if [[ "${ADB_REVERSE:-0}" == "1" ]] && command -v adb >/dev/null 2>&1; then
-  printf 'configuring adb reverse ports...\n'
-  adb devices | awk 'NR > 1 && $2 == "device" {print $1}' | while read -r adb_serial; do
-    adb -s "$adb_serial" reverse "tcp:$APP_PORT" "tcp:$APP_PORT" >/dev/null 2>&1 || true
-    adb -s "$adb_serial" reverse "tcp:$TURN_PORT" "tcp:$TURN_PORT" >/dev/null 2>&1 || true
-    printf 'adb reverse ready: %s\n' "$adb_serial"
-  done
-fi
-
-if [[ "${SKIP_ANDROID:-0}" != "1" ]] && adb_has_device; then
-  printf 'starting Android Mock Robot...\n'
-  adb shell settings put global stay_on_while_plugged_in 7 >/dev/null 2>&1 || true
-  adb shell am force-stop "$ROBOT_PACKAGE" >/dev/null 2>&1 || true
-  adb shell am start -n "$ROBOT_ACTIVITY" \
-    --es serverUrl "$PUBLIC_URL" \
-    --es robotCode "$robot_code" \
-    --es robotToken "$robot_token" \
-    --ez autoConnect true >/dev/null
-else
-  printf 'Android Mock Robot skipped. Set SKIP_ANDROID=0 and connect adb device to auto-start it.\n'
-fi
 
 printf '\nready\n'
 printf 'UI: %s\n' "$PUBLIC_URL"
 printf 'MinIO API: http://%s:9000/%s\n' "$HOST_IP" "$MINIO_BUCKET"
 printf 'MinIO console: http://127.0.0.1:9001\n'
+printf 'Python Mock Robot: %s\n' "$ROOT_DIR/scripts/python-mock-robots-up.sh"
 printf 'status: %s\n' "$ROOT_DIR/scripts/dev-status.sh"

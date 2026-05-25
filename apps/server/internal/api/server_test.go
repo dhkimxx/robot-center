@@ -118,6 +118,25 @@ func TestControlPlaneFlow(t *testing.T) {
 	}
 	assertStringListEqual(t, startedMission["robotCodes"], []string{robotCode, supportRobotCode})
 
+	conflictMissionPayload := requestJSON[map[string]any](t, server.URL, http.MethodPost, "/api/missions", "", map[string]any{
+		"name":        "Conflicting Mission",
+		"missionType": "mountain_rescue",
+		"robotCode":   robotCode,
+	})
+	conflictMission := conflictMissionPayload["mission"].(map[string]any)
+	conflictStatus, conflictPayload := requestRawJSON(t, server.URL, http.MethodPost, "/api/missions/"+conflictMission["missionCode"].(string)+"/start", "", nil)
+	if conflictStatus != http.StatusConflict {
+		t.Fatalf("expected mission start conflict status, got %d payload %#v", conflictStatus, conflictPayload)
+	}
+	conflicts := conflictPayload["conflicts"].([]any)
+	if len(conflicts) != 1 {
+		t.Fatalf("expected one conflict, got %#v", conflictPayload)
+	}
+	conflict := conflicts[0].(map[string]any)
+	if conflict["robotCode"] != robotCode || conflict["activeMissionCode"] != missionCode {
+		t.Fatalf("expected conflict robot %s active in %s, got %#v", robotCode, missionCode, conflict)
+	}
+
 	missionPayload := requestJSON[map[string]any](t, server.URL, http.MethodGet, "/api/robot-gateway/mission?robotCode="+robotCode, robotToken, nil)
 	if missionPayload["missionStatus"] != "active" {
 		t.Fatalf("expected active robot mission, got %#v", missionPayload)
@@ -286,6 +305,44 @@ func requestJSON[T any](t *testing.T, baseURL string, method string, path string
 		t.Fatalf("decode response: %v", err)
 	}
 	return payload
+}
+
+func requestRawJSON(t *testing.T, baseURL string, method string, path string, bearerToken string, body any) (int, map[string]any) {
+	t.Helper()
+
+	var requestBody *bytes.Reader
+	if body == nil {
+		requestBody = bytes.NewReader(nil)
+	} else {
+		rawBody, err := json.Marshal(body)
+		if err != nil {
+			t.Fatalf("marshal request body: %v", err)
+		}
+		requestBody = bytes.NewReader(rawBody)
+	}
+
+	request, err := http.NewRequest(method, baseURL+path, requestBody)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	if body != nil {
+		request.Header.Set("Content-Type", "application/json")
+	}
+	if strings.TrimSpace(bearerToken) != "" {
+		request.Header.Set("Authorization", "Bearer "+bearerToken)
+	}
+
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("send request %s %s: %v", method, path, err)
+	}
+	defer response.Body.Close()
+
+	var payload map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	return response.StatusCode, payload
 }
 
 func componentHasStatus(components []any, name string, status string) bool {

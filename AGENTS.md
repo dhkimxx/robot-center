@@ -153,7 +153,7 @@ UI 원칙:
 
 ```text
 1. API 저장소를 PostgreSQL로 전환 -> verify: 재시작 후 데이터 유지 확인
-2. Android Mock Robot 카메라 해상도 상향 -> verify: 앱 로그와 브라우저 videoWidth/videoHeight 확인
+2. Python Mock Robot 영상 송출 변경 -> verify: 브라우저 videoWidth/videoHeight 확인
 3. 녹화 저장 구현 -> verify: MinIO object와 DB recording chunk 상태 확인
 ```
 
@@ -175,10 +175,9 @@ UI 원칙:
    verify: http://127.0.0.1:18080 접속 가능
    verify: 화면에 기대 상태가 표시됨
 
-3. Android Mock Robot
-   verify: APK 설치 완료
-   verify: 앱 실행 중
-   verify: 서버 URL, robotCode, token이 맞음
+3. Python Mock Robot
+   verify: `./scripts/python-mock-robots-up.sh` 실행 완료
+   verify: robotCode, token, mission room이 맞음
    verify: connected 또는 streaming 상태
 
 4. WebRTC
@@ -196,14 +195,14 @@ UI 원칙:
    verify: 녹화 상태 또는 MinIO 저장 결과 표시
 ```
 
-기능과 무관한 항목은 생략할 수 있지만, 로봇 연결, 영상, GPS, 센서, WebRTC 관련 작업에서는 Android Mock Robot까지 반드시 포함한다.
+기능과 무관한 항목은 생략할 수 있지만, 로봇 연결, 영상, 센서, WebRTC 관련 작업에서는 Python Mock Robot을 반드시 포함한다.
 
 검증이 끝나면 사용자가 바로 볼 수 있는 상태로 남긴다.
 
 - app-server 실행 유지
 - recorder-worker 실행 유지
 - 필요한 Docker Compose 서비스 실행 유지
-- Android Mock Robot 앱 실행 유지
+- Python Mock Robot 실행 유지
 - 관제 UI URL 제공
 
 ## 8. 문서화 규칙
@@ -216,7 +215,7 @@ UI 원칙:
 - 검증 명령
 - 실제 확인 결과
 - 사용자 확인 URL
-- Android Mock Robot 상태
+- Python Mock Robot 상태
 - 남은 한계 또는 다음 단계
 
 문서에는 임시 데이터와 실제 검증 데이터를 구분해서 쓴다.
@@ -240,7 +239,7 @@ UI 원칙:
 현재 PoC/시연 기준의 핵심 흐름은 다음과 같다.
 
 ```text
-Android Mock Robot
+Python Mock Robot
 -> app-server / robot gateway
 -> WebRTC signaling
 -> TURN relay
@@ -250,4 +249,4 @@ Android Mock Robot
 -> PostgreSQL / MinIO
 ```
 
-따라서 WebRTC, Android, 녹화, 위치, 센서, 로봇 등록을 건드리는 작업은 이 흐름 안에서 실제로 확인해야 한다.
+따라서 WebRTC, 녹화, 위치, 센서, 로봇 등록을 건드리는 작업은 이 흐름 안에서 실제로 확인해야 한다.

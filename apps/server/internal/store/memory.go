@@ -230,6 +230,9 @@ func (s *MemoryStore) StartMission(_ context.Context, missionCode string) (domai
 	if mission.Status != "ready" {
 		return domain.Mission{}, ErrInvalidState
 	}
+	if conflicts := s.findActiveMissionConflictsLocked(missionCode, missionRobotCodes(mission)); len(conflicts) > 0 {
+		return domain.Mission{}, &MissionStartConflictError{Conflicts: conflicts}
+	}
 	mission.Status = "active"
 	mission.StartedAt = &now
 	mission.UpdatedAt = now
@@ -243,6 +246,45 @@ func (s *MemoryStore) StartMission(_ context.Context, missionCode string) (domai
 	}
 
 	return copyMission(mission), nil
+}
+
+func (s *MemoryStore) findActiveMissionConflictsLocked(targetMissionCode string, robotCodes []string) []MissionStartConflict {
+	if len(robotCodes) == 0 {
+		return nil
+	}
+	targetRobots := map[string]struct{}{}
+	for _, robotCode := range robotCodes {
+		trimmed := strings.TrimSpace(robotCode)
+		if trimmed != "" {
+			targetRobots[trimmed] = struct{}{}
+		}
+	}
+	if len(targetRobots) == 0 {
+		return nil
+	}
+
+	conflicts := make([]MissionStartConflict, 0)
+	for _, mission := range s.missionsByCode {
+		if mission.MissionCode == targetMissionCode || mission.Status != "active" {
+			continue
+		}
+		for _, robotCode := range missionRobotCodes(mission) {
+			if _, ok := targetRobots[robotCode]; !ok {
+				continue
+			}
+			conflicts = append(conflicts, MissionStartConflict{
+				RobotCode:         robotCode,
+				ActiveMissionCode: mission.MissionCode,
+			})
+		}
+	}
+	sort.Slice(conflicts, func(i, j int) bool {
+		if conflicts[i].RobotCode == conflicts[j].RobotCode {
+			return conflicts[i].ActiveMissionCode < conflicts[j].ActiveMissionCode
+		}
+		return conflicts[i].RobotCode < conflicts[j].RobotCode
+	})
+	return conflicts
 }
 
 func (s *MemoryStore) EndMission(_ context.Context, missionCode string) (domain.Mission, error) {

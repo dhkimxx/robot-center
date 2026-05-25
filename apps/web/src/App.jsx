@@ -50,12 +50,10 @@ export default function App() {
     closeMissionModal,
     closeRobotModal,
     confirmArchiveRobot,
-    connectAllLiveTargets,
     connectLive,
     createMission,
     createRobot,
     disconnectLive,
-    disconnectMissionLiveTargets,
     dismissNotification,
     endMission,
     loadConnectionInfo,
@@ -130,9 +128,7 @@ export default function App() {
               missionTargets={missionControlTargets}
               missions={missions}
               onBackToMissionList={() => setMissionControlCode("")}
-              onConnectAllMissionTargets={() => void connectAllLiveTargets()}
               onConnectSelectedMissionTarget={() => void connectLive()}
-              onDisconnectAllMissionTargets={() => disconnectMissionLiveTargets(missionControlTargets)}
               onDisconnectSelectedMissionTarget={disconnectLive}
               onEndMission={endMission}
               onOpenCreateMissionModal={openMissionCreateModal}

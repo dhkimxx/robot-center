@@ -788,7 +788,20 @@ func writeError(w http.ResponseWriter, status int, err error) {
 }
 
 func writeStoreError(w http.ResponseWriter, err error) {
+	var missionConflict *store.MissionStartConflictError
 	switch {
+	case errors.As(err, &missionConflict):
+		conflicts := make([]map[string]string, 0, len(missionConflict.Conflicts))
+		for _, conflict := range missionConflict.Conflicts {
+			conflicts = append(conflicts, map[string]string{
+				"robotCode":         conflict.RobotCode,
+				"activeMissionCode": conflict.ActiveMissionCode,
+			})
+		}
+		writeJSON(w, http.StatusConflict, map[string]any{
+			"error":     err.Error(),
+			"conflicts": conflicts,
+		})
 	case errors.Is(err, store.ErrNotFound):
 		writeError(w, http.StatusNotFound, err)
 	case errors.Is(err, store.ErrUnauthorized):

@@ -227,13 +227,30 @@ func (s *RecordingService) applyRecordingTick(ctx context.Context, repository st
 }
 
 func (s *RecordingService) MarkRecordingChunkUploaded(ctx context.Context, chunkID string, metadata store.RecordingUploadMetadata) (domain.RecordingChunk, error) {
-	return s.repository.MarkRecordingChunkUploaded(ctx, chunkID, metadata)
+	return s.withRecordingTransaction(ctx, func(ctx context.Context, repository store.RecordingRepository) (domain.RecordingChunk, error) {
+		return repository.MarkRecordingChunkUploaded(ctx, chunkID, metadata)
+	})
 }
 
 func (s *RecordingService) MarkRecordingFileUploaded(ctx context.Context, chunkID string, fileType string, metadata store.RecordingUploadMetadata) (domain.RecordingChunk, error) {
-	return s.repository.MarkRecordingFileUploaded(ctx, chunkID, fileType, metadata)
+	return s.withRecordingTransaction(ctx, func(ctx context.Context, repository store.RecordingRepository) (domain.RecordingChunk, error) {
+		return repository.MarkRecordingFileUploaded(ctx, chunkID, fileType, metadata)
+	})
 }
 
 func (s *RecordingService) ListRecordingChunks(ctx context.Context) ([]domain.RecordingChunk, error) {
 	return s.repository.ListRecordingChunks(ctx)
+}
+
+func (s *RecordingService) withRecordingTransaction(ctx context.Context, run func(ctx context.Context, repository store.RecordingRepository) (domain.RecordingChunk, error)) (domain.RecordingChunk, error) {
+	if s.transactionRunner == nil {
+		return run(ctx, s.repository)
+	}
+	var result domain.RecordingChunk
+	err := s.transactionRunner.WithTransaction(ctx, func(ctx context.Context, repository store.Store) error {
+		var runErr error
+		result, runErr = run(ctx, repository)
+		return runErr
+	})
+	return result, err
 }

@@ -33,32 +33,56 @@ func stringWithDefault(value string, fallback string) string {
 }
 
 func NewPostgresStore(ctx context.Context, cfg PostgresConfig) (*PostgresStore, error) {
-	db, err := gorm.Open(postgres.Open(cfg.DSN), &gorm.Config{})
-	if err != nil {
-		return nil, err
-	}
-	sqlDB, err := db.DB()
+	db, sqlDB, err := openPostgresWithRetry(ctx, cfg.DSN)
 	if err != nil {
 		return nil, err
 	}
 	sqlDB.SetMaxOpenConns(10)
 	sqlDB.SetMaxIdleConns(5)
 	sqlDB.SetConnMaxLifetime(30 * time.Minute)
-	if err := sqlDB.PingContext(ctx); err != nil {
-		_ = sqlDB.Close()
-		return nil, err
-	}
 	store := &PostgresStore{
 		db:          db,
 		sqlDB:       sqlDB,
 		serverURL:   cfg.ServerURL,
 		minioBucket: stringWithDefault(strings.TrimSpace(cfg.MinIOBucket), "robot-center"),
 	}
-	if err := store.ensureP0Schema(ctx); err != nil {
+	if err := store.runAutoMigrations(ctx); err != nil {
 		_ = sqlDB.Close()
 		return nil, err
 	}
 	return store, nil
+}
+
+func openPostgresWithRetry(ctx context.Context, dsn string) (*gorm.DB, *sql.DB, error) {
+	var lastErr error
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+		if err == nil {
+			sqlDB, dbErr := db.DB()
+			if dbErr == nil {
+				if pingErr := sqlDB.PingContext(ctx); pingErr == nil {
+					return db, sqlDB, nil
+				} else {
+					lastErr = pingErr
+				}
+				_ = sqlDB.Close()
+			} else {
+				lastErr = dbErr
+			}
+		} else {
+			lastErr = err
+		}
+
+		if time.Now().After(deadline) {
+			return nil, nil, lastErr
+		}
+		select {
+		case <-ctx.Done():
+			return nil, nil, ctx.Err()
+		case <-time.After(time.Second):
+		}
+	}
 }
 
 func (s *PostgresStore) Close() error {
@@ -77,33 +101,6 @@ func (s *PostgresStore) WithTransaction(ctx context.Context, run func(ctx contex
 		return err
 	}
 	return tx.Commit()
-}
-
-func (s *PostgresStore) ensureP0Schema(ctx context.Context) error {
-	return s.db.WithContext(ctx).Exec(`
-		ALTER TABLE robots
-			ADD COLUMN IF NOT EXISTS archived_at timestamptz;
-
-		ALTER TABLE robot_tokens
-			ADD COLUMN IF NOT EXISTS token_plaintext text;
-
-		ALTER TABLE recording_chunks
-			ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now(),
-			ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
-
-		CREATE TABLE IF NOT EXISTS streaming_statuses (
-			id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-			robot_id uuid NOT NULL REFERENCES robots(id) ON DELETE CASCADE,
-			mission_id uuid REFERENCES missions(id) ON DELETE CASCADE,
-			room_id text NOT NULL,
-			status text NOT NULL,
-			published_tracks jsonb NOT NULL DEFAULT '[]'::jsonb,
-			published_data_channels jsonb NOT NULL DEFAULT '[]'::jsonb,
-			sent_at timestamptz,
-			updated_at timestamptz NOT NULL DEFAULT now(),
-			UNIQUE(robot_id)
-		);
-	`).Error
 }
 
 func (s *PostgresStore) nextCodeWithGorm(tx *gorm.DB, prefix string, tableName string) (string, error) {
