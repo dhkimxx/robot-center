@@ -7,6 +7,7 @@ import {
 } from "./liveHelpers.js";
 import {
   isIntentionalLiveCloseReason,
+  LiveCloseReason,
   LiveSessionStatus
 } from "./liveConnectionStates.js";
 
@@ -82,9 +83,12 @@ export function createLiveConnectionCloseHandler({
       return;
     }
     const isIntentionalClose = isIntentionalLiveCloseReason(reason);
+    const nextStatus = reason === LiveCloseReason.CONNECTION_FAILED
+      ? LiveSessionStatus.SIGNALING_ERROR
+      : isIntentionalClose ? LiveSessionStatus.IDLE : LiveSessionStatus.SIGNALING_CLOSED;
     setLiveSessionStatus(
       targetKey,
-      isIntentionalClose ? LiveSessionStatus.IDLE : LiveSessionStatus.SIGNALING_CLOSED,
+      nextStatus,
       { attemptId: attempt.attemptId, resetStreams: isIntentionalClose }
     );
     if (!isIntentionalClose) {

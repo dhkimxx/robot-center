@@ -24,6 +24,25 @@ export function createLiveConnectionClient({
   let remoteServerPeerId = "";
   let requestedCloseReason = "";
 
+  const closeTransports = (reason = LiveCloseReason.DISCONNECTED) => {
+    requestedCloseReason = reason;
+    if (websocket.readyState === WebSocket.CONNECTING || websocket.readyState === WebSocket.OPEN) {
+      websocket.close(1000, reason);
+    }
+    if (peerConnection.signalingState !== "closed") {
+      peerConnection.close();
+    }
+  };
+
+  const reportSignalingError = (error, { closeConnection = false } = {}) => {
+    const message = error instanceof Error ? error.message : "알 수 없음";
+    onStatusChange(LiveSessionStatus.SIGNALING_ERROR);
+    onEvent(`관제 연결 오류: ${message}`);
+    if (closeConnection) {
+      closeTransports(LiveCloseReason.CONNECTION_FAILED);
+    }
+  };
+
   peerConnection.onicecandidate = (event) => {
     if (websocket.readyState !== WebSocket.OPEN) {
       return;
@@ -77,48 +96,54 @@ export function createLiveConnectionClient({
   };
 
   websocket.onmessage = async (event) => {
-    const message = JSON.parse(event.data);
-    const payload = message.payload ?? {};
-    if (payload.targetPeerId && selfPeerId && payload.targetPeerId !== selfPeerId) {
-      return;
-    }
-    if (message.type === "joined") {
-      selfPeerId = payload.peerId ?? "";
-      onEvent(`${makePeerRoleLabel(payload.role)} 연결 확인`);
-      return;
-    }
-    if (message.type === "peer-present" || message.type === "peer-joined") {
-      onEvent(`${makePeerRoleLabel(payload.role)} 참여`);
-      return;
-    }
-    if (message.type === "select-robot-ack") {
-      onEvent("관제 로봇 선택 반영", payload.robotCode ?? robotCode);
-      return;
-    }
-    if (message.type === "offer") {
-      remoteServerPeerId = payload.fromPeerId ?? remoteServerPeerId;
-      onEvent("영상 연결 요청 수신");
-      await peerConnection.setRemoteDescription({ type: "offer", sdp: payload.sdp });
-      const answer = await peerConnection.createAnswer();
-      await peerConnection.setLocalDescription(answer);
-      await waitForIceGatheringComplete(peerConnection);
-      const localDescription = peerConnection.localDescription ?? answer;
-      const answerPayload = {
-        type: localDescription.type,
-        sdp: localDescription.sdp
-      };
-      if (remoteServerPeerId) {
-        answerPayload.targetPeerId = remoteServerPeerId;
+    let messageType = "";
+    try {
+      const message = JSON.parse(event.data);
+      messageType = message.type ?? "";
+      const payload = message.payload ?? {};
+      if (payload.targetPeerId && selfPeerId && payload.targetPeerId !== selfPeerId) {
+        return;
       }
-      websocket.send(JSON.stringify({
-        type: "answer",
-        payload: answerPayload
-      }));
-      onEvent("영상 연결 응답 전송");
-      return;
-    }
-    if (message.type === "candidate" && payload.candidate) {
-      await peerConnection.addIceCandidate(payload);
+      if (message.type === "joined") {
+        selfPeerId = payload.peerId ?? "";
+        onEvent(`${makePeerRoleLabel(payload.role)} 연결 확인`);
+        return;
+      }
+      if (message.type === "peer-present" || message.type === "peer-joined") {
+        onEvent(`${makePeerRoleLabel(payload.role)} 참여`);
+        return;
+      }
+      if (message.type === "select-robot-ack") {
+        onEvent("관제 로봇 선택 반영", payload.robotCode ?? robotCode);
+        return;
+      }
+      if (message.type === "offer") {
+        remoteServerPeerId = payload.fromPeerId ?? remoteServerPeerId;
+        onEvent("영상 연결 요청 수신");
+        await peerConnection.setRemoteDescription({ type: "offer", sdp: payload.sdp });
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        await waitForIceGatheringComplete(peerConnection);
+        const localDescription = peerConnection.localDescription ?? answer;
+        const answerPayload = {
+          type: localDescription.type,
+          sdp: localDescription.sdp
+        };
+        if (remoteServerPeerId) {
+          answerPayload.targetPeerId = remoteServerPeerId;
+        }
+        websocket.send(JSON.stringify({
+          type: "answer",
+          payload: answerPayload
+        }));
+        onEvent("영상 연결 응답 전송");
+        return;
+      }
+      if (message.type === "candidate" && payload.candidate) {
+        await peerConnection.addIceCandidate(payload);
+      }
+    } catch (error) {
+      reportSignalingError(error, { closeConnection: messageType === "offer" });
     }
   };
 
@@ -126,9 +151,7 @@ export function createLiveConnectionClient({
     peerConnection,
     websocket,
     close(reason = LiveCloseReason.DISCONNECTED) {
-      requestedCloseReason = reason;
-      websocket.close(1000, reason);
-      peerConnection.close();
+      closeTransports(reason);
     },
     onClose(handler) {
       websocket.onclose = (event) => handler({
