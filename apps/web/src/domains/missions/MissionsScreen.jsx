@@ -53,7 +53,7 @@ export default function MissionsScreen({
   }
 
   return (
-    <section className="mission-management-layout">
+    <section className="grid h-full min-h-0 grid-cols-[minmax(0,1.52fr)_minmax(340px,0.88fr)] items-start gap-3 max-[1180px]:grid-cols-1">
       <MissionListPanel
         missions={missions}
         onOpenCreateMissionModal={onOpenCreateMissionModal}
@@ -62,13 +62,15 @@ export default function MissionsScreen({
         selectedMission={selectedMission}
       />
 
-      <article className="surface">
-        <div className="section-heading">
-          <h2>임무 상세</h2>
-          <span>{selectedMission?.missionCode ?? "선택 없음"}</span>
+      <article className="self-start rounded-[14px] border border-slate-500/25 bg-command-800/95 p-6 shadow-command">
+        <div className="mb-6 flex min-w-0 items-start justify-between gap-4">
+          <h2 className="text-lg font-bold text-slate-50">임무 상세</h2>
+          <span className="truncate text-sm font-bold text-slate-400">{selectedMission?.missionCode ?? "선택 없음"}</span>
         </div>
         {!selectedMission ? (
-          <p className="empty-state">임무를 선택하세요.</p>
+          <p className="rounded-xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-sm font-semibold text-amber-200">
+            임무를 선택하세요.
+          </p>
         ) : (
           <MissionDetailPanel
             mission={selectedMission}

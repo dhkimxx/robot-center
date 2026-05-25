@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { cn } from "../../../utils/cn.js";
 
 export function VideoPane({ className = "", compact = false, label, stream, thermal = false }) {
   const videoRef = useRef(null);
@@ -15,17 +16,22 @@ export function VideoPane({ className = "", compact = false, label, stream, ther
       video.srcObject = null;
     };
   }, [stream]);
-  const videoPaneClassName = [
-    "video-pane",
-    thermal ? "thermal" : "",
-    compact ? "compact" : "",
-    className
-  ].filter(Boolean).join(" ");
   return (
-    <div className={videoPaneClassName}>
-      <video ref={videoRef} autoPlay playsInline muted={label !== "Audio"} />
-      {!stream ? <span>{label} 대기</span> : null}
-      <strong>{label}</strong>
+    <div
+      className={cn(
+        "relative min-h-[260px] overflow-hidden rounded-xl border border-slate-500/20 bg-command-950",
+        thermal && "bg-[#111015]",
+        compact && "min-h-[180px]",
+        className
+      )}
+    >
+      <video className="absolute inset-0 h-full w-full object-contain" ref={videoRef} autoPlay playsInline muted={label !== "Audio"} />
+      {!stream ? (
+        <span className="absolute inset-0 grid place-items-center text-sm font-bold text-slate-500">{label} 대기</span>
+      ) : null}
+      <strong className="absolute left-3 top-3 rounded-lg border border-sapphire-500/25 bg-command-950/80 px-3 py-1.5 text-sm font-bold text-slate-100">
+        {label}
+      </strong>
     </div>
   );
 }

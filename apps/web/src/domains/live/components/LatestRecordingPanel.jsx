@@ -1,3 +1,8 @@
+import Button from "../../../components/ui/Button.jsx";
+import EmptyState from "../../../components/ui/EmptyState.jsx";
+import SectionHeader from "../../../components/ui/SectionHeader.jsx";
+import Surface from "../../../components/ui/Surface.jsx";
+import { cn } from "../../../utils/cn.js";
 import {
   formatDateTime,
   makeStatusLabel
@@ -7,31 +12,34 @@ import { createRecordingPlaybackFile } from "../../recordings/recordingHelpers.j
 export function LatestRecordingPanel({ recording, compact = false, onOpenRecordings, onPlayRecording, playbackRecording }) {
   const playableFile = createRecordingPlaybackFile(playbackRecording ?? recording);
   return (
-    <article className={compact ? "latest-recording compact" : "surface latest-recording"}>
-      <div className="section-heading">
-        <h2>녹화 저장</h2>
-        <span>{playableFile ? "재생 가능" : recording ? makeStatusLabel(recording.status) : "대기"}</span>
-      </div>
+    <Surface className={cn("grid gap-3", compact && "rounded-xl p-3 shadow-none")}>
+      <SectionHeader
+        className="mb-0"
+        title="녹화 저장"
+        meta={playableFile ? "재생 가능" : recording ? makeStatusLabel(recording.status) : "대기"}
+      />
       {!recording ? (
-        <p className="empty-state">진행 중인 임무가 시작되면 저장 청크가 생성됩니다.</p>
+        <EmptyState>진행 중인 임무가 시작되면 저장 청크가 생성됩니다.</EmptyState>
       ) : (
-        <div className="latest-recording-body">
-          <div>
-            <strong>{recording.missionCode} / #{recording.chunkIndex}</strong>
-            <span>{formatDateTime(recording.startedAt)} - {formatDateTime(recording.endedAt)}</span>
+        <div className="grid gap-3 rounded-lg border border-slate-500/20 bg-white/[0.045] p-3">
+          <div className="min-w-0">
+            <strong className="block truncate text-sm font-bold text-slate-50">{recording.missionCode} / #{recording.chunkIndex}</strong>
+            <span className="mt-1 block text-xs font-semibold leading-relaxed text-slate-400">
+              {formatDateTime(recording.startedAt)} - {formatDateTime(recording.endedAt)}
+            </span>
           </div>
-          <div className="latest-recording-actions">
+          <div className="flex flex-wrap gap-2">
             {playableFile ? (
-              <button className="object-link" type="button" onClick={onPlayRecording}>
+              <Button size="sm" variant="primary" onClick={onPlayRecording}>
                 재생
-              </button>
+              </Button>
             ) : null}
-            <button className="object-link secondary" type="button" onClick={onOpenRecordings}>
+            <Button size="sm" onClick={onOpenRecordings}>
               녹화 목록
-            </button>
+            </Button>
           </div>
         </div>
       )}
-    </article>
+    </Surface>
   );
 }

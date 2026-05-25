@@ -1,4 +1,7 @@
+import { useState } from "react";
+import ConfirmDialog from "../../components/ConfirmDialog.jsx";
 import Modal from "../../components/Modal.jsx";
+import Button from "../../components/ui/Button.jsx";
 import { RobotConnectionInfoDetails, RobotFormFields } from "./RobotFormFields.jsx";
 
 export function RobotModals({
@@ -18,6 +21,19 @@ export function RobotModals({
   setRobotForm,
   updateRobot
 }) {
+  const [pendingTokenResetRobotCode, setPendingTokenResetRobotCode] = useState("");
+
+  const closeArchiveConfirm = () => setPendingArchiveRobotCode("");
+  const closeTokenResetConfirm = () => setPendingTokenResetRobotCode("");
+  const confirmTokenReset = () => {
+    const robotCode = pendingTokenResetRobotCode;
+    if (!robotCode) {
+      return;
+    }
+    setPendingTokenResetRobotCode("");
+    void rotateRobotToken(robotCode);
+  };
+
   return (
     <>
       {robotModal === "create" ? (
@@ -25,14 +41,14 @@ export function RobotModals({
           description="새 로봇을 관제 목록에 등록합니다."
           footer={(
             <>
-              <button className="secondary-button" type="button" onClick={closeRobotModal}>취소</button>
-              <button className="primary-button" form="robot-create-form" type="submit">등록</button>
+              <Button onClick={closeRobotModal}>취소</Button>
+              <Button form="robot-create-form" type="submit" variant="primary">등록</Button>
             </>
           )}
           onClose={closeRobotModal}
           title="로봇 등록"
         >
-          <form className="form-grid modal-form" id="robot-create-form" onSubmit={createRobot}>
+          <form className="grid gap-3" id="robot-create-form" onSubmit={createRobot}>
             <RobotFormFields form={robotForm} setForm={setRobotForm} />
           </form>
         </Modal>
@@ -42,14 +58,14 @@ export function RobotModals({
           description={selectedRobot.robotCode}
           footer={(
             <>
-              <button className="secondary-button" type="button" onClick={closeRobotModal}>취소</button>
-              <button className="primary-button" form="robot-edit-form" type="submit">저장</button>
+              <Button onClick={closeRobotModal}>취소</Button>
+              <Button form="robot-edit-form" type="submit" variant="primary">저장</Button>
             </>
           )}
           onClose={closeRobotModal}
           title="로봇 수정"
         >
-          <form className="form-grid modal-form" id="robot-edit-form" onSubmit={updateRobot}>
+          <form className="grid gap-3" id="robot-edit-form" onSubmit={updateRobot}>
             <RobotFormFields form={robotEditForm} setForm={setRobotEditForm} />
           </form>
         </Modal>
@@ -57,31 +73,35 @@ export function RobotModals({
       {robotModal === "connection" && connectionInfo ? (
         <Modal
           description={connectionInfo.robotCode}
-          footer={<button className="primary-button" type="button" onClick={closeRobotModal}>확인</button>}
+          footer={<Button variant="primary" onClick={closeRobotModal}>확인</Button>}
           onClose={closeRobotModal}
           title="연결 정보"
           size="large"
         >
-          <RobotConnectionInfoDetails connectionInfo={connectionInfo} onRotateToken={rotateRobotToken} />
+          <RobotConnectionInfoDetails connectionInfo={connectionInfo} onRequestTokenReset={setPendingTokenResetRobotCode} />
         </Modal>
       ) : null}
       {pendingArchiveRobotCode ? (
-        <Modal
-          description={pendingArchiveRobot?.robotCode ?? pendingArchiveRobotCode}
-          footer={(
-            <>
-              <button className="secondary-button" type="button" onClick={() => setPendingArchiveRobotCode("")}>취소</button>
-              <button className="danger-button" type="button" onClick={() => void confirmArchiveRobot()}>삭제</button>
-            </>
-          )}
-          onClose={() => setPendingArchiveRobotCode("")}
+        <ConfirmDialog
+          confirmLabel="삭제"
+          description="로봇을 목록에서 제거합니다. 진행 중이거나 대기 중인 임무에 배정되어 있으면 삭제 요청은 실패합니다."
+          onCancel={closeArchiveConfirm}
+          onConfirm={confirmArchiveRobot}
+          subject={pendingArchiveRobot?.displayName ?? pendingArchiveRobotCode}
           title="로봇 삭제"
-        >
-          <div className="confirm-message">
-            <strong>{pendingArchiveRobot?.displayName ?? pendingArchiveRobotCode}</strong>
-            <span>로봇을 목록에서 제거합니다. 진행 중이거나 대기 중인 임무에 배정되어 있으면 삭제 요청은 실패합니다.</span>
-          </div>
-        </Modal>
+          tone="danger"
+        />
+      ) : null}
+      {pendingTokenResetRobotCode ? (
+        <ConfirmDialog
+          confirmLabel="재발급"
+          description="기존 토큰은 더 이상 사용할 수 없습니다. 로봇 쪽 연결 정보도 새 토큰으로 다시 설정해야 합니다."
+          onCancel={closeTokenResetConfirm}
+          onConfirm={confirmTokenReset}
+          subject={pendingTokenResetRobotCode}
+          title="토큰 재발급"
+          tone="danger"
+        />
       ) : null}
     </>
   );

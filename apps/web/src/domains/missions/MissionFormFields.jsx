@@ -6,8 +6,8 @@ import { makeStatusLabel } from "../../utils/formatters.js";
 export function MissionFormFields({ form, robots, setForm }) {
   return (
     <>
-      <label>
-        임무명
+      <label className="grid gap-1.5 text-xs font-extrabold text-slate-400">
+        <span>임무명</span>
         <input
           value={form.name}
           onChange={(event) => setForm({ ...form, name: event.target.value })}
@@ -29,8 +29,8 @@ export function MissionFormFields({ form, robots, setForm }) {
         value={form.robotCodes ?? []}
         onChange={(robotCodes) => setForm({ ...form, robotCode: robotCodes[0] ?? "", robotCodes })}
       />
-      <label>
-        현장 메모
+      <label className="grid gap-1.5 text-xs font-extrabold text-slate-400">
+        <span>현장 메모</span>
         <textarea
           value={form.siteNote}
           onChange={(event) => setForm({ ...form, siteNote: event.target.value })}

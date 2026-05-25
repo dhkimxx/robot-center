@@ -1,5 +1,10 @@
 import { getMissionRobotCodes } from "../missions/missionHelpers.js";
 import { formatDateTime, makeStatusLabel } from "../../utils/formatters.js";
+import Button from "../../components/ui/Button.jsx";
+import EmptyState from "../../components/ui/EmptyState.jsx";
+import SectionHeader from "../../components/ui/SectionHeader.jsx";
+import Surface from "../../components/ui/Surface.jsx";
+import { cn } from "../../utils/cn.js";
 
 export default function RobotsScreen({
   missions,
@@ -16,78 +21,86 @@ export default function RobotsScreen({
     : false;
 
   return (
-    <section className="robot-management-layout">
-      <article className="surface robot-list-surface">
-        <div className="section-heading">
-          <div>
-            <h2>등록 로봇</h2>
-            <span>{robots.length}대</span>
-          </div>
-          <button className="primary-button compact-button" type="button" onClick={onOpenCreateRobotModal}>로봇 등록</button>
-        </div>
-        <div className="list-block">
+    <section className="grid h-full min-h-0 grid-cols-[minmax(0,1.36fr)_minmax(340px,0.82fr)] items-stretch gap-3.5 max-[1180px]:grid-cols-1">
+      <Surface className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
+        <SectionHeader
+          action={<Button size="sm" variant="primary" onClick={onOpenCreateRobotModal}>로봇 등록</Button>}
+          meta={`${robots.length}대`}
+          title="등록 로봇"
+        />
+        <div className="grid min-h-0 auto-rows-max gap-2 overflow-auto pr-1">
           {robots.length === 0 ? (
-            <p className="empty-state">등록된 로봇이 없습니다.</p>
+            <EmptyState>등록된 로봇이 없습니다.</EmptyState>
           ) : (
             robots.map((robot) => {
               const isSelectedRobot = selectedRobot?.robotCode === robot.robotCode;
               return (
-                <div
-                  className={isSelectedRobot ? "row-item robot-row active" : "row-item robot-row"}
+                <button
+                  aria-label={`${robot.displayName} ${robot.robotCode} 선택`}
+                  aria-pressed={isSelectedRobot}
+                  className={cn(
+                    "grid min-h-[52px] w-full gap-1 rounded-lg border border-slate-500/20 bg-white/[0.045] px-3 py-2 text-left transition hover:border-sapphire-500/[0.45] hover:bg-sapphire-500/[0.12]",
+                    isSelectedRobot && "border-sapphire-500/55 bg-sapphire-500/[0.10] shadow-[inset_3px_0_0_var(--color-sapphire)]"
+                  )}
                   key={robot.robotCode}
+                  type="button"
+                  onClick={() => onSelectRobot(robot.robotCode)}
                 >
-                  <button
-                    aria-label={`${robot.displayName} ${robot.robotCode} 선택`}
-                    aria-pressed={isSelectedRobot}
-                    className="robot-row-select"
-                    type="button"
-                    onClick={() => onSelectRobot(robot.robotCode)}
-                  >
-                    <strong>{robot.displayName}</strong>
-                    <span>{robot.robotCode} / {makeStatusLabel(robot.status)} / 최근 {formatDateTime(robot.lastSeenAt)}</span>
-                  </button>
-                </div>
+                  <strong className="truncate text-sm font-bold leading-tight text-slate-50">{robot.displayName}</strong>
+                  <span className="truncate text-xs font-semibold text-slate-400">
+                    {robot.robotCode} / {makeStatusLabel(robot.status)} / 최근 {formatDateTime(robot.lastSeenAt)}
+                  </span>
+                </button>
               );
             })
           )}
         </div>
-      </article>
+      </Surface>
 
-      <section className="robot-detail-stack">
-        <article className="surface">
-          <div className="section-heading">
-            <h2>로봇 상세</h2>
-            <span>{selectedRobot?.robotCode ?? "선택 없음"}</span>
-          </div>
+      <section className="grid min-h-0 content-start overflow-auto">
+        <Surface>
+          <SectionHeader meta={selectedRobot?.robotCode ?? "선택 없음"} title="로봇 상세" />
           {!selectedRobot ? (
-            <p className="empty-state">로봇을 선택하세요.</p>
+            <EmptyState>로봇을 선택하세요.</EmptyState>
           ) : (
-            <div className="robot-detail-panel">
-              <div>
-                <strong>{selectedRobot.displayName}</strong>
-                <span>{selectedRobot.modelName || "모델 미지정"}</span>
+            <div className="grid gap-5">
+              <div className="min-w-0">
+                <strong className="block truncate text-xl font-bold leading-tight text-slate-50">{selectedRobot.displayName}</strong>
+                <span className="mt-2 block text-sm font-semibold text-slate-400">{selectedRobot.modelName || "모델 미지정"}</span>
               </div>
-              <div className="robot-detail-meta">
-                <span>상태 {makeStatusLabel(selectedRobot.status)}</span>
-                <span>최근 연결 {formatDateTime(selectedRobot.lastSeenAt)}</span>
-                <span>최근 송출 {formatDateTime(selectedRobot.lastStreamingAt)}</span>
-                {selectedRobotHasOpenMission ? <span>삭제 불가: 진행/대기 임무 배정</span> : null}
+              <div className="grid gap-3 rounded-xl border border-slate-500/20 bg-white/[0.045] p-4">
+                <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-3 text-sm">
+                  <span className="font-semibold text-slate-400">상태</span>
+                  <span className="font-semibold text-slate-200">{makeStatusLabel(selectedRobot.status)}</span>
+                </div>
+                <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-3 text-sm">
+                  <span className="font-semibold text-slate-400">최근 연결</span>
+                  <span className="font-semibold text-slate-200">{formatDateTime(selectedRobot.lastSeenAt)}</span>
+                </div>
+                <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-3 text-sm">
+                  <span className="font-semibold text-slate-400">최근 송출</span>
+                  <span className="font-semibold text-slate-200">{formatDateTime(selectedRobot.lastStreamingAt)}</span>
+                </div>
+                {selectedRobotHasOpenMission ? (
+                  <span className="rounded-lg border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-sm font-semibold text-amber-200">
+                    삭제 불가: 진행/대기 임무 배정
+                  </span>
+                ) : null}
               </div>
-              <div className="button-row robot-detail-actions">
-                <button className="primary-button" type="button" onClick={onOpenEditRobotModal}>수정</button>
-                <button type="button" onClick={() => onLoadConnectionInfo(selectedRobot.robotCode)}>연결 정보</button>
-                <button
-                  className="danger-button"
+              <div className="flex flex-wrap justify-end gap-3 pt-1">
+                <Button variant="primary" onClick={onOpenEditRobotModal}>수정</Button>
+                <Button onClick={() => onLoadConnectionInfo(selectedRobot.robotCode)}>연결 정보</Button>
+                <Button
+                  variant="danger"
                   disabled={selectedRobotHasOpenMission}
-                  type="button"
                   onClick={() => onArchiveRobot(selectedRobot.robotCode)}
                 >
                   삭제
-                </button>
+                </Button>
               </div>
             </div>
           )}
-        </article>
+        </Surface>
       </section>
     </section>
   );

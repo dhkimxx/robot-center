@@ -1,19 +1,19 @@
 :root {
   color-scheme: dark;
   --font-command: "Mulish", "Pretendard", "Noto Sans KR", system-ui, sans-serif;
-  --color-command-bg: #050914;
-  --color-command-bg-soft: #08111f;
-  --color-command-surface: #0e1b2d;
-  --color-command-surface-muted: #132238;
-  --color-command-border: rgba(133, 160, 197, 0.22);
-  --color-command-text: #eef5ff;
-  --color-command-muted: #95a7c0;
-  --color-sapphire: #0d71d3;
-  --color-sapphire-strong: #2f9bff;
-  --color-state-ok: #35d399;
-  --color-state-warn: #f7b955;
-  --color-state-danger: #ff667a;
-  --shadow-command: 0 24px 80px rgba(0, 0, 0, 0.35);
+  --color-command-bg: #090b0f;
+  --color-command-bg-soft: #0f1218;
+  --color-command-surface: #151a22;
+  --color-command-surface-muted: #1d2430;
+  --color-command-border: rgba(148, 163, 184, 0.16);
+  --color-command-text: #f4f7fb;
+  --color-command-muted: #9aa5b4;
+  --color-sapphire: #3b82f6;
+  --color-sapphire-strong: #60a5fa;
+  --color-state-ok: #22c55e;
+  --color-state-warn: #f59e0b;
+  --color-state-danger: #ef4444;
+  --shadow-command: 0 16px 36px rgba(0, 0, 0, 0.22);
   --radius-panel: 14px;
   --radius-control: 10px;
 }

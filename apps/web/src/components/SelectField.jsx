@@ -13,8 +13,8 @@ export default function SelectField({
   const selectId = id ?? generatedId;
 
   return (
-    <label className="select-field" htmlFor={selectId}>
-      <span className="select-field-label">{label}</span>
+    <label className="grid min-w-0 gap-1.5 text-xs font-extrabold text-slate-400" htmlFor={selectId}>
+      <span>{label}</span>
       <select
         disabled={disabled}
         id={selectId}

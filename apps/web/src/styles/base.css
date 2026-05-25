@@ -3,15 +3,46 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    font-family: var(--font-command);
+    color: var(--color-command-text);
+    background: var(--color-command-bg);
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  *::-webkit-scrollbar {
+    width: 7px;
+    height: 7px;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: #6b7280;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: #111827;
+  }
+
   html,
   body,
   #root {
+    width: 100%;
+    min-width: 320px;
     min-height: 100%;
+    background: var(--color-command-bg);
   }
 
   body {
     margin: 0;
-    background: linear-gradient(135deg, var(--color-command-bg), #070b16 48%, #02040b);
+    min-height: 100vh;
+    overflow: hidden;
+    background: var(--color-command-bg);
     color: var(--color-command-text);
     font-family: var(--font-command);
   }
@@ -21,6 +52,72 @@
   select,
   textarea {
     font: inherit;
+  }
+
+  button {
+    border: 0;
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  input,
+  select,
+  textarea {
+    width: 100%;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 8px;
+    background: #10151d;
+    color: var(--color-command-text);
+  }
+
+  input:focus,
+  select:focus,
+  textarea:focus {
+    outline: 2px solid rgba(59, 130, 246, 0.42);
+    outline-offset: 1px;
+    border-color: var(--color-sapphire);
+  }
+
+  input,
+  select {
+    height: 38px;
+    padding: 0 10px;
+  }
+
+  textarea {
+    min-height: 80px;
+    resize: vertical;
+    padding: 9px 10px;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: #6b7280;
+  }
+
+  select option {
+    color: var(--color-command-text);
+    background: #11161e;
+  }
+
+  h1,
+  h2,
+  p,
+  pre {
+    margin: 0;
+  }
+
+  audio {
+    display: none;
+  }
+
+  @media (max-width: 900px) {
+    body {
+      overflow: auto;
+    }
   }
 }
 
