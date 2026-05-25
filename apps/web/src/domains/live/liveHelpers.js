@@ -89,5 +89,5 @@ export function getStreamingSubscriberCount(streamingStatus) {
 
 export function formatStreamingSubscriberCount(streamingStatus) {
   const subscriberCount = getStreamingSubscriberCount(streamingStatus);
-  return subscriberCount === null ? "구독자 -" : `구독 ${subscriberCount}명`;
+  return subscriberCount === null ? "관제 -" : `관제 ${subscriberCount}명`;
 }

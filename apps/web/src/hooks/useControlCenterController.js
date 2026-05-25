@@ -33,15 +33,23 @@ import {
   findLatestRecordingForTarget
 } from "../domains/recordings/recordingHelpers.js";
 import { createInitialRobotForm, createRobotEditForm } from "../domains/robots/robotHelpers.js";
-import {
-  findNavigationItemByPath,
-  getNavigationKeyFromPath,
-  getNavigationPath,
-  normalizePathname
-} from "../utils/navigation.js";
 import { waitForIceGatheringComplete } from "../utils/webrtc.js";
 
 const selectedLiveTargetStorageKey = "robot-center.selectedLiveTargetKey";
+const reconnectableLiveStatuses = new Set([
+  "closed",
+  "disconnected",
+  "failed",
+  "signaling closed",
+  "signaling error"
+]);
+const activeLiveConnectionStatuses = new Set([
+  "checking",
+  "completed",
+  "connected",
+  "connecting",
+  "signaling connected"
+]);
 
 function readSelectedLiveTargetKey() {
   try {
@@ -63,8 +71,11 @@ function writeSelectedLiveTargetKey(targetKey) {
   }
 }
 
-export function useControlCenterController() {
-  const [activeTab, setActiveTab] = useState(() => getNavigationKeyFromPath(window.location.pathname));
+export function useControlCenterController({
+  activeSection = "missions",
+  missionControlCode: routeMissionControlCode = "",
+  navigateToPath = null
+} = {}) {
   const [systemStatus, setSystemStatus] = useState(null);
   const [robots, setRobots] = useState([]);
   const [missions, setMissions] = useState([]);
@@ -89,30 +100,9 @@ export function useControlCenterController() {
   const [selectedLiveTargetKey, setSelectedLiveTargetKey] = useState(readSelectedLiveTargetKey);
   const [liveSessions, setLiveSessions] = useState({});
   const liveConnectionsRef = useRef(new Map());
+  const autoConnectingTargetKeyRef = useRef("");
+  const previousRouteMissionControlCodeRef = useRef("");
   const notificationSequenceRef = useRef(0);
-
-  const navigateToTab = useCallback((tabKey, options = {}) => {
-    const nextPath = getNavigationPath(tabKey);
-    setActiveTab(tabKey);
-    if (normalizePathname(window.location.pathname) === nextPath) {
-      return;
-    }
-    const historyMethod = options.replace ? "replaceState" : "pushState";
-    window.history[historyMethod]({ tabKey }, "", nextPath);
-  }, []);
-
-  useEffect(() => {
-    const currentNavigationItem = findNavigationItemByPath(window.location.pathname);
-    if (!currentNavigationItem || normalizePathname(window.location.pathname) === "/") {
-      navigateToTab(getNavigationKeyFromPath(window.location.pathname), { replace: true });
-    }
-
-    const handlePopState = () => {
-      setActiveTab(getNavigationKeyFromPath(window.location.pathname));
-    };
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, [navigateToTab]);
 
   const activeMissions = useMemo(
     () => missions.filter((mission) => mission.status === "active"),
@@ -228,17 +218,21 @@ export function useControlCenterController() {
     }));
   }, [updateLiveSession]);
 
-  const disconnectLiveTarget = useCallback((targetKey) => {
-    const missionCode = getMissionCodeFromRobotKey(targetKey);
-    const connectionKey = makeMissionConnectionKey(missionCode);
-    const connection = liveConnectionsRef.current.get(connectionKey) ?? liveConnectionsRef.current.get(targetKey);
+  const closeLiveConnection = useCallback((connectionKey, reason = "operator disconnected") => {
+    const connection = liveConnectionsRef.current.get(connectionKey);
     if (connection?.websocket) {
-      connection.websocket.close(1000, "operator disconnected");
+      connection.websocket.close(1000, reason);
     }
     if (connection?.peerConnection) {
       connection.peerConnection.close();
     }
     liveConnectionsRef.current.delete(connectionKey);
+  }, []);
+
+  const disconnectLiveTarget = useCallback((targetKey) => {
+    const missionCode = getMissionCodeFromRobotKey(targetKey);
+    const connectionKey = makeMissionConnectionKey(missionCode);
+    closeLiveConnection(connectionKey);
     liveConnectionsRef.current.delete(targetKey);
     const targetKeys = liveTargets
       .filter((candidate) => candidate.mission.missionCode === missionCode)
@@ -250,7 +244,7 @@ export function useControlCenterController() {
         videoStreams: { rgb: null, thermal: null, audio: null }
       }));
     });
-  }, [liveTargets, updateLiveSession]);
+  }, [closeLiveConnection, liveTargets, updateLiveSession]);
 
   const disconnectAllLiveTargets = useCallback(() => {
     const missionCodes = new Set(liveTargets.map((target) => target.mission.missionCode));
@@ -288,6 +282,15 @@ export function useControlCenterController() {
     disconnectLiveTarget(makeMissionRobotKey(missionCode, ""));
   }, [disconnectLiveTarget]);
 
+  useEffect(() => {
+    const previousMissionCode = previousRouteMissionControlCodeRef.current;
+    if (previousMissionCode && previousMissionCode !== routeMissionControlCode) {
+      disconnectMissionByCode(previousMissionCode);
+    }
+    previousRouteMissionControlCodeRef.current = routeMissionControlCode;
+    setMissionControlCode(routeMissionControlCode || "");
+  }, [disconnectMissionByCode, routeMissionControlCode]);
+
   const persistDataChannelMessage = useCallback((targetKey, label, message) => {
     let parsed;
     try {
@@ -310,7 +313,7 @@ export function useControlCenterController() {
     appendLiveEvent(targetKey, `${makeLiveChannelLabel(label)} 데이터 수신`);
   }, [appendLiveEvent, updateLiveSession]);
 
-  const connectLiveTarget = useCallback(async (target) => {
+  const connectLiveTarget = useCallback(async (target, options = {}) => {
     if (!target) {
       showNotification("선택한 임무에 연결할 로봇이 없습니다.", "warning");
       return;
@@ -322,10 +325,14 @@ export function useControlCenterController() {
     const missionTargets = missionTargetsForRoom.length > 0 ? missionTargetsForRoom : [target];
     const targetKey = makeLiveTargetKey(target);
     const connectionKey = makeMissionConnectionKey(missionCode);
+    const currentConnection = liveConnectionsRef.current.get(connectionKey);
+    const currentSession = liveSessions[targetKey] ?? createEmptyLiveSession();
+    if (!options.force && currentConnection?.targetKey === targetKey && activeLiveConnectionStatuses.has(currentSession.status)) {
+      return;
+    }
     disconnectLiveTarget(targetKey);
     setMissionControlCode(missionCode);
     setSelectedLiveTargetKey(targetKey);
-    navigateToTab("missions");
     updateLiveSession(targetKey, (session) => ({
       ...session,
       status: "connecting",
@@ -347,7 +354,7 @@ export function useControlCenterController() {
       let remoteServerPeerId = "";
       let videoTrackOrder = 0;
 
-      liveConnectionsRef.current.set(connectionKey, { websocket, peerConnection });
+      liveConnectionsRef.current.set(connectionKey, { targetKey, websocket, peerConnection });
 
       peerConnection.onicecandidate = (event) => {
         if (websocket.readyState !== WebSocket.OPEN) {
@@ -423,7 +430,10 @@ export function useControlCenterController() {
       websocket.onclose = () => {
         updateLiveSession(targetKey, (session) => ({ ...session, status: "signaling closed" }));
         appendLiveEvent(targetKey, "관제 연결 종료");
-        liveConnectionsRef.current.delete(connectionKey);
+        const currentConnection = liveConnectionsRef.current.get(connectionKey);
+        if (currentConnection?.targetKey === targetKey) {
+          liveConnectionsRef.current.delete(connectionKey);
+        }
       };
       websocket.onerror = () => {
         updateLiveSession(targetKey, (session) => ({ ...session, status: "signaling error" }));
@@ -475,49 +485,58 @@ export function useControlCenterController() {
         }
       };
     } catch (error) {
+      closeLiveConnection(connectionKey, "operator connection failed");
       updateLiveSession(targetKey, (session) => ({ ...session, status: "failed" }));
       showNotification(error instanceof Error ? error.message : "관제 연결 실패", "danger");
       appendLiveEvent(targetKey, `관제 연결 실패: ${error instanceof Error ? error.message : "알 수 없음"}`);
-      disconnectLiveTarget(targetKey);
     }
-  }, [appendLiveEvent, disconnectLiveTarget, liveTargets, navigateToTab, persistDataChannelMessage, showNotification, updateLiveSession]);
+  }, [appendLiveEvent, closeLiveConnection, disconnectLiveTarget, liveSessions, liveTargets, persistDataChannelMessage, showNotification, updateLiveSession]);
 
-  useEffect(() => {
-    if (!selectedMissionCode || !selectedRobotCode) {
-      return;
-    }
-    const connectionKey = makeMissionConnectionKey(selectedMissionCode);
-    const connection = liveConnectionsRef.current.get(connectionKey);
-    if (!connection?.websocket || connection.websocket.readyState !== WebSocket.OPEN) {
-      return;
-    }
-    const targetKey = makeMissionRobotKey(selectedMissionCode, selectedRobotCode);
-    updateLiveSession(targetKey, (session) => ({
-      ...session,
-      status: "connecting",
-      videoStreams: { rgb: null, thermal: null, audio: null }
-    }));
-    connection.websocket.send(JSON.stringify({
-      type: "select-robot",
-      payload: {
-        targetPeerId: "sfu",
-        robotCode: selectedRobotCode
-      }
-    }));
-    appendLiveEvent(targetKey, "관제 로봇 전환 요청");
-  }, [appendLiveEvent, selectedLiveTargetKey, selectedMissionCode, selectedRobotCode, updateLiveSession]);
-
-  const connectLive = useCallback(() => {
-    void connectLiveTarget(selectedLiveTarget);
+  const reconnectLive = useCallback(() => {
+    void connectLiveTarget(selectedLiveTarget, { force: true });
   }, [connectLiveTarget, selectedLiveTarget]);
 
-  const disconnectLive = useCallback(() => {
-    if (selectedLiveTarget) {
-      disconnectLiveTarget(makeLiveTargetKey(selectedLiveTarget));
-    } else {
-      disconnectAllLiveTargets();
+  useEffect(() => {
+    if (activeSection !== "missions" || !missionControlMission || missionControlMission.status !== "active" || !selectedLiveTarget) {
+      return;
     }
-  }, [disconnectAllLiveTargets, disconnectLiveTarget, selectedLiveTarget]);
+
+    const targetKey = makeLiveTargetKey(selectedLiveTarget);
+    const missionConnectionKey = makeMissionConnectionKey(missionControlMission.missionCode);
+    const currentConnection = liveConnectionsRef.current.get(missionConnectionKey);
+    const selectedSession = liveSessions[targetKey] ?? createEmptyLiveSession();
+
+    if (
+      reconnectableLiveStatuses.has(selectedSession.status)
+      && selectedSession.events.length > 0
+      && (!currentConnection || currentConnection.targetKey === targetKey)
+    ) {
+      return;
+    }
+    if (currentConnection?.targetKey === targetKey && activeLiveConnectionStatuses.has(selectedSession.status)) {
+      return;
+    }
+    if (autoConnectingTargetKeyRef.current === targetKey) {
+      return;
+    }
+
+    autoConnectingTargetKeyRef.current = targetKey;
+    void connectLiveTarget(selectedLiveTarget).finally(() => {
+      if (autoConnectingTargetKeyRef.current === targetKey) {
+        autoConnectingTargetKeyRef.current = "";
+      }
+    });
+  }, [activeSection, connectLiveTarget, liveSessions, missionControlMission, selectedLiveTarget]);
+
+  const closeMissionControl = useCallback(() => {
+    if (missionControlCode) {
+      disconnectMissionByCode(missionControlCode);
+    }
+    setMissionControlCode("");
+    if (navigateToPath) {
+      navigateToPath("/missions");
+    }
+  }, [disconnectMissionByCode, missionControlCode, navigateToPath]);
 
   const loadAll = useCallback(async () => {
     const [statusPayload, robotPayload, missionPayload, streamingPayload, recordingPayload] = await Promise.all([
@@ -655,8 +674,10 @@ export function useControlCenterController() {
     const storedMissionTarget = targets.find((target) => target.key === storedTargetKey);
     setMissionControlCode(mission.missionCode);
     setSelectedLiveTargetKey(storedMissionTarget?.key ?? targets[0]?.key ?? "");
-    navigateToTab("missions");
-  }, [navigateToTab, robots, streamingStatuses]);
+    if (navigateToPath) {
+      navigateToPath(`/missions/${encodeURIComponent(mission.missionCode)}/control`);
+    }
+  }, [navigateToPath, robots, streamingStatuses]);
 
   const closeRobotModal = useCallback(() => {
     setRobotModal(null);
@@ -859,8 +880,6 @@ export function useControlCenterController() {
   ];
 
   return {
-    activeTab,
-    navigateToTab,
     systemStatus,
     robots,
     missions,
@@ -898,10 +917,8 @@ export function useControlCenterController() {
     closeMissionModal,
     closeRobotModal,
     confirmArchiveRobot,
-    connectLive,
     createMission,
     createRobot,
-    disconnectLive,
     dismissNotification,
     endMission,
     loadConnectionInfo,
@@ -910,8 +927,9 @@ export function useControlCenterController() {
     openRobotCreateModal,
     openRobotEditModal,
     playLatestRecording,
+    reconnectLive,
     rotateRobotToken,
-    setMissionControlCode,
+    closeMissionControl,
     setSelectedMissionManagementCode,
     setSelectedRobotManagementCode,
     startMission,

@@ -17,11 +17,12 @@ import {
 } from "../live/liveHelpers.js";
 import {
   formatMissionRobotCount,
-  getMissionRobotDetails,
-  makeMissionRoomId
+  getMissionRobotDetails
 } from "./missionHelpers.js";
 import { createRecordingPlaybackFile } from "../recordings/recordingHelpers.js";
 import "leaflet/dist/leaflet.css";
+
+const closedMissionStatuses = new Set(["completed", "ended", "cancelled"]);
 
 export default function MissionsScreen({
   controlMission,
@@ -33,13 +34,12 @@ export default function MissionsScreen({
   missionTargets,
   missions,
   onBackToMissionList,
-  onConnectSelectedMissionTarget,
-  onDisconnectSelectedMissionTarget,
   onEndMission,
   onOpenCreateMissionModal,
   onOpenMissionControl,
   onOpenRecordings,
   onPlayLatestRecording,
+  onReconnectSelectedMissionTarget,
   onSelectMission,
   onStartMission,
   operationStatuses,
@@ -50,7 +50,7 @@ export default function MissionsScreen({
   setSelectedMissionTargetKey
 }) {
   const orderedMissions = useMemo(() => {
-    const statusOrder = { active: 0, ready: 1, completed: 2, cancelled: 3 };
+    const statusOrder = { active: 0, ready: 1, completed: 2, ended: 2, cancelled: 3 };
     return [...missions].sort((left, right) => {
       const leftOrder = statusOrder[left.status] ?? 9;
       const rightOrder = statusOrder[right.status] ?? 9;
@@ -73,11 +73,10 @@ export default function MissionsScreen({
         mission={controlMission}
         missionTargets={missionTargets}
         onBackToMissionList={onBackToMissionList}
-        onConnectSelectedMissionTarget={onConnectSelectedMissionTarget}
-        onDisconnectSelectedMissionTarget={onDisconnectSelectedMissionTarget}
         onEndMission={onEndMission}
         onOpenRecordings={onOpenRecordings}
         onPlayLatestRecording={onPlayLatestRecording}
+        onReconnectSelectedMissionTarget={onReconnectSelectedMissionTarget}
         onStartMission={onStartMission}
         operationStatuses={operationStatuses}
         playbackRecording={playbackRecording}
@@ -103,10 +102,17 @@ export default function MissionsScreen({
           ) : (
             orderedMissions.map((mission) => {
               const isSelectedMission = selectedMission?.missionCode === mission.missionCode;
+              const isClosedMission = closedMissionStatuses.has(mission.status);
               const robotDetails = getMissionRobotDetails(mission, robots);
+              const missionRowClassName = [
+                "row-item",
+                "mission-row",
+                isSelectedMission ? "active" : "",
+                isClosedMission ? "closed" : ""
+              ].filter(Boolean).join(" ");
               return (
                 <div
-                  className={isSelectedMission ? "row-item mission-row active" : "row-item mission-row"}
+                  className={missionRowClassName}
                   key={mission.missionCode}
                 >
                   <button
@@ -196,11 +202,10 @@ function MissionControlView({
   mission,
   missionTargets,
   onBackToMissionList,
-  onConnectSelectedMissionTarget,
-  onDisconnectSelectedMissionTarget,
   onEndMission,
   onOpenRecordings,
   onPlayLatestRecording,
+  onReconnectSelectedMissionTarget,
   onStartMission,
   operationStatuses,
   playbackRecording,
@@ -213,8 +218,10 @@ function MissionControlView({
     const session = liveSessions[target.key] ?? createEmptyLiveSession();
     return ["connected", "completed"].includes(session.status);
   }).length;
-  const canConnectSelectedRobot = mission.status === "active" && Boolean(selectedTarget);
-  const missionRoomId = makeMissionRoomId(mission);
+  const canReconnectSelectedRobot = mission.status === "active"
+    && Boolean(selectedTarget)
+    && selectedSession.events.length > 0
+    && ["closed", "disconnected", "failed", "signaling closed", "signaling error"].includes(selectedSession.status);
 
   return (
     <section className="mission-control-layout">
@@ -233,7 +240,7 @@ function MissionControlView({
 
         <div className="mission-command-bar">
           <div>
-            <strong>{missionRoomId || mission.missionCode}</strong>
+            <strong>{mission.missionCode}</strong>
             <span>{selectedTarget ? `선택 ${selectedTarget.robotCode} ${makeLiveStatusLabel(selectedSession.status)} / 연결 ${connectedCount}/${missionTargets.length}대` : "임무에 배정된 로봇이 없습니다."}</span>
           </div>
           <div className="mission-command-controls">
@@ -255,10 +262,11 @@ function MissionControlView({
                 )}
               </select>
             </label>
-            <div className="button-row control-actions">
-              <button type="button" disabled={!canConnectSelectedRobot} onClick={onConnectSelectedMissionTarget}>연결</button>
-              <button type="button" disabled={!selectedTarget} onClick={onDisconnectSelectedMissionTarget}>연결 종료</button>
-            </div>
+            {canReconnectSelectedRobot ? (
+              <div className="button-row control-actions">
+                <button type="button" onClick={onReconnectSelectedMissionTarget}>재연결</button>
+              </div>
+            ) : null}
           </div>
         </div>
 

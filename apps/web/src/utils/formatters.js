@@ -81,7 +81,9 @@ export function makeStatusLabel(status) {
     fault: "장애",
     ready: "준비",
     active: "진행 중",
+    completed: "종료",
     ended: "종료",
+    cancelled: "취소",
     recording: "녹화 중",
     uploaded: "업로드 완료"
   };
@@ -92,14 +94,14 @@ export function makeLiveStatusLabel(status) {
   const labels = {
     connected: "연결됨",
     completed: "연결됨",
-    checking: "연결 확인",
+    checking: "연결 중",
     connecting: "연결 중",
-    disconnected: "연결 안 됨",
-    failed: "실패",
-    closed: "종료",
-    "signaling connected": "대기 중",
-    "signaling closed": "종료",
-    "signaling error": "신호 오류"
+    disconnected: "연결 대기",
+    failed: "연결 실패",
+    closed: "연결 종료",
+    "signaling connected": "연결 중",
+    "signaling closed": "연결 종료",
+    "signaling error": "연결 실패"
   };
   return labels[status] ?? status;
 }

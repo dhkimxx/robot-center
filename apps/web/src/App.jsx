@@ -1,3 +1,4 @@
+import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import Modal from "./components/Modal.jsx";
 import NotificationStack from "./components/NotificationStack.jsx";
 import { navigationItems } from "./config/controlCenterConfig.js";
@@ -10,9 +11,19 @@ import SystemScreen from "./domains/system/SystemScreen.jsx";
 import { useControlCenterController } from "./hooks/useControlCenterController.js";
 
 export default function App() {
+  return (
+    <BrowserRouter>
+      <ControlCenterApp />
+    </BrowserRouter>
+  );
+}
+
+function ControlCenterApp() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const routeMissionControlCode = getRouteMissionControlCode(location.pathname);
+  const activeSection = getActiveSection(location.pathname);
   const {
-    activeTab,
-    navigateToTab,
     systemStatus,
     robots,
     missions,
@@ -50,10 +61,8 @@ export default function App() {
     closeMissionModal,
     closeRobotModal,
     confirmArchiveRobot,
-    connectLive,
     createMission,
     createRobot,
-    disconnectLive,
     dismissNotification,
     endMission,
     loadConnectionInfo,
@@ -62,27 +71,32 @@ export default function App() {
     openRobotCreateModal,
     openRobotEditModal,
     playLatestRecording,
+    reconnectLive,
     rotateRobotToken,
-    setMissionControlCode,
+    closeMissionControl,
     setSelectedMissionManagementCode,
     setSelectedRobotManagementCode,
     startMission,
     updateRobot
-  } = useControlCenterController();
+  } = useControlCenterController({
+    activeSection,
+    missionControlCode: routeMissionControlCode,
+    navigateToPath: navigate
+  });
 
   return (
     <main className="app-shell">
       <aside className="sidebar">
         <nav className="nav-list">
           {navigationItems.map((item) => (
-            <button
-              className={activeTab === item.key ? "nav-item active" : "nav-item"}
+            <NavLink
+              className={({ isActive }) => isActive || location.pathname.startsWith(`${item.path}/`) ? "nav-item active" : "nav-item"}
+              end={item.path !== "/missions"}
               key={item.key}
-              type="button"
-              onClick={() => navigateToTab(item.key)}
+              to={item.path}
             >
               {item.label}
-            </button>
+            </NavLink>
           ))}
         </nav>
       </aside>
@@ -103,59 +117,94 @@ export default function App() {
         </div>
 
         <div className="workspace-content">
-          {activeTab === "robots" ? (
-            <RobotsScreen
-              missions={missions}
-              onArchiveRobot={archiveRobot}
-              onOpenCreateRobotModal={openRobotCreateModal}
-              onOpenEditRobotModal={openRobotEditModal}
-              onLoadConnectionInfo={loadConnectionInfo}
-              onRotateRobotToken={rotateRobotToken}
-              onSelectRobot={setSelectedRobotManagementCode}
-              robots={robots}
-              selectedRobot={selectedRobot}
+          <Routes>
+            <Route path="/" element={<Navigate replace to="/missions" />} />
+            <Route
+              path="/missions"
+              element={(
+                <MissionsScreen
+                  controlMission={null}
+                  latestRecording={latestRecording}
+                  latestSensor={latestSensor}
+                  latestTelemetry={latestTelemetry}
+                  liveEvents={selectedLiveSession.events}
+                  liveSessions={liveSessions}
+                  missionTargets={missionControlTargets}
+                  missions={missions}
+                  onBackToMissionList={closeMissionControl}
+                  onEndMission={endMission}
+                  onOpenCreateMissionModal={openMissionCreateModal}
+                  onOpenMissionControl={openMissionControl}
+                  onOpenRecordings={() => navigate("/recordings")}
+                  onPlayLatestRecording={playLatestRecording}
+                  onReconnectSelectedMissionTarget={reconnectLive}
+                  onSelectMission={setSelectedMissionManagementCode}
+                  onStartMission={startMission}
+                  operationStatuses={operationStatuses}
+                  playbackRecording={latestPlayableRecording}
+                  robots={robots}
+                  selectedMission={selectedMission}
+                  selectedMissionTargetKey={selectedLiveTargetKey}
+                  setSelectedMissionTargetKey={setSelectedLiveTargetKey}
+                />
+              )}
             />
-          ) : null}
-
-          {activeTab === "missions" ? (
-            <MissionsScreen
-              controlMission={missionControlMission}
-              latestRecording={latestRecording}
-              latestSensor={latestSensor}
-              latestTelemetry={latestTelemetry}
-              liveEvents={selectedLiveSession.events}
-              liveSessions={liveSessions}
-              missionTargets={missionControlTargets}
-              missions={missions}
-              onBackToMissionList={() => setMissionControlCode("")}
-              onConnectSelectedMissionTarget={() => void connectLive()}
-              onDisconnectSelectedMissionTarget={disconnectLive}
-              onEndMission={endMission}
-              onOpenCreateMissionModal={openMissionCreateModal}
-              onOpenMissionControl={openMissionControl}
-              onOpenRecordings={() => navigateToTab("recordings")}
-              onPlayLatestRecording={playLatestRecording}
-              onSelectMission={setSelectedMissionManagementCode}
-              onStartMission={startMission}
-              operationStatuses={operationStatuses}
-              playbackRecording={latestPlayableRecording}
-              robots={robots}
-              selectedMission={selectedMission}
-              selectedMissionTargetKey={selectedLiveTargetKey}
-              setSelectedMissionTargetKey={setSelectedLiveTargetKey}
+            <Route
+              path="/missions/:missionCode/control"
+              element={(
+                <MissionsScreen
+                  controlMission={missionControlMission}
+                  latestRecording={latestRecording}
+                  latestSensor={latestSensor}
+                  latestTelemetry={latestTelemetry}
+                  liveEvents={selectedLiveSession.events}
+                  liveSessions={liveSessions}
+                  missionTargets={missionControlTargets}
+                  missions={missions}
+                  onBackToMissionList={closeMissionControl}
+                  onEndMission={endMission}
+                  onOpenCreateMissionModal={openMissionCreateModal}
+                  onOpenMissionControl={openMissionControl}
+                  onOpenRecordings={() => navigate("/recordings")}
+                  onPlayLatestRecording={playLatestRecording}
+                  onReconnectSelectedMissionTarget={reconnectLive}
+                  onSelectMission={setSelectedMissionManagementCode}
+                  onStartMission={startMission}
+                  operationStatuses={operationStatuses}
+                  playbackRecording={latestPlayableRecording}
+                  robots={robots}
+                  selectedMission={selectedMission}
+                  selectedMissionTargetKey={selectedLiveTargetKey}
+                  setSelectedMissionTargetKey={setSelectedLiveTargetKey}
+                />
+              )}
             />
-          ) : null}
-
-          {activeTab === "recordings" ? (
-            <RecordingsScreen
-              onOpenPlaybackFile={setRecordingPlaybackFile}
-              recordings={recordings}
+            <Route
+              path="/robots"
+              element={(
+                <RobotsScreen
+                  missions={missions}
+                  onArchiveRobot={archiveRobot}
+                  onLoadConnectionInfo={loadConnectionInfo}
+                  onOpenCreateRobotModal={openRobotCreateModal}
+                  onOpenEditRobotModal={openRobotEditModal}
+                  onRotateRobotToken={rotateRobotToken}
+                  onSelectRobot={setSelectedRobotManagementCode}
+                  robots={robots}
+                  selectedRobot={selectedRobot}
+                />
+              )}
             />
-          ) : null}
-
-          {activeTab === "system" ? (
-            <SystemScreen statusError={statusError} systemStatus={systemStatus} />
-          ) : null}
+            <Route
+              path="/recordings"
+              element={<RecordingsScreen onOpenPlaybackFile={setRecordingPlaybackFile} recordings={recordings} />}
+            />
+            <Route
+              path="/system"
+              element={<SystemScreen statusError={statusError} systemStatus={systemStatus} />}
+            />
+            <Route path="*" element={<Navigate replace to="/missions" />} />
+          </Routes>
         </div>
       </section>
       <NotificationStack notifications={notifications} onDismiss={dismissNotification} />
@@ -247,4 +296,13 @@ export default function App() {
       ) : null}
     </main>
   );
+}
+
+function getActiveSection(pathname) {
+  return navigationItems.find((item) => pathname === item.path || pathname.startsWith(`${item.path}/`))?.key ?? "missions";
+}
+
+function getRouteMissionControlCode(pathname) {
+  const match = pathname.match(/^\/missions\/([^/]+)\/control\/?$/);
+  return match ? decodeURIComponent(match[1]) : "";
 }

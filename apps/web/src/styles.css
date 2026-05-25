@@ -121,10 +121,13 @@ h2 {
 
 .nav-item {
   height: 38px;
+  display: flex;
+  align-items: center;
   border-radius: 6px;
   color: #c9d3df;
   background: transparent;
   text-align: left;
+  text-decoration: none;
   padding: 0 12px;
   font-weight: 700;
 }
@@ -2168,6 +2171,18 @@ h2 {
 
 .mission-row-robots {
   color: #b8c8dc;
+}
+
+.mission-row.closed {
+  background: rgba(128, 140, 156, 0.24);
+}
+
+.mission-row.closed:hover {
+  background: rgba(128, 140, 156, 0.3);
+}
+
+.mission-row.closed.active {
+  background: rgba(128, 140, 156, 0.36);
 }
 
 .mission-detail-panel {
