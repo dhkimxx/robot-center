@@ -21,7 +21,8 @@
 
 ## 현재 기준
 
-최신 검증 기준은 `server-layer-gorm-storage-2026-05-22` 결과다.
+최신 검증 기준은 `mission-room-multi-robot-sfu-2026-05-23`와
+`backend-refactor-2026-05-23` 결과다.
 
 ```text
 Robot Gateway / Mock Robot
@@ -35,7 +36,7 @@ Robot Gateway / Mock Robot
 
 확인된 상태:
 
-- 3대 mock robot이 각각 `missionCode__robotCode` room에 publish
+- 여러 mock robot이 같은 `roomId=missionCode` mission room에 publish
 - Browser와 recorder-worker가 SFU subscriber로 독립 수신
 - RGB/Thermal/Audio track 송수신
 - sensor/telemetry DataChannel 수신과 DB 적재

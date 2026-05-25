@@ -1,7 +1,7 @@
 ---
 title: "multi-robot-sfu-checklist"
 created: 2026-05-23
-updated: 2026-05-23
+updated: 2026-05-25
 author: "dhkimxx <dhkimxx@naver.com>"
 editors: ["dhkimxx <dhkimxx@naver.com>"]
 type: "checklist"
@@ -9,6 +9,7 @@ tags: ["harness", "webrtc", "sfu", "multi-robot", "regression"]
 history:
 - "2026-05-23 dhkimxx <dhkimxx@naver.com>: initial mission-level multi-robot SFU validation checklist"
 - "2026-05-23 dhkimxx <dhkimxx@naver.com>: added internal PoC selective subscribe QA checklist"
+- "2026-05-25 Codex: aligned checklist with RobotStreamBundle slot roles"
 ---
 # Multi-Robot SFU Selective Subscribe Checklist
 
@@ -45,6 +46,37 @@ mission-001 room
 - sensor/telemetry payload에는 `robotCode`가 유지되어야 한다.
 - recorder-worker는 같은 mission room을 subscribe하되 chunk/file metadata는 robotCode별로 나뉘어야 한다.
 - browser A/B와 recorder-worker는 서로 독립적인 subscriber다.
+
+## RobotStreamBundle 내부 슬롯
+
+로봇 1대는 mission room 안에 1개의 `RobotStreamBundle`로 등록된다.
+
+```text
+RobotStreamBundle
+  missionCode
+  robotCode
+  tracks:
+    track.video_1
+    track.video_2
+    track.audio_1
+    track.audio_2
+  dataChannels:
+    channel.telemetry
+    channel.spatial
+    channel.event
+    channel.control
+```
+
+슬롯명은 의미를 고정하지 않는다. `track.video_1 = RGB`, `track.video_2 = Thermal` 같은 해석은 mock/display metadata에서만 다룬다.
+
+현재 PoC 호환을 위해 `rgb`, `thermal`, `audio`, `sensor`, `telemetry` 같은 legacy label은 fallback alias로만 허용한다. 신규 mock/robot은 canonical slot label을 우선 사용한다.
+
+Subscriber policy:
+
+- operator는 selected robot의 bundle만 받는다.
+- recorder는 mission room의 모든 robot bundle을 받는다.
+- `select-robot`이 publish 중인 robot bundle을 찾지 못하면 성공 ACK가 아니라 error signal을 받는다.
+- `channel.spatial`과 `channel.control`은 telemetry/event와 섞지 않는다.
 
 ## 필수 수동/통합 시나리오
 

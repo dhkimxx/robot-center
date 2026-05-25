@@ -43,6 +43,9 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "robotCode query parameter is required for robot peers", http.StatusBadRequest)
 		return
 	}
+	if role != "robot" {
+		robotCode = ""
+	}
 
 	connection, err := h.upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -175,6 +178,9 @@ func (h *Hub) registerPublisherSession(roomID string, publisherSession *publishe
 	if existingPublisher := currentRoom.publishers[publisherSession.robotCode]; existingPublisher != nil {
 		closePublisherSession(existingPublisher)
 	}
+	if publisherSession.streamBundle != nil {
+		publisherSession.streamBundle.MissionCode = roomID
+	}
 	currentRoom.publishers[publisherSession.robotCode] = publisherSession
 }
 
@@ -195,7 +201,17 @@ func (h *Hub) removePublisherConnection(roomID string, robotCode string, peerID 
 }
 
 func (h *Hub) publishRobotTrack(roomID string, robotCode string, remoteTrack *webrtc.TrackRemote) {
-	label := classifyTrack(remoteTrack)
+	var label string
+	h.mu.RLock()
+	if currentRoom := h.rooms[roomID]; currentRoom != nil {
+		if publisher := currentRoom.publishers[robotCode]; publisher != nil {
+			label = normalizeTrackRole(remoteTrack, publisher.publishedTracks)
+		}
+	}
+	h.mu.RUnlock()
+	if label == "" {
+		label = normalizeTrackRole(remoteTrack, nil)
+	}
 	trackKey := publishedTrackKey(robotCode, label)
 	localTrack, err := webrtc.NewTrackLocalStaticRTP(remoteTrack.Codec().RTPCodecCapability, localTrackID(robotCode, label), localStreamID(robotCode))
 	if err != nil {
@@ -211,12 +227,16 @@ func (h *Hub) publishRobotTrack(roomID string, robotCode string, remoteTrack *we
 		log.Printf("sfu publisher missing room=%s robot=%s label=%s", roomID, robotCode, label)
 		return
 	}
-	publisher.publishedTracks[trackKey] = &publishedTrack{
+	publishedTrack := &publishedTrack{
 		key:        trackKey,
 		robotCode:  robotCode,
 		label:      label,
 		remoteSSRC: uint32(remoteTrack.SSRC()),
 		track:      localTrack,
+	}
+	publisher.publishedTracks[trackKey] = publishedTrack
+	if publisher.streamBundle != nil {
+		publisher.streamBundle.Tracks[label] = publishedTrack
 	}
 	h.mu.Unlock()
 
@@ -278,7 +298,7 @@ func (h *Hub) ensureSubscriberOffer(roomID string, peerID string) {
 			log.Printf("sfu subscriber peer connection failed room=%s peer=%s: %v", roomID, peerID, err)
 			return
 		}
-		session = newSubscriberSession(peerID, targetPeer.role, targetPeer.robotCode, peerConnection)
+		session = newSubscriberSession(peerID, targetPeer.role, "", peerConnection)
 		currentRoom.subscribers[peerID] = session
 		session.configureConnection(roomID, targetPeer)
 	}
@@ -412,6 +432,7 @@ func (h *Hub) handleSubscriberAnswer(sender *peer, payload map[string]any) error
 func (h *Hub) handleSubscriberRobotSelection(sender *peer, payload map[string]any) error {
 	robotCode := strings.TrimSpace(payloadString(payload, "robotCode"))
 	if robotCode == "" {
+		h.sendSelectRobotError(sender, robotCode, "robotCode is required")
 		return fmt.Errorf("robotCode is required")
 	}
 
@@ -419,16 +440,30 @@ func (h *Hub) handleSubscriberRobotSelection(sender *peer, payload map[string]an
 	currentRoom := h.rooms[sender.roomID]
 	if currentRoom == nil {
 		h.mu.Unlock()
+		h.sendSelectRobotError(sender, robotCode, "room is missing")
 		return fmt.Errorf("room is missing")
 	}
 	targetPeer := currentRoom.peers[sender.id]
 	if targetPeer == nil || !isSubscriberRole(targetPeer.role) {
 		h.mu.Unlock()
+		h.sendSelectRobotError(sender, robotCode, "subscriber peer is missing")
 		return fmt.Errorf("subscriber peer is missing")
 	}
 	if targetPeer.role == "recorder" {
 		h.mu.Unlock()
-		return nil
+		h.sendSelectRobotError(sender, robotCode, "recorder cannot select a single robot")
+		return fmt.Errorf("recorder cannot select a single robot")
+	}
+	publisher := currentRoom.publishers[robotCode]
+	if publisher == nil {
+		h.mu.Unlock()
+		h.sendSelectRobotError(sender, robotCode, "robot is not publishing in this mission room")
+		return fmt.Errorf("robot %s is not publishing in room %s", robotCode, sender.roomID)
+	}
+	if publisher.streamBundle == nil || len(publisher.streamBundle.Tracks) == 0 {
+		h.mu.Unlock()
+		h.sendSelectRobotError(sender, robotCode, "robot stream bundle is not usable")
+		return fmt.Errorf("robot %s has no usable stream bundle in room %s", robotCode, sender.roomID)
 	}
 	targetPeer.robotCode = robotCode
 	if session := currentRoom.subscribers[sender.id]; session != nil {
@@ -442,6 +477,23 @@ func (h *Hub) handleSubscriberRobotSelection(sender *peer, payload map[string]an
 	})
 	go h.ensureSubscriberOffer(sender.roomID, sender.id)
 	return nil
+}
+
+func (h *Hub) sendSelectRobotError(targetPeer *peer, robotCode string, reason string) {
+	if targetPeer == nil {
+		return
+	}
+	targetPeer.enqueue(signalMessage{
+		Type: "select-robot-error",
+		Payload: map[string]any{
+			"room":         targetPeer.roomID,
+			"fromRole":     "sfu",
+			"fromPeerId":   serverPeerID,
+			"targetPeerId": targetPeer.id,
+			"robotCode":    robotCode,
+			"reason":       reason,
+		},
+	})
 }
 
 func (h *Hub) handleRemoteCandidate(sender *peer, payload map[string]any) error {

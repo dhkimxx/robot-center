@@ -58,7 +58,9 @@ func (s *subscriberSession) createLocalOffer() (*webrtc.SessionDescription, erro
 }
 
 func (s *subscriberSession) beginOffer(currentRoom *room, forwardRTCP func(roomID string, trackKey string, packets []rtcp.Packet), requestKeyFrames func(roomID string, trackKey string, count int, interval time.Duration)) bool {
-	s.ensureSelectedRobot(currentRoom)
+	if !s.isReadyToSubscribe() {
+		return s.detachPublishedTracks(currentRoom)
+	}
 	offerRequired := s.attachPublishedTracks(currentRoom, forwardRTCP, requestKeyFrames)
 	if s.ensureDataChannels() {
 		offerRequired = true
@@ -77,18 +79,8 @@ func (s *subscriberSession) selectRobot(robotCode string) {
 	s.selectedRobotCode = strings.TrimSpace(robotCode)
 }
 
-func (s *subscriberSession) ensureSelectedRobot(currentRoom *room) {
-	if s.role == "recorder" || strings.TrimSpace(s.selectedRobotCode) != "" {
-		return
-	}
-	robotCodes := make([]string, 0, len(currentRoom.publishers))
-	for robotCode := range currentRoom.publishers {
-		robotCodes = append(robotCodes, robotCode)
-	}
-	sort.Strings(robotCodes)
-	if len(robotCodes) > 0 {
-		s.selectedRobotCode = robotCodes[0]
-	}
+func (s *subscriberSession) isReadyToSubscribe() bool {
+	return s.role == "recorder" || strings.TrimSpace(s.selectedRobotCode) != ""
 }
 
 func (s *subscriberSession) shouldReceiveRobot(robotCode string) bool {
@@ -159,9 +151,30 @@ func (s *subscriberSession) attachPublishedTracks(currentRoom *room, forwardRTCP
 	return changed
 }
 
+func (s *subscriberSession) detachPublishedTracks(currentRoom *room) bool {
+	if s.attachedTracks == nil {
+		s.attachedTracks = map[string]struct{}{}
+	}
+	if s.attachedTrackSenders == nil {
+		s.attachedTrackSenders = map[string]*webrtc.RTPSender{}
+	}
+	changed := false
+	for trackKey, sender := range s.attachedTrackSenders {
+		if sender != nil {
+			if err := s.peerConnection.RemoveTrack(sender); err != nil {
+				log.Printf("sfu subscriber remove track failed room=%s peer=%s track=%s: %v", currentRoom.id, s.peerID, trackKey, err)
+			}
+		}
+		delete(s.attachedTrackSenders, trackKey)
+		delete(s.attachedTracks, trackKey)
+		changed = true
+	}
+	return changed
+}
+
 func (s *subscriberSession) ensureDataChannels() bool {
 	created := false
-	for _, label := range []string{"sensor", "telemetry"} {
+	for _, label := range canonicalDataChannelRoles {
 		if s.dataChannels[label] != nil {
 			continue
 		}

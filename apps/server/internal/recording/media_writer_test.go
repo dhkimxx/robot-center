@@ -47,3 +47,30 @@ func TestUpdateH264ParameterSets(t *testing.T) {
 		t.Fatal("expected PPS to be stored")
 	}
 }
+
+func TestRecordingStorageMediaLabelMapsCanonicalVideoSlots(t *testing.T) {
+	cases := map[string]string{
+		"track.video_1": "rgb",
+		"track.video_2": "thermal",
+		"rgb":           "rgb",
+		"thermal":       "thermal",
+	}
+	for input, want := range cases {
+		if got := recordingStorageMediaLabel(input); got != want {
+			t.Fatalf("recordingStorageMediaLabel(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
+func TestRecordingStorageAudioLabelMapsPrimaryCanonicalAudio(t *testing.T) {
+	cases := map[string]string{
+		"track.audio_1": "audio",
+		"audio":         "audio",
+		"track.audio_2": "",
+	}
+	for input, want := range cases {
+		if got := recordingStorageAudioLabel(input); got != want {
+			t.Fatalf("recordingStorageAudioLabel(%q) = %q, want %q", input, got, want)
+		}
+	}
+}

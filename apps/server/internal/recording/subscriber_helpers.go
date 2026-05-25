@@ -141,6 +141,17 @@ func classifyRecorderTrack(track *webrtc.TrackRemote) (string, string) {
 	return "", label
 }
 
+func recorderStorageDataChannelLabel(label string) string {
+	switch strings.TrimSpace(label) {
+	case "channel.telemetry":
+		return "telemetry"
+	case "channel.event", "channel.spatial", "channel.control":
+		return ""
+	default:
+		return strings.TrimSpace(label)
+	}
+}
+
 func recorderTrackLabel(robotCode string, label string) string {
 	if strings.TrimSpace(robotCode) == "" {
 		return strings.TrimSpace(label)
@@ -230,6 +241,18 @@ func dereferenceUint16(value *uint16) uint16 {
 
 func classifyTrack(track *webrtc.TrackRemote) string {
 	raw := strings.ToLower(track.StreamID() + " " + track.ID() + " " + track.Codec().MimeType)
+	if strings.Contains(raw, "track.video_1") {
+		return "track.video_1"
+	}
+	if strings.Contains(raw, "track.video_2") {
+		return "track.video_2"
+	}
+	if strings.Contains(raw, "track.audio_1") {
+		return "track.audio_1"
+	}
+	if strings.Contains(raw, "track.audio_2") {
+		return "track.audio_2"
+	}
 	if strings.Contains(raw, "thermal") {
 		return "thermal"
 	}

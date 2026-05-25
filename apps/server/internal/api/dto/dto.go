@@ -42,6 +42,7 @@ type MissionResponse struct {
 
 type StreamingTrackResponse struct {
 	Name        string `json:"name"`
+	DisplayName string `json:"displayName,omitempty"`
 	Kind        string `json:"kind"`
 	Codec       string `json:"codec"`
 	Width       int    `json:"width,omitempty"`

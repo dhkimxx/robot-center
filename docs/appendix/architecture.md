@@ -438,6 +438,6 @@ UI는 다음을 표시한다.
 - `apps/web`: React UI source
 - `apps/android-robot`: Android Mock Robot
 - `deploy/docker-compose.yml`: P0 compose
-- `db/migrations`: PostgreSQL/PostGIS migration
+- `db/migrations`: 향후 운영용 SQL migration placeholder. 현재 로컬 PoC schema는 app-server 시작 시 GORM `AutoMigrate` 경로로 생성한다.
 
 기존 WebRTC PoC 소스와 과거 단계별 검증 문서는 제거했다. 현재 구조 판단은 PRD, appendix, harness, 최신 rebuild 결과 문서를 기준으로 한다.

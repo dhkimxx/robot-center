@@ -2,7 +2,7 @@ package sfu
 
 import "testing"
 
-func TestOperatorSubscriberReceivesOnlySelectedRobot(t *testing.T) {
+func TestOperatorSubscriberDoesNotAutoSelectRobot(t *testing.T) {
 	session := &subscriberSession{role: "operator"}
 	currentRoom := &room{
 		publishers: map[string]*publisherSession{
@@ -11,10 +11,21 @@ func TestOperatorSubscriberReceivesOnlySelectedRobot(t *testing.T) {
 		},
 	}
 
-	session.ensureSelectedRobot(currentRoom)
-	if session.selectedRobotCode != "robot-001" {
-		t.Fatalf("selectedRobotCode = %q, want robot-001", session.selectedRobotCode)
+	if session.beginOffer(currentRoom, nil, nil) {
+		t.Fatalf("operator should not create an offer before selecting a robot")
 	}
+	if session.selectedRobotCode != "" {
+		t.Fatalf("selectedRobotCode = %q, want empty before explicit selection", session.selectedRobotCode)
+	}
+	if session.shouldReceiveRobot("robot-001") || session.shouldReceiveRobot("robot-002") {
+		t.Fatalf("operator should not receive robot streams before explicit selection")
+	}
+}
+
+func TestOperatorSubscriberReceivesOnlySelectedRobot(t *testing.T) {
+	session := &subscriberSession{role: "operator"}
+
+	session.selectRobot("robot-001")
 	if !session.shouldReceiveRobot("robot-001") {
 		t.Fatalf("operator should receive the selected robot")
 	}
@@ -37,5 +48,22 @@ func TestRecorderSubscriberReceivesEveryRobot(t *testing.T) {
 
 	if !session.shouldReceiveRobot("robot-001") || !session.shouldReceiveRobot("robot-002") {
 		t.Fatalf("recorder should receive all robot streams")
+	}
+}
+
+func TestCanonicalDataChannelRoles(t *testing.T) {
+	cases := map[string]string{
+		"telemetry":         StreamRoleChannelTelemetry,
+		"sensor":            StreamRoleChannelTelemetry,
+		"channel.telemetry": StreamRoleChannelTelemetry,
+		"event":             StreamRoleChannelEvent,
+		"channel.event":     StreamRoleChannelEvent,
+		"spatial":           StreamRoleChannelSpatial,
+		"control":           StreamRoleChannelControl,
+	}
+	for input, want := range cases {
+		if got := normalizeDataChannelRole(input); got != want {
+			t.Fatalf("normalizeDataChannelRole(%q) = %q, want %q", input, got, want)
+		}
 	}
 }

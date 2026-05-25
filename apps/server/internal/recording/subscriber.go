@@ -434,29 +434,33 @@ func (w *Worker) createRecorderPeerConnection(ctx context.Context, roomID string
 }
 
 func (w *Worker) persistRecorderDataChannelMessage(ctx context.Context, roomID string, label string, payload []byte) {
-	if label == "sensor" || label == "telemetry" {
+	storageLabel := recorderStorageDataChannelLabel(label)
+	if storageLabel == "" {
+		return
+	}
+	if storageLabel == "sensor" || storageLabel == "telemetry" {
 		robotCode := robotCodeFromDataPayload(payload)
 		if robotCode == "" {
 			robotCode = w.singleSubscriberRobotCode(roomID)
 		}
 		if robotCode == "" {
 			w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
-				status.lastError = fmt.Sprintf("%s payload missing robotCode", label)
+				status.lastError = fmt.Sprintf("%s payload missing robotCode", storageLabel)
 			})
 			return
 		}
 		payload = recorderDataChannelPayloadWithRobotCode(robotCode, payload)
 		if !json.Valid(payload) {
 			w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
-				status.lastError = fmt.Sprintf("invalid %s JSON payload", label)
+				status.lastError = fmt.Sprintf("invalid %s JSON payload", storageLabel)
 			})
 			return
 		}
-		if err := w.appendDataChannelPayload(recorderMediaKey(roomID, robotCode), label, payload); err != nil {
+		if err := w.appendDataChannelPayload(recorderMediaKey(roomID, robotCode), storageLabel, payload); err != nil {
 			w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
 				status.lastError = err.Error()
 			})
-			log.Printf("recorder-worker datachannel append failed room=%s label=%s: %v", roomID, label, err)
+			log.Printf("recorder-worker datachannel append failed room=%s label=%s: %v", roomID, storageLabel, err)
 			return
 		}
 		w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
@@ -466,21 +470,21 @@ func (w *Worker) persistRecorderDataChannelMessage(ctx context.Context, roomID s
 			}
 		})
 	}
-	if err := w.appServerClient.PostDataChannelPayload(ctx, label, payload); err != nil {
+	if err := w.appServerClient.PostDataChannelPayload(ctx, storageLabel, payload); err != nil {
 		w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
 			status.lastError = err.Error()
 		})
-		log.Printf("recorder-worker datachannel persist failed room=%s label=%s: %v", roomID, label, err)
+		log.Printf("recorder-worker datachannel persist failed room=%s label=%s: %v", roomID, storageLabel, err)
 		return
 	}
 	w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
-		switch label {
+		switch storageLabel {
 		case "sensor":
 			status.sensorStoredCount++
 		case "telemetry":
 			status.telemetryStoredCount++
 		}
-		status.lastPersistedLabel = label
+		status.lastPersistedLabel = storageLabel
 		status.lastPersistedAt = time.Now().UTC()
 		status.lastError = ""
 	})

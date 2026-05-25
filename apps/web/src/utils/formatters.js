@@ -111,6 +111,14 @@ export function makeLiveChannelLabel(label) {
     audio: "오디오",
     sensor: "센서",
     telemetry: "위치",
+    "channel.control": "제어",
+    "channel.event": "이벤트",
+    "channel.spatial": "공간",
+    "channel.telemetry": "위치",
+    "track.audio_1": "오디오 1",
+    "track.audio_2": "오디오 2",
+    "track.video_1": "영상 1",
+    "track.video_2": "영상 2",
     thermal: "Thermal",
     rgb: "RGB"
   };

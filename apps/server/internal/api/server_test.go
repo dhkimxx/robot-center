@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"robot-center/apps/server/internal/config"
+	"robot-center/apps/server/internal/sfu"
 )
 
 func TestControlPlaneFlow(t *testing.T) {
@@ -147,6 +148,18 @@ func TestControlPlaneFlow(t *testing.T) {
 	if missionPayload["legacyRoomId"] != missionCode+"__"+robotCode {
 		t.Fatalf("expected legacy room id for compatibility, got %#v", missionPayload)
 	}
+	assertStringListEqual(t, missionPayload["tracks"], []string{
+		sfu.StreamRoleTrackVideo1,
+		sfu.StreamRoleTrackVideo2,
+		sfu.StreamRoleTrackAudio1,
+		sfu.StreamRoleTrackAudio2,
+	})
+	assertStringListEqual(t, missionPayload["dataChannels"], []string{
+		sfu.StreamRoleChannelTelemetry,
+		sfu.StreamRoleChannelSpatial,
+		sfu.StreamRoleChannelEvent,
+		sfu.StreamRoleChannelControl,
+	})
 	supportMissionPayload := requestJSON[map[string]any](t, server.URL, http.MethodGet, "/api/robot-gateway/mission?robotCode="+supportRobotCode, supportRobotToken, nil)
 	if supportMissionPayload["missionStatus"] != "active" || supportMissionPayload["roomId"] != missionCode {
 		t.Fatalf("expected active support robot mission in shared room, got %#v", supportMissionPayload)
@@ -158,12 +171,17 @@ func TestControlPlaneFlow(t *testing.T) {
 		"roomId":    missionCode,
 		"status":    "streaming",
 		"publishedTracks": []map[string]any{
-			{"name": "rgb", "kind": "video", "codec": "h264"},
-			{"name": "thermal", "kind": "video", "codec": "h264"},
-			{"name": "audio", "kind": "audio", "codec": "opus"},
+			{"name": sfu.StreamRoleTrackVideo1, "kind": "video", "codec": "h264"},
+			{"name": sfu.StreamRoleTrackVideo2, "kind": "video", "codec": "h264"},
+			{"name": sfu.StreamRoleTrackAudio1, "kind": "audio", "codec": "opus"},
 		},
-		"publishedDataChannels": []string{"sensor", "telemetry"},
-		"sentAt":                time.Now().UTC().Format(time.RFC3339Nano),
+		"publishedDataChannels": []string{
+			sfu.StreamRoleChannelTelemetry,
+			sfu.StreamRoleChannelEvent,
+			sfu.StreamRoleChannelSpatial,
+			sfu.StreamRoleChannelControl,
+		},
+		"sentAt": time.Now().UTC().Format(time.RFC3339Nano),
 	})
 
 	streamingPayload := requestJSON[map[string]any](t, server.URL, http.MethodGet, "/api/streaming-statuses", "", nil)

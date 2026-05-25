@@ -59,6 +59,7 @@ type publisherSession struct {
 	peerID          string
 	robotCode       string
 	peerConnection  *webrtc.PeerConnection
+	streamBundle    *RobotStreamBundle
 	publishedTracks map[string]*publishedTrack
 }
 

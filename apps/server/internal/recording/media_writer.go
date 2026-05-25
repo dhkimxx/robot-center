@@ -118,7 +118,8 @@ func (w *Worker) recordOpusTrack(ctx context.Context, roomID string, label strin
 }
 
 func (w *Worker) appendH264Payload(roomID string, label string, payload []byte) error {
-	if label != "rgb" && label != "thermal" {
+	storageLabel := recordingStorageMediaLabel(label)
+	if storageLabel != "rgb" && storageLabel != "thermal" {
 		return nil
 	}
 
@@ -129,12 +130,12 @@ func (w *Worker) appendH264Payload(roomID string, label string, payload []byte) 
 	if !ok {
 		return nil
 	}
-	w.updateH264ParameterSetsLocked(roomID, label, payload)
+	w.updateH264ParameterSetsLocked(roomID, storageLabel, payload)
 	directory := recordingChunkDirectory(chunk.ID)
 	if err := os.MkdirAll(directory, 0o755); err != nil {
 		return err
 	}
-	file, err := os.OpenFile(h264TrackPath(chunk.ID, label), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	file, err := os.OpenFile(h264TrackPath(chunk.ID, storageLabel), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return err
 	}
@@ -143,8 +144,19 @@ func (w *Worker) appendH264Payload(roomID string, label string, payload []byte) 
 	return err
 }
 
+func recordingStorageMediaLabel(label string) string {
+	switch strings.TrimSpace(label) {
+	case "track.video_1":
+		return "rgb"
+	case "track.video_2":
+		return "thermal"
+	default:
+		return strings.TrimSpace(label)
+	}
+}
+
 func (w *Worker) appendOpusPacket(roomID string, label string, packet *rtp.Packet) error {
-	if label != "audio" {
+	if recordingStorageAudioLabel(label) != "audio" {
 		return nil
 	}
 
@@ -160,6 +172,17 @@ func (w *Worker) appendOpusPacket(roomID string, label string, packet *rtp.Packe
 		return err
 	}
 	return writer.WriteRTP(packet)
+}
+
+func recordingStorageAudioLabel(label string) string {
+	switch strings.TrimSpace(label) {
+	case "track.audio_1", "audio":
+		return "audio"
+	case "track.audio_2":
+		return ""
+	default:
+		return strings.TrimSpace(label)
+	}
 }
 
 func (w *Worker) appendDataChannelPayload(roomID string, label string, payload []byte) error {

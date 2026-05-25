@@ -610,8 +610,20 @@ func (s *Server) handleRobotGatewayMission(w http.ResponseWriter, r *http.Reques
 				"credential": s.config.TURNPassword,
 			},
 		},
-		"tracks":       []string{"rgb", "thermal", "audio"},
-		"dataChannels": []string{"sensor", "telemetry"},
+		"tracks": []string{
+			sfu.StreamRoleTrackVideo1,
+			sfu.StreamRoleTrackVideo2,
+			sfu.StreamRoleTrackAudio1,
+			sfu.StreamRoleTrackAudio2,
+		},
+		"dataChannels": []string{
+			sfu.StreamRoleChannelTelemetry,
+			sfu.StreamRoleChannelSpatial,
+			sfu.StreamRoleChannelEvent,
+			sfu.StreamRoleChannelControl,
+		},
+		"legacyTracks":       []string{"rgb", "thermal", "audio"},
+		"legacyDataChannels": []string{"sensor", "telemetry"},
 		"videoPolicy": map[string]string{
 			"mode": "robot_defined",
 		},

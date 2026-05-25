@@ -107,11 +107,12 @@ def robot_number(robot_code: str) -> int:
 
 
 class SyntheticVideoTrack(VideoStreamTrack):
-    def __init__(self, robot_code: str, label: str, width: int, height: int, fps: int):
+    def __init__(self, robot_code: str, label: str, slot: str, width: int, height: int, fps: int):
         super().__init__()
-        self._id = f"python-{label}-video"
+        self._id = slot
         self.robot_code = robot_code
         self.label = label
+        self.slot = slot
         self.width = width
         self.height = height
         self.fps = fps
@@ -279,9 +280,9 @@ class SyntheticVideoTrack(VideoStreamTrack):
 
 
 class SilenceAudioTrack(AudioStreamTrack):
-    def __init__(self):
+    def __init__(self, slot: str = "track.audio_1"):
         super().__init__()
-        self._id = "python-opus-audio"
+        self._id = slot
         self.sample_rate = 48000
         self.samples_per_frame = 960
         self.timestamp = 0
@@ -320,8 +321,10 @@ class MockRobot:
         self.websocket: aiohttp.ClientWebSocketResponse | None = None
         self.local_peer_id = ""
         self.mission: dict[str, Any] = {}
-        self.sensor_channel = None
         self.telemetry_channel = None
+        self.event_channel = None
+        self.spatial_channel = None
+        self.control_channel = None
         self.stop_event = asyncio.Event()
         self.sequence = 0
         self.offer_sent = False
@@ -416,7 +419,8 @@ class MockRobot:
             "status": "streaming",
             "publishedTracks": [
                 {
-                    "name": "rgb",
+                    "name": "track.video_1",
+                    "displayName": "RGB",
                     "kind": "video",
                     "codec": "h264",
                     "width": self.rgb_width,
@@ -425,7 +429,8 @@ class MockRobot:
                     "bitrateKbps": 2500,
                 },
                 {
-                    "name": "thermal",
+                    "name": "track.video_2",
+                    "displayName": "Thermal",
                     "kind": "video",
                     "codec": "h264",
                     "width": self.thermal_width,
@@ -434,12 +439,18 @@ class MockRobot:
                     "bitrateKbps": 900,
                 },
                 {
-                    "name": "audio",
+                    "name": "track.audio_1",
+                    "displayName": "Audio",
                     "kind": "audio",
                     "codec": "opus",
                 },
             ],
-            "publishedDataChannels": ["sensor", "telemetry"],
+            "publishedDataChannels": [
+                "channel.telemetry",
+                "channel.event",
+                "channel.spatial",
+                "channel.control",
+            ],
             "sentAt": utc_now_iso(),
         }
         await self.post_json("/api/robot-gateway/streaming-status", payload)
@@ -520,11 +531,15 @@ class MockRobot:
         self.peer_connection = RTCPeerConnection(RTCConfiguration(iceServers=ice_servers))
         self.configure_peer_connection()
         self.add_media_tracks()
-        self.sensor_channel = self.peer_connection.createDataChannel("sensor")
-        self.telemetry_channel = self.peer_connection.createDataChannel("telemetry")
+        self.telemetry_channel = self.peer_connection.createDataChannel("channel.telemetry")
+        self.event_channel = self.peer_connection.createDataChannel("channel.event")
+        self.spatial_channel = self.peer_connection.createDataChannel("channel.spatial")
+        self.control_channel = self.peer_connection.createDataChannel("channel.control")
 
-        asyncio.create_task(self.data_channel_loop("sensor", self.sensor_channel))
-        asyncio.create_task(self.data_channel_loop("telemetry", self.telemetry_channel))
+        asyncio.create_task(self.data_channel_loop("channel.telemetry", self.telemetry_channel))
+        asyncio.create_task(self.data_channel_loop("channel.event", self.event_channel))
+        asyncio.create_task(self.data_channel_loop("channel.spatial", self.spatial_channel))
+        asyncio.create_task(self.data_channel_loop("channel.control", self.control_channel))
 
         offer = await self.peer_connection.createOffer()
         await self.peer_connection.setLocalDescription(offer)
@@ -568,6 +583,7 @@ class MockRobot:
         rgb_track = SyntheticVideoTrack(
             self.robot_code,
             "rgb",
+            "track.video_1",
             self.rgb_width,
             self.rgb_height,
             self.fps,
@@ -575,11 +591,12 @@ class MockRobot:
         thermal_track = SyntheticVideoTrack(
             self.robot_code,
             "thermal",
+            "track.video_2",
             self.thermal_width,
             self.thermal_height,
             self.fps,
         )
-        audio_track = SilenceAudioTrack()
+        audio_track = SilenceAudioTrack("track.audio_1")
 
         rgb_transceiver = self.peer_connection.addTransceiver(rgb_track, direction="sendonly")
         thermal_transceiver = self.peer_connection.addTransceiver(
@@ -620,11 +637,16 @@ class MockRobot:
             if channel.readyState != "open":
                 continue
             self.sequence += 1
-            payload = (
-                self.create_sensor_payload()
-                if label == "sensor"
-                else self.create_telemetry_payload()
-            )
+            if label == "channel.telemetry":
+                payload = self.create_telemetry_payload()
+            elif label == "channel.event":
+                payload = self.create_event_payload()
+            elif label == "channel.spatial":
+                payload = self.create_spatial_payload()
+            elif label == "channel.control":
+                payload = self.create_control_payload()
+            else:
+                payload = self.create_telemetry_payload()
             channel.send(json.dumps(payload, separators=(",", ":")))
 
     async def heartbeat_loop(self) -> None:
@@ -638,13 +660,79 @@ class MockRobot:
         return {
             "messageId": f"{self.robot_code}-telemetry-{self.sequence}",
             "messageType": "telemetry",
+            "channelRole": "channel.telemetry",
             "robotCode": self.robot_code,
             "missionId": self.mission["missionId"],
             "sequence": self.sequence,
             "sentAt": utc_now_iso(),
+            "descriptors": [
+                {
+                    "sensorId": "telemetry.position_1",
+                    "kind": "position",
+                    "displayName": "GPS",
+                    "samplingRate": 1,
+                    "enabled": True,
+                },
+                {
+                    "sensorId": "telemetry.environment_1",
+                    "kind": "environment",
+                    "displayName": "Environment",
+                    "samplingRate": 1,
+                    "enabled": True,
+                },
+                {
+                    "sensorId": "telemetry.battery_1",
+                    "kind": "battery",
+                    "displayName": "Battery",
+                    "unit": "percent",
+                    "samplingRate": 1,
+                    "enabled": True,
+                },
+            ],
+            "samples": [
+                {
+                    "sensorId": "telemetry.position_1",
+                    "timestamp": utc_now_iso(),
+                    "sequence": self.sequence,
+                    "quality": "good",
+                    "values": {
+                        "latitude": latitude,
+                        "longitude": longitude,
+                        "altitudeMeter": 45.0 + (self.sequence % 8),
+                        "accuracyMeter": 4.5,
+                        "headingDegree": (self.sequence * 12) % 360,
+                        "speedMeterPerSecond": 0.4 + (self.sequence % 4) * 0.1,
+                    },
+                },
+                {
+                    "sensorId": "telemetry.environment_1",
+                    "timestamp": utc_now_iso(),
+                    "sequence": self.sequence,
+                    "quality": "good",
+                    "values": {
+                        "temperatureCelsius": 28.5 + math.sin(self.sequence / 5) * 2,
+                        "humidityPercent": 52.0 + math.cos(self.sequence / 8) * 5,
+                        "oxygenPercent": 20.7,
+                        "coPpm": 5 + self.sequence % 6,
+                        "ch4Ppm": 1 + self.sequence % 3,
+                    },
+                },
+                {
+                    "sensorId": "telemetry.battery_1",
+                    "timestamp": utc_now_iso(),
+                    "sequence": self.sequence,
+                    "quality": "good",
+                    "values": {"batteryPercent": self.current_battery_percent()},
+                },
+            ],
             "payload": {
                 "batteryPercent": self.current_battery_percent(),
                 "networkState": "mock-local",
+                "temperatureCelsius": 28.5 + math.sin(self.sequence / 5) * 2,
+                "humidityPercent": 52.0 + math.cos(self.sequence / 8) * 5,
+                "oxygenPercent": 20.7,
+                "coPpm": 5 + self.sequence % 6,
+                "ch4Ppm": 1 + self.sequence % 3,
                 "positionAvailable": True,
                 "position": {
                     "latitude": latitude,
@@ -654,6 +742,48 @@ class MockRobot:
                     "headingDegree": (self.sequence * 12) % 360,
                     "speedMeterPerSecond": 0.4 + (self.sequence % 4) * 0.1,
                 },
+            },
+        }
+
+    def create_event_payload(self) -> dict[str, Any]:
+        return {
+            "messageId": f"{self.robot_code}-event-{self.sequence}",
+            "messageType": "event.robot_heartbeat",
+            "channelRole": "channel.event",
+            "robotCode": self.robot_code,
+            "missionId": self.mission["missionId"],
+            "sequence": self.sequence,
+            "sentAt": utc_now_iso(),
+            "event": {
+                "kind": "robot_state_changed",
+                "severity": "info",
+                "message": "mock robot streaming",
+            },
+        }
+
+    def create_spatial_payload(self) -> dict[str, Any]:
+        return {
+            "messageId": f"{self.robot_code}-spatial-{self.sequence}",
+            "messageType": "spatial.status",
+            "channelRole": "channel.spatial",
+            "robotCode": self.robot_code,
+            "missionId": self.mission["missionId"],
+            "sequence": self.sequence,
+            "sentAt": utc_now_iso(),
+            "state": "unsupported",
+        }
+
+    def create_control_payload(self) -> dict[str, Any]:
+        return {
+            "messageId": f"{self.robot_code}-control-{self.sequence}",
+            "messageType": "control.ack",
+            "channelRole": "channel.control",
+            "robotCode": self.robot_code,
+            "missionId": self.mission["missionId"],
+            "sequence": self.sequence,
+            "sentAt": utc_now_iso(),
+            "ack": {
+                "state": "idle",
             },
         }
 

@@ -10,10 +10,12 @@ import (
 )
 
 func newPublisherSession(peerID string, robotCode string, peerConnection *webrtc.PeerConnection) *publisherSession {
+	streamBundle := newRobotStreamBundle("", robotCode)
 	return &publisherSession{
 		peerID:          peerID,
 		robotCode:       robotCode,
 		peerConnection:  peerConnection,
+		streamBundle:    streamBundle,
 		publishedTracks: map[string]*publishedTrack{},
 	}
 }
@@ -43,7 +45,10 @@ func (s *publisherSession) prepareConnection(roomID string, hub *Hub) {
 		hub.publishRobotTrack(roomID, s.robotCode, track)
 	})
 	s.peerConnection.OnDataChannel(func(dataChannel *webrtc.DataChannel) {
-		label := dataChannel.Label()
+		label := normalizeDataChannelRole(dataChannel.Label())
+		if s.streamBundle != nil {
+			s.streamBundle.DataChannels[label] = &PublishedDataChannel{Role: label}
+		}
 		log.Printf("sfu robot datachannel room=%s robot=%s label=%s", roomID, s.robotCode, label)
 		dataChannel.OnMessage(func(message webrtc.DataChannelMessage) {
 			hub.forwardDataChannelMessage(roomID, s.robotCode, label, message.Data)

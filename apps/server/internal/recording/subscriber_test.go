@@ -40,3 +40,17 @@ func TestRecorderMediaKeySeparatesRobotStorageWithinMissionRoom(t *testing.T) {
 		t.Fatalf("expected media key to preserve mission and robot, got mission=%q robot=%q", missionCode, robotCode)
 	}
 }
+
+func TestRecorderStorageDataChannelLabelKeepsOnlyTelemetryPersistence(t *testing.T) {
+	cases := map[string]string{
+		"channel.telemetry": "telemetry",
+		"channel.event":     "",
+		"channel.spatial":   "",
+		"channel.control":   "",
+	}
+	for input, want := range cases {
+		if got := recorderStorageDataChannelLabel(input); got != want {
+			t.Fatalf("recorderStorageDataChannelLabel(%q) = %q, want %q", input, got, want)
+		}
+	}
+}

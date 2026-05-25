@@ -300,8 +300,8 @@ export function useControlCenterController({
       return;
     }
 
-    if (label === "telemetry") {
-      updateLiveSession(targetKey, (session) => ({ ...session, telemetry: parsed }));
+    if (label === "telemetry" || label === "channel.telemetry") {
+      updateLiveSession(targetKey, (session) => ({ ...session, telemetry: parsed, sensor: parsed }));
       return;
     }
 
@@ -343,8 +343,7 @@ export function useControlCenterController({
       const rtcConfig = await requestJson("/api/rtc-config");
       const websocket = new WebSocket(websocketUrlWithQuery(rtcConfig.signalingUrl, {
         room: missionRoomId,
-        role: "operator",
-        robotCode: target.robotCode
+        role: "operator"
       }));
       const peerConnection = new RTCPeerConnection({
         iceServers: rtcConfig.iceServers ?? [],

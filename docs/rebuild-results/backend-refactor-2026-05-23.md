@@ -83,9 +83,8 @@ Additional risk fixes after review:
 - Wrapped `RecordingService.MarkRecordingChunkUploaded` in the service transaction boundary.
 - Wrapped `RecordingService.MarkRecordingFileUploaded` in the service transaction boundary.
 - Added service tests that fail if upload status changes bypass the transaction repository.
-- Fixed `002_recording_chunk_timestamps.sql` to add nullable columns, backfill from `started_at`, then set defaults and `NOT NULL`.
-- Added `003_fix_recording_chunk_timestamps.sql` for already-applied PoC DBs.
-- Applied the timestamp migration to the local PoC DB.
+- Kept recording chunk timestamp columns aligned with the current Go startup schema path.
+- Pruned references to local-only SQL migration files that are no longer present in the repository.
 - Moved SFU subscriber track attach, DataChannel creation, and RTCP read loop into `subscriberSession`.
 
 Verification:
@@ -117,9 +116,8 @@ Runtime verification:
 
 Additional operational fixes:
 
-- Added `scripts/db-migrate.sh` so existing PostgreSQL volumes can receive `db/migrations/*.sql` without dropping data.
-- Wired `scripts/dev-up.sh` to run `scripts/db-migrate.sh` after PostgreSQL starts and before app-server starts.
-- Re-ran migrations against the local PoC DB.
+- Current local PoC schema setup is handled by app-server startup `AutoMigrate`.
+- Kept `db/migrations/README.md` only as a placeholder for future production-grade SQL migrations.
 - Added upload failure tests for `MarkRecordingChunkUploaded` and `MarkRecordingFileUploaded`.
   - transaction repository error is propagated
   - transaction is not committed
@@ -136,7 +134,6 @@ go test -count=1 ./...
 go vet ./...
 
 cd /Users/dhkim/workspace/sst/robot-center
-./scripts/db-migrate.sh
 ./scripts/dev-status.sh
 ```
 
@@ -208,7 +205,7 @@ Additional scope completed from the second refactoring instruction:
 - `RecordingRepository` now exposes storage primitives instead of a single use-case method.
 - `PostgresStore.ApplyRecordingTick` and `MemoryStore.ApplyRecordingTick` were removed.
 - `recording_chunks.created_at` and `recording_chunks.updated_at` are real DB columns.
-- Added migration `db/migrations/002_recording_chunk_timestamps.sql`.
+- Timestamp columns are now covered by the current app startup schema path; no local SQL migration file remains in the repo.
 - Recording upload status updates now set `updated_at = now()`.
 - Recorder Worker now receives `AppServerClient`, `ObjectStorage`, and `MediaUploader` collaborators through construction.
 - Added a Worker tick unit test that runs without HTTP or MinIO.

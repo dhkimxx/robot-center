@@ -32,7 +32,9 @@ func (s *PostgresStore) SaveTelemetry(ctx context.Context, snapshot domain.Telem
 			accuracy_meter, heading_degree, geom, raw_payload
 		)
 		VALUES (
-			$1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+			$1::uuid, $2::uuid, $3, $4, $5, $6::double precision, $7, $8,
+			$9::double precision, $10::double precision, $11::double precision,
+			$12::double precision, $13::double precision,
 			CASE
 				WHEN $9::double precision IS NOT NULL AND $10::double precision IS NOT NULL
 				THEN ST_SetSRID(ST_MakePoint($10::double precision, $9::double precision), 4326)

@@ -34,6 +34,12 @@ export function findTrackSlot(event, fallbackIndex) {
   if (event.track?.kind === "audio" || raw.includes("audio")) {
     return "audio";
   }
+  if (raw.includes("track.video_2")) {
+    return "thermal";
+  }
+  if (raw.includes("track.video_1")) {
+    return "rgb";
+  }
   if (raw.includes("thermal")) {
     return "thermal";
   }

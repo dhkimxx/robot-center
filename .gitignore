@@ -1,5 +1,8 @@
 .DS_Store
+__pycache__/
+*.py[cod]
 .runtime/
+.agents/skills/*/.venv/
 apps/server/.runtime/
 
 apps/web/node_modules/
@@ -7,4 +10,5 @@ apps/web/dist/
 apps/android-robot/.gradle/
 apps/android-robot/build/
 apps/android-robot/app/build/
-.playwright-mcp
+.playwright-cli/
+.playwright-mcp/
