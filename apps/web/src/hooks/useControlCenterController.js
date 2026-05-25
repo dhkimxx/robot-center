@@ -9,10 +9,8 @@ import {
 import { useMissionManagementController } from "../domains/missions/useMissionManagementController.js";
 import { useRecordingsController } from "../domains/recordings/useRecordingsController.js";
 import { useRobotManagementController } from "../domains/robots/useRobotManagementController.js";
-import {
-  readSelectedLiveTargetKey,
-  useLiveConnectionManager
-} from "../domains/live/useLiveConnectionManager.js";
+import { useLiveConnectionManager } from "../domains/live/useLiveConnectionManager.js";
+import { resolveStoredLiveTargetKey } from "../domains/live/useLiveTargetSelection.js";
 import { useMissionSamples } from "../domains/live/useMissionSamples.js";
 import { useOperationStatuses } from "../domains/live/useOperationStatuses.js";
 import { useControlCenterData } from "./useControlCenterData.js";
@@ -144,7 +142,7 @@ export function useControlCenterController({
     loadAll,
     missions,
     navigateToPath,
-    readSelectedLiveTargetKey,
+    resolveStoredLiveTargetKey,
     robots,
     setMissionControlCode,
     setSelectedLiveTargetKey,
@@ -172,59 +170,80 @@ export function useControlCenterController({
   });
 
   return {
-    systemStatus,
-    robots,
-    missions,
-    recordings,
-    connectionInfo,
     statusError,
     notifications,
-    robotForm: robotController.robotForm,
-    setRobotForm: robotController.setRobotForm,
-    selectedRobot: robotController.selectedRobot,
-    robotEditForm: robotController.robotEditForm,
-    setRobotEditForm: robotController.setRobotEditForm,
-    missionForm: missionController.missionForm,
-    setMissionForm: missionController.setMissionForm,
-    recordingPlaybackFile: recordingsController.recordingPlaybackFile,
-    setRecordingPlaybackFile: recordingsController.setRecordingPlaybackFile,
-    missionControlMission,
-    missionControlTargets,
-    selectedLiveSession,
-    liveSessions,
-    latestRecording,
-    latestPlayableRecording,
-    latestTelemetry,
-    latestSensor,
-    operationStatuses,
-    selectedMission: missionController.selectedMission,
-    selectedLiveTargetKey,
-    setSelectedLiveTargetKey,
-    robotModal: robotController.robotModal,
-    missionModal: missionController.missionModal,
-    pendingArchiveRobotCode: robotController.pendingArchiveRobotCode,
-    pendingArchiveRobot: robotController.pendingArchiveRobot,
-    setPendingArchiveRobotCode: robotController.setPendingArchiveRobotCode,
-    archiveRobot: robotController.archiveRobot,
-    closeMissionModal: missionController.closeMissionModal,
-    closeRobotModal: robotController.closeRobotModal,
-    confirmArchiveRobot: robotController.confirmArchiveRobot,
-    createMission: missionController.createMission,
-    createRobot: robotController.createRobot,
     dismissNotification,
-    endMission: missionController.endMission,
-    loadConnectionInfo: robotController.loadConnectionInfo,
-    openMissionControl: missionController.openMissionControl,
-    openMissionCreateModal: missionController.openMissionCreateModal,
-    openRobotCreateModal: robotController.openRobotCreateModal,
-    openRobotEditModal: robotController.openRobotEditModal,
-    playLatestRecording: recordingsController.playLatestRecording,
-    reconnectLive,
-    rotateRobotToken: robotController.rotateRobotToken,
-    closeMissionControl,
-    setSelectedMissionManagementCode: missionController.setSelectedMissionManagementCode,
-    setSelectedRobotManagementCode: robotController.setSelectedRobotManagementCode,
-    startMission: missionController.startMission,
-    updateRobot: robotController.updateRobot
+    missionRouteProps: {
+      controlMission: missionControlMission,
+      latestRecording,
+      latestSensor,
+      latestTelemetry,
+      liveEvents: selectedLiveSession.events,
+      liveSessions,
+      missionTargets: missionControlTargets,
+      missions,
+      onBackToMissionList: closeMissionControl,
+      onEndMission: missionController.endMission,
+      onOpenCreateMissionModal: missionController.openMissionCreateModal,
+      onOpenMissionControl: missionController.openMissionControl,
+      onOpenRecordings: () => navigateToPath?.("/recordings"),
+      onPlayLatestRecording: recordingsController.playLatestRecording,
+      onReconnectSelectedMissionTarget: reconnectLive,
+      onSelectMission: missionController.setSelectedMissionManagementCode,
+      onStartMission: missionController.startMission,
+      operationStatuses,
+      playbackRecording: latestPlayableRecording,
+      robots,
+      selectedMission: missionController.selectedMission,
+      selectedMissionTargetKey: selectedLiveTargetKey,
+      setSelectedMissionTargetKey: setSelectedLiveTargetKey
+    },
+    missionModalProps: {
+      createMission: missionController.createMission,
+      missionForm: missionController.missionForm,
+      missionModal: missionController.missionModal,
+      onClose: missionController.closeMissionModal,
+      robots,
+      setMissionForm: missionController.setMissionForm
+    },
+    playbackModalProps: {
+      recordingPlaybackFile: recordingsController.recordingPlaybackFile,
+      setRecordingPlaybackFile: recordingsController.setRecordingPlaybackFile
+    },
+    recordingRouteProps: {
+      onOpenPlaybackFile: recordingsController.setRecordingPlaybackFile,
+      recordings
+    },
+    robotModalProps: {
+      closeRobotModal: robotController.closeRobotModal,
+      confirmArchiveRobot: robotController.confirmArchiveRobot,
+      connectionInfo,
+      createRobot: robotController.createRobot,
+      pendingArchiveRobot: robotController.pendingArchiveRobot,
+      pendingArchiveRobotCode: robotController.pendingArchiveRobotCode,
+      robotEditForm: robotController.robotEditForm,
+      robotForm: robotController.robotForm,
+      robotModal: robotController.robotModal,
+      rotateRobotToken: robotController.rotateRobotToken,
+      selectedRobot: robotController.selectedRobot,
+      setPendingArchiveRobotCode: robotController.setPendingArchiveRobotCode,
+      setRobotEditForm: robotController.setRobotEditForm,
+      setRobotForm: robotController.setRobotForm,
+      updateRobot: robotController.updateRobot
+    },
+    robotRouteProps: {
+      missions,
+      onArchiveRobot: robotController.archiveRobot,
+      onLoadConnectionInfo: robotController.loadConnectionInfo,
+      onOpenCreateRobotModal: robotController.openRobotCreateModal,
+      onOpenEditRobotModal: robotController.openRobotEditModal,
+      onSelectRobot: robotController.setSelectedRobotManagementCode,
+      robots,
+      selectedRobot: robotController.selectedRobot
+    },
+    systemRouteProps: {
+      statusError,
+      systemStatus
+    }
   };
 }

@@ -1391,6 +1391,14 @@ h2 {
   font-weight: 900;
 }
 
+.connection-info-row-header {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .connection-info-row code {
   overflow: auto;
   display: block;

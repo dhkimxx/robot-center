@@ -1,6 +1,6 @@
 # AI Web Documentation
 
-이 문서 폴더는 Android Mock Robot을 로봇 샘플로 사용하는 AI Web 관제센터 P0 기준으로 정리한다.
+이 문서 폴더는 AI Web 관제센터 P0 기준으로 정리한다.
 
 과거 PoC 단계별 로그와 오래된 rebuild phase 로그는 현재 구현 기준과 섞이지 않도록 제거했다. 필요한 과거 이력은 git history에서 확인한다.
 
@@ -9,10 +9,10 @@
 | 목적 | 먼저 볼 문서 |
 | --- | --- |
 | 제품 범위와 수용 기준 확인 | `docs/ai-web-prd.md` |
-| 현재 구현/검증 상태 확인 | `docs/rebuild-results/server-layer-gorm-storage-2026-05-22.md` |
+| 현재 구현/검증 상태 확인 | `docs/rebuild-results/control-center-live-refactor-2026-05-25.md` |
 | 서버/SFU 기준 확인 | `docs/harness/20260522-harness-index.md` |
 | 전체 구조와 런타임 구성 확인 | `docs/appendix/architecture.md` |
-| Android Mock/Robot Gateway 연동 확인 | `docs/appendix/robot-interface.md` |
+| Robot Gateway / Mock Robot 연동 확인 | `docs/appendix/robot-interface.md` |
 | 관제 UI 화면 범위 확인 | `docs/appendix/ui-plan.md` |
 | DB schema, MinIO object, replay 구조 확인 | `docs/appendix/data-storage.md` |
 | AI Agent 범위 확인 | `docs/appendix/ai-agent.md` |
@@ -21,8 +21,8 @@
 
 ## 현재 기준
 
-최신 검증 기준은 `mission-room-multi-robot-sfu-2026-05-23`와
-`backend-refactor-2026-05-23` 결과다.
+최신 검증 기준은 `control-center-live-refactor-2026-05-25` 결과와
+`docs/harness/20260522-harness-index.md`의 mission room SFU 기준이다.
 
 ```text
 Robot Gateway / Mock Robot
@@ -51,7 +51,7 @@ Robot Gateway / Mock Robot
 | --- | --- |
 | `docs/ai-web-prd.md` | 전체 시스템 P0 PRD |
 | `docs/appendix/architecture.md` | Docker Compose, app-server, recorder-worker, Robot Gateway 기준 전체 아키텍처 |
-| `docs/appendix/robot-interface.md` | Android Mock/Robot Gateway REST/WebRTC 연동 계약 |
+| `docs/appendix/robot-interface.md` | Robot Gateway / Mock Robot REST/WebRTC 연동 계약 |
 | `docs/appendix/ui-plan.md` | React 관제 UI 화면과 기능 범위 |
 | `docs/appendix/data-storage.md` | PostgreSQL/PostGIS 테이블과 MinIO object key, replay 규칙 |
 | `docs/appendix/ai-agent.md` | Go/Eino 기반 AI Agent 기능 명세 |
@@ -71,7 +71,7 @@ Robot Gateway / Mock Robot
 
 | 문서 | 내용 |
 | --- | --- |
-| `docs/rebuild-results/server-layer-gorm-storage-2026-05-22.md` | 최신 서버 레이어, GORM, storage object metadata 검증 결과 |
+| `docs/rebuild-results/control-center-live-refactor-2026-05-25.md` | 최신 관제 UI, live connection lifecycle, Python mock robot 검증 결과 |
 
 ## 문서 원칙
 

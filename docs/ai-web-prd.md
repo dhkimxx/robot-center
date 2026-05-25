@@ -395,11 +395,11 @@ P0 완료 기준:
 | 문서 | 내용 |
 | --- | --- |
 | `docs/appendix/architecture.md` | 전체 시스템 아키텍처 |
-| `docs/appendix/robot-interface.md` | Android Mock/Robot Gateway 연동 계약 |
+| `docs/appendix/robot-interface.md` | Robot Gateway / Mock Robot 연동 계약 |
 | `docs/appendix/data-storage.md` | PostgreSQL/PostGIS/MinIO 규칙 |
 | `docs/appendix/ui-plan.md` | UI 화면/기능 설계 |
 | `docs/appendix/ai-agent.md` | Eino 기반 AI Agent 명세 |
 | `docs/appendix/scenarios.md` | 실증 시나리오 |
 | `docs/appendix/decisions.md` | 설계 결정 기록 |
 | `docs/harness/20260522-harness-index.md` | 서버/SFU/persistence harness 진입점 |
-| `docs/rebuild-results/server-layer-gorm-storage-2026-05-22.md` | 최신 구현 검증 결과 |
+| `docs/rebuild-results/control-center-live-refactor-2026-05-25.md` | 최신 구현 검증 결과 |

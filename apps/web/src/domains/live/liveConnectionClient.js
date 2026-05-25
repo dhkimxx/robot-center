@@ -1,6 +1,7 @@
 import { websocketUrlWithQuery } from "../../api/controlCenterApi.js";
 import { makeLiveChannelLabel, makeLiveStatusLabel, makePeerRoleLabel } from "../../utils/formatters.js";
 import { waitForIceGatheringComplete } from "../../utils/webrtc.js";
+import { LiveCloseReason, LiveSessionStatus } from "./liveConnectionStates.js";
 
 export function createLiveConnectionClient({
   missionRoomId,
@@ -66,12 +67,12 @@ export function createLiveConnectionClient({
         robotCode
       }
     }));
-    onStatusChange("signaling connected");
+    onStatusChange(LiveSessionStatus.SIGNALING_CONNECTED);
     onEvent("관제 연결 준비");
   };
 
   websocket.onerror = () => {
-    onStatusChange("signaling error");
+    onStatusChange(LiveSessionStatus.SIGNALING_ERROR);
     onEvent("관제 연결 오류");
   };
 
@@ -124,7 +125,7 @@ export function createLiveConnectionClient({
   return {
     peerConnection,
     websocket,
-    close(reason = "operator disconnected") {
+    close(reason = LiveCloseReason.DISCONNECTED) {
       requestedCloseReason = reason;
       websocket.close(1000, reason);
       peerConnection.close();

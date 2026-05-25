@@ -7,7 +7,6 @@ export default function RobotsScreen({
   onLoadConnectionInfo,
   onOpenCreateRobotModal,
   onOpenEditRobotModal,
-  onRotateRobotToken,
   onSelectRobot,
   robots,
   selectedRobot
@@ -77,7 +76,6 @@ export default function RobotsScreen({
               <div className="button-row robot-detail-actions">
                 <button className="primary-button" type="button" onClick={onOpenEditRobotModal}>수정</button>
                 <button type="button" onClick={() => onLoadConnectionInfo(selectedRobot.robotCode)}>연결 정보</button>
-                <button type="button" onClick={() => onRotateRobotToken(selectedRobot.robotCode)}>토큰 재발급</button>
                 <button
                   className="danger-button"
                   disabled={selectedRobotHasOpenMission}

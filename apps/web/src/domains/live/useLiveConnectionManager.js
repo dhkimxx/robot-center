@@ -1,14 +1,18 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect } from "react";
 import { fetchRtcConfig } from "../../api/liveApi.js";
-import { makeLiveChannelLabel } from "../../utils/formatters.js";
 import {
   createEmptyLiveSession,
-  findRobotCodeForRemoteTrack,
-  findRobotCodeFromDataMessage,
-  findTrackSlot,
   makeLiveTargetKey
 } from "./liveHelpers.js";
+import {
+  createLiveConnectionCloseHandler,
+  createLiveConnectionHandlers
+} from "./liveConnectionHandlers.js";
 import { mapLiveDataChannelPayload } from "./livePayloadMapper.js";
+import { useLiveAutoConnect } from "./useLiveAutoConnect.js";
+import { useLiveConnectionRegistry } from "./useLiveConnectionRegistry.js";
+import { useLiveSessionStore } from "./useLiveSessionStore.js";
+import { useLiveTargetSelection } from "./useLiveTargetSelection.js";
 import {
   getMissionCodeFromRobotKey,
   makeMissionConnectionKey,
@@ -16,47 +20,11 @@ import {
   makeMissionRoomId
 } from "../missions/missionHelpers.js";
 import { createLiveConnectionClient } from "./liveConnectionClient.js";
-
-const selectedLiveTargetStorageKey = "robot-center.selectedLiveTargetKey";
-const reconnectableLiveStatuses = new Set([
-  "closed",
-  "disconnected",
-  "failed",
-  "signaling closed",
-  "signaling error"
-]);
-const activeLiveConnectionStatuses = new Set([
-  "checking",
-  "completed",
-  "connected",
-  "connecting",
-  "signaling connected"
-]);
-const intentionalCloseReasons = new Set([
-  "operator disconnected",
-  "operator navigation",
-  "operator switching target"
-]);
-
-export function readSelectedLiveTargetKey() {
-  try {
-    return window.localStorage.getItem(selectedLiveTargetStorageKey) ?? "";
-  } catch {
-    return "";
-  }
-}
-
-function writeSelectedLiveTargetKey(targetKey) {
-  try {
-    if (targetKey) {
-      window.localStorage.setItem(selectedLiveTargetStorageKey, targetKey);
-      return;
-    }
-    window.localStorage.removeItem(selectedLiveTargetStorageKey);
-  } catch {
-    // Local selection persistence is optional; the in-memory state remains authoritative.
-  }
-}
+import {
+  activeLiveConnectionStatuses,
+  LiveCloseReason,
+  LiveSessionStatus
+} from "./liveConnectionStates.js";
 
 export function useLiveConnectionManager({
   activeSection,
@@ -65,85 +33,47 @@ export function useLiveConnectionManager({
   setMissionControlCode,
   showNotification
 }) {
-  const [selectedLiveTargetKey, setSelectedLiveTargetKey] = useState(readSelectedLiveTargetKey);
-  const [liveSessions, setLiveSessions] = useState({});
-  const liveConnectionsRef = useRef(new Map());
-  const autoConnectingTargetKeyRef = useRef("");
-
-  const updateLiveSession = useCallback((targetKey, updater) => {
-    setLiveSessions((current) => {
-      const previous = current[targetKey] ?? createEmptyLiveSession();
-      return {
-        ...current,
-        [targetKey]: updater(previous)
-      };
-    });
-  }, []);
-
-  const appendLiveEvent = useCallback((targetKey, message) => {
-    if (!targetKey) {
-      return;
-    }
-    updateLiveSession(targetKey, (session) => ({
-      ...session,
-      events: [
-        { id: `${Date.now()}-${Math.random()}`, message, at: new Date().toISOString() },
-        ...session.events
-      ].slice(0, 40)
-    }));
-  }, [updateLiveSession]);
-
-  const closeLiveConnection = useCallback((connectionKey, reason = "operator disconnected") => {
-    const connection = liveConnectionsRef.current.get(connectionKey);
-    connection?.close?.(reason);
-    liveConnectionsRef.current.delete(connectionKey);
-  }, []);
+  const {
+    selectedLiveTarget,
+    selectedLiveTargetKey,
+    setSelectedLiveTargetKey
+  } = useLiveTargetSelection(liveTargets);
+  const {
+    closeAllConnections,
+    closeMissionConnection,
+    getConnection,
+    registerConnection,
+    removeConnection,
+    startConnectionAttempt
+  } = useLiveConnectionRegistry();
+  const {
+    appendLiveEvent,
+    applyMappedDataChannelPayload,
+    applyTrackStream,
+    liveSessions,
+    resetMissionStreams,
+    selectedSessionForTarget,
+    setLiveSessionStatus
+  } = useLiveSessionStore();
 
   const disconnectLiveTarget = useCallback((targetKey) => {
     const missionCode = getMissionCodeFromRobotKey(targetKey);
-    const connectionKey = makeMissionConnectionKey(missionCode);
-    closeLiveConnection(connectionKey, "operator navigation");
-    liveConnectionsRef.current.delete(targetKey);
-    const targetKeys = liveTargets
-      .filter((candidate) => candidate.mission.missionCode === missionCode)
-      .map((candidate) => candidate.key);
-    (targetKeys.length > 0 ? targetKeys : [targetKey]).forEach((candidateKey) => {
-      updateLiveSession(candidateKey, (session) => ({
-        ...session,
-        status: "disconnected",
-        videoStreams: { rgb: null, thermal: null, audio: null }
-      }));
-    });
-  }, [closeLiveConnection, liveTargets, updateLiveSession]);
+    closeMissionConnection(missionCode, LiveCloseReason.NAVIGATION);
+    resetMissionStreams(missionCode, liveTargets, targetKey);
+  }, [closeMissionConnection, liveTargets, resetMissionStreams]);
 
   const disconnectMissionByCode = useCallback((missionCode) => {
     disconnectLiveTarget(makeMissionRobotKey(missionCode, ""));
   }, [disconnectLiveTarget]);
 
   useEffect(() => () => {
-    liveConnectionsRef.current.forEach((connection) => connection?.close?.("operator disconnected"));
-    liveConnectionsRef.current.clear();
-  }, []);
+    closeAllConnections(LiveCloseReason.DISCONNECTED);
+  }, [closeAllConnections]);
 
-  const persistDataChannelMessage = useCallback((targetKey, label, message) => {
+  const persistDataChannelMessage = useCallback((targetKey, label, message, options = {}) => {
     const mappedPayload = mapLiveDataChannelPayload(label, message);
-    if (!mappedPayload.ok) {
-      appendLiveEvent(targetKey, `${makeLiveChannelLabel(label)} ${mappedPayload.eventMessage}`);
-      return;
-    }
-
-    if (mappedPayload.telemetry || mappedPayload.sensor) {
-      updateLiveSession(targetKey, (session) => ({
-        ...session,
-        ...(mappedPayload.telemetry ? { telemetry: mappedPayload.telemetry } : {}),
-        ...(mappedPayload.sensor ? { sensor: mappedPayload.sensor } : {})
-      }));
-    }
-    if (mappedPayload.eventMessage) {
-      appendLiveEvent(targetKey, mappedPayload.eventMessage);
-      return;
-    }
-  }, [appendLiveEvent, updateLiveSession]);
+    applyMappedDataChannelPayload(targetKey, label, mappedPayload, options);
+  }, [applyMappedDataChannelPayload]);
 
   const connectLiveTarget = useCallback(async (target, options = {}) => {
     if (!target) {
@@ -157,138 +87,88 @@ export function useLiveConnectionManager({
     const missionTargets = missionTargetsForRoom.length > 0 ? missionTargetsForRoom : [target];
     const targetKey = makeLiveTargetKey(target);
     const connectionKey = makeMissionConnectionKey(missionCode);
-    const currentConnection = liveConnectionsRef.current.get(connectionKey);
+    const currentConnection = getConnection(connectionKey);
     const currentSession = liveSessions[targetKey] ?? createEmptyLiveSession();
     if (!options.force && currentConnection?.targetKey === targetKey && activeLiveConnectionStatuses.has(currentSession.status)) {
       return;
     }
-    disconnectLiveTarget(targetKey);
+    const attempt = startConnectionAttempt(connectionKey, targetKey, {
+      closeReason: LiveCloseReason.SWITCHING_TARGET
+    });
+    resetMissionStreams(missionCode, liveTargets, targetKey, {
+      attemptId: attempt.attemptId,
+      replaceAttempt: true
+    });
     setMissionControlCode(missionCode);
     setSelectedLiveTargetKey(targetKey);
-    updateLiveSession(targetKey, (session) => ({
-      ...session,
-      status: "connecting",
-      videoStreams: { rgb: null, thermal: null, audio: null }
-    }));
+    setLiveSessionStatus(targetKey, LiveSessionStatus.CONNECTING, {
+      attemptId: attempt.attemptId,
+      replaceAttempt: true,
+      resetStreams: true
+    });
 
     try {
       const rtcConfig = await fetchRtcConfig();
-      let videoTrackOrder = 0;
-      const client = createLiveConnectionClient({
+      let client;
+      const handlers = createLiveConnectionHandlers({
+        appendLiveEvent,
+        applyTrackStream,
+        attempt,
+        missionCode,
+        missionTargets,
+        persistDataChannelMessage,
+        setLiveSessionStatus,
+        target,
+        targetKey
+      });
+      client = createLiveConnectionClient({
         missionRoomId,
         robotCode: target.robotCode,
         rtcConfig,
-        onDataChannelMessage: (label, message) => {
-          const robotCode = findRobotCodeFromDataMessage(message) || target.robotCode;
-          persistDataChannelMessage(makeMissionRobotKey(missionCode, robotCode), label, message);
-        },
-        onEvent: (message, robotCode = target.robotCode) => {
-          appendLiveEvent(makeMissionRobotKey(missionCode, robotCode), message);
-        },
-        onStatusChange: (status) => {
-          updateLiveSession(targetKey, (session) => ({ ...session, status }));
-        },
-        onTrack: (event) => {
-          const robotCode = findRobotCodeForRemoteTrack(event, missionTargets) || target.robotCode;
-          const routedTargetKey = makeMissionRobotKey(missionCode, robotCode);
-          const stream = new MediaStream([event.track]);
-          const slot = findTrackSlot(event, videoTrackOrder);
-          if (slot !== "audio") {
-            videoTrackOrder += 1;
-          }
-          if (slot === "audio") {
-            updateLiveSession(routedTargetKey, (session) => ({
-              ...session,
-              videoStreams: { ...session.videoStreams, audio: stream }
-            }));
-            appendLiveEvent(routedTargetKey, "오디오 수신");
-            return;
-          }
-
-          updateLiveSession(routedTargetKey, (session) => ({
-            ...session,
-            videoStreams: { ...session.videoStreams, [slot]: stream }
-          }));
-          appendLiveEvent(routedTargetKey, `${makeLiveChannelLabel(slot)} 영상 수신`);
-        }
+        ...handlers
       });
       client.targetKey = targetKey;
-      client.onClose(({ reason } = {}) => {
-        const isIntentionalClose = intentionalCloseReasons.has(reason);
-        updateLiveSession(targetKey, (session) => ({
-          ...session,
-          status: isIntentionalClose ? "idle" : "signaling closed",
-          ...(isIntentionalClose ? { videoStreams: { rgb: null, thermal: null, audio: null } } : {})
-        }));
-        if (!isIntentionalClose) {
-          appendLiveEvent(targetKey, "관제 연결 종료");
-        }
-        const currentConnection = liveConnectionsRef.current.get(connectionKey);
-        if (currentConnection?.targetKey === targetKey) {
-          liveConnectionsRef.current.delete(connectionKey);
-        }
-      });
-      liveConnectionsRef.current.set(connectionKey, client);
+      client.onClose(createLiveConnectionCloseHandler({
+        appendLiveEvent,
+        attempt,
+        client,
+        connectionKey,
+        removeConnection,
+        setLiveSessionStatus,
+        targetKey
+      }));
+      registerConnection(connectionKey, client, attempt);
     } catch (error) {
-      closeLiveConnection(connectionKey, "operator connection failed");
-      updateLiveSession(targetKey, (session) => ({ ...session, status: "failed" }));
+      if (!attempt.isCurrent()) {
+        return;
+      }
+      setLiveSessionStatus(targetKey, LiveSessionStatus.FAILED, { attemptId: attempt.attemptId });
       showNotification(error instanceof Error ? error.message : "관제 연결 실패", "danger");
-      appendLiveEvent(targetKey, `관제 연결 실패: ${error instanceof Error ? error.message : "알 수 없음"}`);
+      appendLiveEvent(
+        targetKey,
+        `관제 연결 실패: ${error instanceof Error ? error.message : "알 수 없음"}`,
+        { attemptId: attempt.attemptId }
+      );
     }
-  }, [appendLiveEvent, closeLiveConnection, disconnectLiveTarget, liveSessions, liveTargets, persistDataChannelMessage, setMissionControlCode, showNotification, updateLiveSession]);
+  }, [appendLiveEvent, applyTrackStream, getConnection, liveSessions, liveTargets, persistDataChannelMessage, registerConnection, removeConnection, resetMissionStreams, setLiveSessionStatus, setMissionControlCode, setSelectedLiveTargetKey, showNotification, startConnectionAttempt]);
 
-  const selectedLiveTarget = liveTargets.find((target) => target.key === selectedLiveTargetKey) ?? liveTargets[0] ?? null;
-  const selectedLiveSession = liveSessions[makeLiveTargetKey(selectedLiveTarget)] ?? createEmptyLiveSession();
+  const selectedLiveSession = selectedSessionForTarget(selectedLiveTarget);
+  const currentMissionConnection = missionControlMission
+    ? getConnection(makeMissionConnectionKey(missionControlMission.missionCode))
+    : null;
 
   const reconnectLive = useCallback(() => {
     void connectLiveTarget(selectedLiveTarget, { force: true });
   }, [connectLiveTarget, selectedLiveTarget]);
 
-  useEffect(() => {
-    if (liveTargets.length === 0) {
-      setSelectedLiveTargetKey("");
-      return;
-    }
-    if (!selectedLiveTargetKey || !liveTargets.some((target) => target.key === selectedLiveTargetKey)) {
-      setSelectedLiveTargetKey(liveTargets[0].key);
-    }
-  }, [liveTargets, selectedLiveTargetKey]);
-
-  useEffect(() => {
-    writeSelectedLiveTargetKey(selectedLiveTargetKey);
-  }, [selectedLiveTargetKey]);
-
-  useEffect(() => {
-    if (activeSection !== "missions" || !missionControlMission || missionControlMission.status !== "active" || !selectedLiveTarget) {
-      return;
-    }
-
-    const targetKey = makeLiveTargetKey(selectedLiveTarget);
-    const missionConnectionKey = makeMissionConnectionKey(missionControlMission.missionCode);
-    const currentConnection = liveConnectionsRef.current.get(missionConnectionKey);
-    const selectedSession = liveSessions[targetKey] ?? createEmptyLiveSession();
-
-    if (
-      reconnectableLiveStatuses.has(selectedSession.status)
-      && selectedSession.events.length > 0
-      && (!currentConnection || currentConnection.targetKey === targetKey)
-    ) {
-      return;
-    }
-    if (currentConnection?.targetKey === targetKey && activeLiveConnectionStatuses.has(selectedSession.status)) {
-      return;
-    }
-    if (autoConnectingTargetKeyRef.current === targetKey) {
-      return;
-    }
-
-    autoConnectingTargetKeyRef.current = targetKey;
-    void connectLiveTarget(selectedLiveTarget).finally(() => {
-      if (autoConnectingTargetKeyRef.current === targetKey) {
-        autoConnectingTargetKeyRef.current = "";
-      }
-    });
-  }, [activeSection, connectLiveTarget, liveSessions, missionControlMission, selectedLiveTarget]);
+  useLiveAutoConnect({
+    activeSection,
+    connectLiveTarget,
+    currentConnection: currentMissionConnection,
+    missionControlMission,
+    selectedLiveSession,
+    selectedLiveTarget
+  });
 
   return {
     appendLiveEvent,

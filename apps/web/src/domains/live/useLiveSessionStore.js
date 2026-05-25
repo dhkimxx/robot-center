@@ -1,0 +1,93 @@
+import { useCallback, useState } from "react";
+import { makeLiveChannelLabel } from "../../utils/formatters.js";
+import { createEmptyLiveSession, makeLiveTargetKey } from "./liveHelpers.js";
+import { LiveSessionStatus } from "./liveConnectionStates.js";
+import { applyLiveAttemptUpdate } from "./liveSessionAttempts.js";
+
+export function useLiveSessionStore() {
+  const [liveSessions, setLiveSessions] = useState({});
+
+  const updateLiveSession = useCallback((targetKey, updater, options = {}) => {
+    setLiveSessions((current) => {
+      const previous = current[targetKey] ?? createEmptyLiveSession();
+      const next = applyLiveAttemptUpdate(previous, options.attemptId, updater, {
+        replaceAttempt: options.replaceAttempt
+      });
+      if (next === previous) {
+        return current;
+      }
+      return { ...current, [targetKey]: next };
+    });
+  }, []);
+
+  const appendLiveEvent = useCallback((targetKey, message, options = {}) => {
+    if (!targetKey) {
+      return;
+    }
+    updateLiveSession(targetKey, (session) => ({
+      ...session,
+      events: [
+        { id: `${Date.now()}-${Math.random()}`, message, at: new Date().toISOString() },
+        ...session.events
+      ].slice(0, 40)
+    }), options);
+  }, [updateLiveSession]);
+
+  const setLiveSessionStatus = useCallback((targetKey, status, options = {}) => {
+    updateLiveSession(targetKey, (session) => ({
+      ...session,
+      status,
+      ...(options.resetStreams ? { videoStreams: { rgb: null, thermal: null, audio: null } } : {})
+    }), options);
+  }, [updateLiveSession]);
+
+  const resetMissionStreams = useCallback((missionCode, liveTargets, fallbackTargetKey, options = {}) => {
+    const targetKeys = liveTargets
+      .filter((candidate) => candidate.mission.missionCode === missionCode)
+      .map((candidate) => candidate.key);
+    (targetKeys.length > 0 ? targetKeys : [fallbackTargetKey]).forEach((targetKey) => {
+      setLiveSessionStatus(targetKey, LiveSessionStatus.DISCONNECTED, { ...options, resetStreams: true });
+    });
+  }, [setLiveSessionStatus]);
+
+  const applyTrackStream = useCallback((targetKey, slot, stream, options = {}) => {
+    updateLiveSession(targetKey, (session) => ({
+      ...session,
+      videoStreams: { ...session.videoStreams, [slot]: stream }
+    }), options);
+  }, [updateLiveSession]);
+
+  const applyMappedDataChannelPayload = useCallback((targetKey, label, mappedPayload, options = {}) => {
+    if (!mappedPayload.ok) {
+      appendLiveEvent(targetKey, `${makeLiveChannelLabel(label)} ${mappedPayload.eventMessage}`, options);
+      return;
+    }
+
+    if (mappedPayload.telemetry || mappedPayload.sensor) {
+      updateLiveSession(targetKey, (session) => ({
+        ...session,
+        ...(mappedPayload.telemetry ? { telemetry: mappedPayload.telemetry } : {}),
+        ...(mappedPayload.sensor ? { sensor: mappedPayload.sensor } : {})
+      }), options);
+    }
+
+    if (mappedPayload.eventMessage) {
+      appendLiveEvent(targetKey, mappedPayload.eventMessage, options);
+    }
+  }, [appendLiveEvent, updateLiveSession]);
+
+  const selectedSessionForTarget = useCallback((target) => (
+    liveSessions[makeLiveTargetKey(target)] ?? createEmptyLiveSession()
+  ), [liveSessions]);
+
+  return {
+    appendLiveEvent,
+    applyMappedDataChannelPayload,
+    applyTrackStream,
+    liveSessions,
+    resetMissionStreams,
+    selectedSessionForTarget,
+    setLiveSessionStatus,
+    updateLiveSession
+  };
+}

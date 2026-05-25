@@ -1,10 +1,12 @@
 import { makeMissionRobotKey } from "../missions/missionHelpers.js";
+import { LiveSessionStatus } from "./liveConnectionStates.js";
 
 export function createEmptyLiveSession() {
   return {
+    attemptId: null,
     events: [],
     sensor: null,
-    status: "disconnected",
+    status: LiveSessionStatus.DISCONNECTED,
     telemetry: null,
     videoStreams: { rgb: null, thermal: null, audio: null }
   };

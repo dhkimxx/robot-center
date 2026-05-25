@@ -1,8 +1,10 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import NotificationStack from "../components/NotificationStack.jsx";
 import { navigationItems } from "../config/controlCenterConfig.js";
+import { MissionModals } from "../domains/missions/MissionModals.jsx";
+import { RecordingModals } from "../domains/recordings/RecordingModals.jsx";
+import { RobotModals } from "../domains/robots/RobotModals.jsx";
 import { useControlCenterController } from "../hooks/useControlCenterController.js";
-import { ControlCenterModals } from "./ControlCenterModals.jsx";
 import { ControlCenterRoutes } from "./ControlCenterRoutes.jsx";
 import { getActiveSection, getRouteMissionControlCode } from "./routeUtils.js";
 
@@ -50,12 +52,19 @@ export function ControlCenterApp() {
         </div>
 
         <div className="workspace-content">
-          <ControlCenterRoutes controller={controller} navigateToPath={navigate} />
+          <ControlCenterRoutes
+            missionRouteProps={controller.missionRouteProps}
+            recordingRouteProps={controller.recordingRouteProps}
+            robotRouteProps={controller.robotRouteProps}
+            systemRouteProps={controller.systemRouteProps}
+          />
         </div>
       </section>
 
       <NotificationStack notifications={controller.notifications} onDismiss={controller.dismissNotification} />
-      <ControlCenterModals controller={controller} />
+      <RobotModals {...controller.robotModalProps} />
+      <MissionModals {...controller.missionModalProps} />
+      <RecordingModals {...controller.playbackModalProps} />
     </main>
   );
 }

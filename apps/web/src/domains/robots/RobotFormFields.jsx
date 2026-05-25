@@ -19,18 +19,34 @@ export function RobotFormFields({ form, setForm }) {
   );
 }
 
-export function RobotConnectionInfoDetails({ connectionInfo }) {
+export function RobotConnectionInfoDetails({ connectionInfo, onRotateToken }) {
   const rows = [
     { label: "관제 주소", value: connectionInfo.serverUrl },
     { label: "로봇 코드", value: connectionInfo.robotCode },
-    { label: "인증 토큰", value: connectionInfo.robotToken, secret: true }
+    {
+      action: onRotateToken ? (
+        <button
+          className="secondary-button compact-button"
+          type="button"
+          onClick={() => void onRotateToken(connectionInfo.robotCode)}
+        >
+          재발급
+        </button>
+      ) : null,
+      label: "인증 토큰",
+      secret: true,
+      value: connectionInfo.robotToken
+    }
   ];
 
   return (
     <div className="connection-info-grid">
       {rows.map((row) => (
         <div className={row.secret ? "connection-info-row secret" : "connection-info-row"} key={row.label}>
-          <span>{row.label}</span>
+          <div className="connection-info-row-header">
+            <span>{row.label}</span>
+            {row.action}
+          </div>
           <code>{row.value || "-"}</code>
         </div>
       ))}

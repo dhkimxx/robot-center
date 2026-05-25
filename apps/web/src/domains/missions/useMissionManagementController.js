@@ -14,7 +14,7 @@ export function useMissionManagementController({
   loadAll,
   missions,
   navigateToPath,
-  readSelectedLiveTargetKey,
+  resolveStoredLiveTargetKey,
   robots,
   setMissionControlCode,
   setSelectedLiveTargetKey,
@@ -57,14 +57,12 @@ export function useMissionManagementController({
 
   const openMissionControl = useCallback((mission) => {
     const targets = createMissionRobotTargets(mission, robots, streamingStatuses);
-    const storedTargetKey = readSelectedLiveTargetKey();
-    const storedMissionTarget = targets.find((target) => target.key === storedTargetKey);
     setMissionControlCode(mission.missionCode);
-    setSelectedLiveTargetKey(storedMissionTarget?.key ?? targets[0]?.key ?? "");
+    setSelectedLiveTargetKey(resolveStoredLiveTargetKey(targets));
     if (navigateToPath) {
       navigateToPath(`/missions/${encodeURIComponent(mission.missionCode)}/control`);
     }
-  }, [navigateToPath, readSelectedLiveTargetKey, robots, setMissionControlCode, setSelectedLiveTargetKey, streamingStatuses]);
+  }, [navigateToPath, resolveStoredLiveTargetKey, robots, setMissionControlCode, setSelectedLiveTargetKey, streamingStatuses]);
 
   const closeMissionControl = useCallback((missionControlCode) => {
     if (missionControlCode) {

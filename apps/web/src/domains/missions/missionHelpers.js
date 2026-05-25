@@ -72,7 +72,7 @@ export function createMissionRobotTargets(mission, robots, streamingStatuses) {
       missionRoomId: makeMissionRoomId(mission),
       robot: robots.find((robot) => robot.robotCode === robotCode) ?? null,
       robotCode,
-      roomId: streamingStatus?.roomId || makeMissionRoomId(mission),
+      roomId: makeMissionRoomId(mission),
       streamingStatus
     };
   });

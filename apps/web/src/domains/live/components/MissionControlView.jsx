@@ -3,6 +3,10 @@ import {
   makeStatusLabel,
   missionTypeLabel
 } from "../../../utils/formatters.js";
+import {
+  connectedLiveConnectionStatuses,
+  reconnectableLiveStatuses
+} from "../liveConnectionStates.js";
 import { createEmptyLiveSession } from "../liveHelpers.js";
 import { AudioSink } from "./AudioSink.jsx";
 import { ConnectionStatusPanel } from "./ConnectionStatusPanel.jsx";
@@ -36,12 +40,12 @@ export function MissionControlView({
   const selectedSession = selectedTarget ? liveSessions[selectedTarget.key] ?? createEmptyLiveSession() : createEmptyLiveSession();
   const connectedCount = missionTargets.filter((target) => {
     const session = liveSessions[target.key] ?? createEmptyLiveSession();
-    return ["connected", "completed"].includes(session.status);
+    return connectedLiveConnectionStatuses.has(session.status);
   }).length;
   const canReconnectSelectedRobot = mission.status === "active"
     && Boolean(selectedTarget)
     && selectedSession.events.length > 0
-    && ["closed", "disconnected", "failed", "signaling closed", "signaling error"].includes(selectedSession.status);
+    && reconnectableLiveStatuses.has(selectedSession.status);
 
   return (
     <section className="mission-control-layout">
