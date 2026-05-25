@@ -1,0 +1,140 @@
+import { websocketUrlWithQuery } from "../../api/controlCenterApi.js";
+import { makeLiveChannelLabel, makeLiveStatusLabel, makePeerRoleLabel } from "../../utils/formatters.js";
+import { waitForIceGatheringComplete } from "../../utils/webrtc.js";
+
+export function createLiveConnectionClient({
+  missionRoomId,
+  onDataChannelMessage,
+  onEvent,
+  onStatusChange,
+  onTrack,
+  robotCode,
+  rtcConfig
+}) {
+  const websocket = new WebSocket(websocketUrlWithQuery(rtcConfig.signalingUrl, {
+    room: missionRoomId,
+    role: "operator"
+  }));
+  const peerConnection = new RTCPeerConnection({
+    iceServers: rtcConfig.iceServers ?? [],
+    iceTransportPolicy: rtcConfig.iceTransportPolicy ?? "relay"
+  });
+  let selfPeerId = "";
+  let remoteServerPeerId = "";
+  let requestedCloseReason = "";
+
+  peerConnection.onicecandidate = (event) => {
+    if (websocket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    const payload = event.candidate
+      ? {
+          candidate: event.candidate.candidate,
+          sdpMid: event.candidate.sdpMid,
+          sdpMLineIndex: event.candidate.sdpMLineIndex
+        }
+      : { candidate: "" };
+    if (remoteServerPeerId) {
+      payload.targetPeerId = remoteServerPeerId;
+    }
+    websocket.send(JSON.stringify({
+      type: "candidate",
+      payload
+    }));
+  };
+
+  peerConnection.oniceconnectionstatechange = () => {
+    onStatusChange(peerConnection.iceConnectionState);
+    onEvent(`실시간 연결 ${makeLiveStatusLabel(peerConnection.iceConnectionState)}`);
+  };
+
+  peerConnection.ontrack = onTrack;
+
+  peerConnection.ondatachannel = (event) => {
+    const channel = event.channel;
+    onEvent(`${makeLiveChannelLabel(channel.label)} 데이터 연결 생성`);
+    channel.onopen = () => onEvent(`${makeLiveChannelLabel(channel.label)} 데이터 연결됨`);
+    channel.onclose = () => onEvent(`${makeLiveChannelLabel(channel.label)} 데이터 종료`);
+    channel.onmessage = (messageEvent) => onDataChannelMessage(channel.label, messageEvent.data);
+  };
+
+  websocket.onopen = () => {
+    websocket.send(JSON.stringify({
+      type: "select-robot",
+      payload: {
+        targetPeerId: "sfu",
+        robotCode
+      }
+    }));
+    onStatusChange("signaling connected");
+    onEvent("관제 연결 준비");
+  };
+
+  websocket.onerror = () => {
+    onStatusChange("signaling error");
+    onEvent("관제 연결 오류");
+  };
+
+  websocket.onmessage = async (event) => {
+    const message = JSON.parse(event.data);
+    const payload = message.payload ?? {};
+    if (payload.targetPeerId && selfPeerId && payload.targetPeerId !== selfPeerId) {
+      return;
+    }
+    if (message.type === "joined") {
+      selfPeerId = payload.peerId ?? "";
+      onEvent(`${makePeerRoleLabel(payload.role)} 연결 확인`);
+      return;
+    }
+    if (message.type === "peer-present" || message.type === "peer-joined") {
+      onEvent(`${makePeerRoleLabel(payload.role)} 참여`);
+      return;
+    }
+    if (message.type === "select-robot-ack") {
+      onEvent("관제 로봇 선택 반영", payload.robotCode ?? robotCode);
+      return;
+    }
+    if (message.type === "offer") {
+      remoteServerPeerId = payload.fromPeerId ?? remoteServerPeerId;
+      onEvent("영상 연결 요청 수신");
+      await peerConnection.setRemoteDescription({ type: "offer", sdp: payload.sdp });
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
+      await waitForIceGatheringComplete(peerConnection);
+      const localDescription = peerConnection.localDescription ?? answer;
+      const answerPayload = {
+        type: localDescription.type,
+        sdp: localDescription.sdp
+      };
+      if (remoteServerPeerId) {
+        answerPayload.targetPeerId = remoteServerPeerId;
+      }
+      websocket.send(JSON.stringify({
+        type: "answer",
+        payload: answerPayload
+      }));
+      onEvent("영상 연결 응답 전송");
+      return;
+    }
+    if (message.type === "candidate" && payload.candidate) {
+      await peerConnection.addIceCandidate(payload);
+    }
+  };
+
+  return {
+    peerConnection,
+    websocket,
+    close(reason = "operator disconnected") {
+      requestedCloseReason = reason;
+      websocket.close(1000, reason);
+      peerConnection.close();
+    },
+    onClose(handler) {
+      websocket.onclose = (event) => handler({
+        code: event.code,
+        reason: requestedCloseReason || event.reason,
+        wasClean: event.wasClean
+      });
+    }
+  };
+}

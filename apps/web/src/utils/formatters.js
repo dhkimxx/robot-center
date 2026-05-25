@@ -98,6 +98,7 @@ export function makeLiveStatusLabel(status) {
     connecting: "연결 중",
     disconnected: "연결 대기",
     failed: "연결 실패",
+    idle: "연결 대기",
     closed: "연결 종료",
     "signaling connected": "연결 중",
     "signaling closed": "연결 종료",
