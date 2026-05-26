@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getTelemetryPositionState } from "../utils/formatters.js";
-import { findLatestSampleForRobot } from "../domains/live/liveHelpers.js";
 import { createMissionRobotTargets } from "../domains/missions/missionHelpers.js";
 import {
   createRecordingPlaybackFile,
@@ -12,6 +11,10 @@ import { useRobotManagementController } from "../domains/robots/useRobotManageme
 import { useLiveConnectionManager } from "../domains/live/useLiveConnectionManager.js";
 import { resolveStoredLiveTargetKey } from "../domains/live/useLiveTargetSelection.js";
 import { useMissionSamples } from "../domains/live/useMissionSamples.js";
+import {
+  createSensorPanelSnapshot,
+  createTelemetryFromSensorLatest
+} from "../domains/live/sensorLatestMapper.js";
 import { useOperationStatuses } from "../domains/live/useOperationStatuses.js";
 import { useControlCenterData } from "./useControlCenterData.js";
 import { useNotifications } from "./useNotifications.js";
@@ -88,8 +91,7 @@ export function useControlCenterController({
     setSelectedLiveTargetKey
   } = liveConnectionManager;
   const {
-    serverTelemetry,
-    serverSensors
+    serverSensorLatest
   } = useMissionSamples({ appendLiveEvent, selectedLiveTarget });
   const activeStreamingStatus = useMemo(() => {
     if (!selectedLiveTarget) {
@@ -99,16 +101,16 @@ export function useControlCenterController({
   }, [selectedLiveTarget]);
   const selectedMissionCode = selectedLiveTarget?.mission?.missionCode ?? "";
   const selectedRobotCode = selectedLiveTarget?.robotCode ?? "";
-  const latestServerTelemetry = useMemo(
-    () => findLatestSampleForRobot(serverTelemetry, selectedRobotCode),
-    [selectedRobotCode, serverTelemetry]
+  const latestServerTelemetryFromSensors = useMemo(
+    () => createTelemetryFromSensorLatest(serverSensorLatest, selectedRobotCode),
+    [selectedRobotCode, serverSensorLatest]
   );
-  const latestServerSensor = useMemo(
-    () => findLatestSampleForRobot(serverSensors, selectedRobotCode),
-    [selectedRobotCode, serverSensors]
+  const latestServerSensorPanel = useMemo(
+    () => createSensorPanelSnapshot(serverSensorLatest, selectedRobotCode),
+    [selectedRobotCode, serverSensorLatest]
   );
-  const latestTelemetry = selectedLiveSession.telemetry ?? latestServerTelemetry;
-  const latestSensor = selectedLiveSession.sensor ?? latestServerSensor;
+  const latestTelemetry = selectedLiveSession.telemetry ?? latestServerTelemetryFromSensors;
+  const latestSensor = selectedLiveSession.sensor ?? latestServerSensorPanel;
   const latestPositionState = getTelemetryPositionState(latestTelemetry);
   const latestRecording = useMemo(
     () => findLatestRecordingForTarget(recordings, selectedMissionCode, selectedRobotCode),

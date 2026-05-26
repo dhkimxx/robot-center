@@ -144,11 +144,24 @@ func classifyRecorderTrack(track *webrtc.TrackRemote) (string, string) {
 func recorderStorageDataChannelLabel(label string) string {
 	switch strings.TrimSpace(label) {
 	case "channel.telemetry":
-		return "telemetry"
-	case "channel.event", "channel.spatial", "channel.control":
+		return "channel.telemetry"
+	case "channel.spatial":
+		return "channel.spatial"
+	case "telemetry", "sensor":
+		return "channel.telemetry"
+	case "channel.event", "channel.control":
 		return ""
 	default:
 		return strings.TrimSpace(label)
+	}
+}
+
+func recorderDataChannelFileLabel(storageLabel string) string {
+	switch strings.TrimSpace(storageLabel) {
+	case "channel.telemetry":
+		return "telemetry"
+	default:
+		return ""
 	}
 }
 

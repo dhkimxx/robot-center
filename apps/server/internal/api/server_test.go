@@ -191,45 +191,59 @@ func TestControlPlaneFlow(t *testing.T) {
 	}
 
 	missionID := startedMission["id"].(string)
-	requestJSON[map[string]any](t, server.URL, http.MethodPost, "/api/telemetry", "", map[string]any{
-		"messageId":   "telemetry-1",
-		"messageType": "telemetry.robotStatus",
+	requestJSON[map[string]any](t, server.URL, http.MethodPost, "/api/sensor-samples", "", map[string]any{
+		"messageId":   "telemetry-canonical-1",
+		"messageType": "telemetry",
+		"channelRole": "channel.telemetry",
 		"robotCode":   robotCode,
 		"missionId":   missionID,
-		"sequence":    1,
+		"sequence":    2,
 		"sentAt":      time.Now().UTC().Format(time.RFC3339Nano),
-		"payload": map[string]any{
-			"positionAvailable": true,
-			"batteryPercent":    81.5,
-			"networkState":      "good",
-			"position": map[string]any{
-				"latitude":  37.402181,
-				"longitude": 127.106818,
+		"descriptors": []map[string]any{
+			{
+				"sensorId":    "telemetry.position_1",
+				"kind":        "position",
+				"displayName": "GPS",
+				"valueType":   "object",
+				"enabled":     true,
+			},
+			{
+				"sensorId":    "telemetry.gas_1",
+				"kind":        "gas",
+				"displayName": "Gas",
+				"valueType":   "object",
+				"enabled":     true,
+			},
+		},
+		"samples": []map[string]any{
+			{
+				"sensorId":  "telemetry.position_1",
+				"timestamp": time.Now().UTC().Format(time.RFC3339Nano),
+				"sequence":  2,
+				"values": map[string]any{
+					"latitude":  37.402181,
+					"longitude": 127.106818,
+				},
+			},
+			{
+				"sensorId":  "telemetry.gas_1",
+				"timestamp": time.Now().UTC().Format(time.RFC3339Nano),
+				"sequence":  2,
+				"values": map[string]any{
+					"coPpm":         12.3,
+					"oxygenPercent": 20.8,
+				},
 			},
 		},
 	})
-	requestJSON[map[string]any](t, server.URL, http.MethodPost, "/api/sensor-readings", "", map[string]any{
-		"messageId":   "sensor-1",
-		"messageType": "sensor.environment",
-		"robotCode":   robotCode,
-		"missionId":   missionID,
-		"sequence":    1,
-		"sentAt":      time.Now().UTC().Format(time.RFC3339Nano),
-		"payload": map[string]any{
-			"coPpm":              12.3,
-			"oxygenPercent":      20.8,
-			"temperatureCelsius": 30.2,
-			"humidityPercent":    60.5,
-		},
-	})
 
-	telemetryPayload := requestJSON[map[string]any](t, server.URL, http.MethodGet, "/api/telemetry?missionId="+missionID, "", nil)
-	if len(telemetryPayload["telemetry"].([]any)) != 1 {
-		t.Fatalf("expected one telemetry item, got %#v", telemetryPayload)
+	sensorLatestPayload := requestJSON[map[string]any](t, server.URL, http.MethodGet, "/api/sensor-latest?missionId="+missionID+"&robotCode="+robotCode, "", nil)
+	latestSensors := sensorLatestPayload["sensors"].([]any)
+	if len(latestSensors) != 2 {
+		t.Fatalf("expected two latest sensor rows, got %#v", sensorLatestPayload)
 	}
-	sensorPayload := requestJSON[map[string]any](t, server.URL, http.MethodGet, "/api/sensor-readings?missionId="+missionID, "", nil)
-	if len(sensorPayload["sensorReadings"].([]any)) != 1 {
-		t.Fatalf("expected one sensor item, got %#v", sensorPayload)
+	if !sensorListHasID(latestSensors, "telemetry.position_1") {
+		t.Fatalf("expected position sensor latest row, got %#v", sensorLatestPayload)
 	}
 
 	recordingTickPayload := requestJSON[map[string]any](t, server.URL, http.MethodPost, "/api/recorder/tick", "", map[string]any{
@@ -383,6 +397,19 @@ func robotListHasCode(robots []any, robotCode string) bool {
 			continue
 		}
 		if robot["robotCode"] == robotCode {
+			return true
+		}
+	}
+	return false
+}
+
+func sensorListHasID(sensors []any, sensorID string) bool {
+	for _, item := range sensors {
+		sensor, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if sensor["sensorId"] == sensorID {
 			return true
 		}
 	}

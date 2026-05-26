@@ -13,7 +13,6 @@ type Services struct {
 	Robots    *RobotService
 	Missions  *MissionService
 	Streaming *StreamingService
-	Telemetry *TelemetryService
 	Sensors   *SensorService
 	Recording *RecordingService
 
@@ -26,7 +25,6 @@ func NewServices(repository store.Store) *Services {
 		Robots:            &RobotService{repository: repository},
 		Missions:          &MissionService{repository: repository},
 		Streaming:         &StreamingService{repository: repository},
-		Telemetry:         &TelemetryService{repository: repository},
 		Sensors:           &SensorService{repository: repository},
 		Recording:         &RecordingService{repository: repository, transactionRunner: transactionRunner},
 		transactionRunner: transactionRunner,
@@ -114,28 +112,24 @@ func (s *StreamingService) ListStreamingStatuses(ctx context.Context) ([]domain.
 	return s.repository.ListStreamingStatuses(ctx)
 }
 
-type TelemetryService struct {
-	repository store.TelemetryRepository
-}
-
-func (s *TelemetryService) SaveTelemetry(ctx context.Context, snapshot domain.TelemetrySnapshot) (domain.TelemetrySnapshot, error) {
-	return s.repository.SaveTelemetry(ctx, snapshot)
-}
-
-func (s *TelemetryService) ListTelemetry(ctx context.Context, missionID string) ([]domain.TelemetrySnapshot, error) {
-	return s.repository.ListTelemetry(ctx, missionID)
-}
-
 type SensorService struct {
 	repository store.SensorRepository
 }
 
-func (s *SensorService) SaveSensorReading(ctx context.Context, reading domain.SensorReading) (domain.SensorReading, error) {
-	return s.repository.SaveSensorReading(ctx, reading)
+func (s *SensorService) SaveSensorEnvelope(ctx context.Context, envelope domain.SensorEnvelope) ([]domain.SensorSample, error) {
+	return s.repository.SaveSensorEnvelope(ctx, envelope)
 }
 
-func (s *SensorService) ListSensorReadings(ctx context.Context, missionID string) ([]domain.SensorReading, error) {
-	return s.repository.ListSensorReadings(ctx, missionID)
+func (s *SensorService) ListSensorDescriptors(ctx context.Context, missionID string, robotCode string) ([]domain.SensorDescriptor, error) {
+	return s.repository.ListSensorDescriptors(ctx, missionID, robotCode)
+}
+
+func (s *SensorService) ListSensorSamples(ctx context.Context, missionID string, robotCode string, sensorID string, limit int) ([]domain.SensorSample, error) {
+	return s.repository.ListSensorSamples(ctx, missionID, robotCode, sensorID, limit)
+}
+
+func (s *SensorService) ListLatestSensorSamples(ctx context.Context, missionID string, robotCode string) ([]domain.SensorLatest, error) {
+	return s.repository.ListLatestSensorSamples(ctx, missionID, robotCode)
 }
 
 type RecordingService struct {

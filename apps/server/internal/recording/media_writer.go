@@ -34,6 +34,11 @@ type h264ParameterSets struct {
 	pps []byte
 }
 
+type recordingChunkFinalization struct {
+	mediaKey string
+	chunk    domain.RecordingChunk
+}
+
 type MediaUploader interface {
 	UploadMediaSnapshots(ctx context.Context, roomID string, chunk domain.RecordingChunk) error
 }
@@ -58,10 +63,61 @@ func NewMediaUploader(appServerClient AppServerClient, objectStorage ObjectStora
 	}
 }
 
-func (w *Worker) setActiveRecordingChunk(roomID string, chunk domain.RecordingChunk) {
+func (w *Worker) setActiveRecordingChunk(roomID string, chunk domain.RecordingChunk) (domain.RecordingChunk, bool) {
 	w.mediaMu.Lock()
 	defer w.mediaMu.Unlock()
+	previousChunk, hadPreviousChunk := w.activeChunks[roomID]
 	w.activeChunks[roomID] = chunk
+	if !hadPreviousChunk || previousChunk.ID == "" || previousChunk.ID == chunk.ID {
+		return domain.RecordingChunk{}, false
+	}
+	return previousChunk, true
+}
+
+func (w *Worker) queueInactiveRecordingChunks(activeTargetKeys map[string]struct{}) {
+	w.mediaMu.Lock()
+	defer w.mediaMu.Unlock()
+
+	for mediaKey, chunk := range w.activeChunks {
+		if _, ok := activeTargetKeys[mediaKey]; ok {
+			continue
+		}
+		delete(w.activeChunks, mediaKey)
+		w.pendingFinalizations[recordingChunkFinalizationKey(mediaKey, chunk.ID)] = recordingChunkFinalization{
+			mediaKey: mediaKey,
+			chunk:    chunk,
+		}
+	}
+}
+
+func (w *Worker) queueRecordingChunkFinalization(mediaKey string, chunk domain.RecordingChunk) {
+	w.mediaMu.Lock()
+	defer w.mediaMu.Unlock()
+	w.pendingFinalizations[recordingChunkFinalizationKey(mediaKey, chunk.ID)] = recordingChunkFinalization{
+		mediaKey: mediaKey,
+		chunk:    chunk,
+	}
+}
+
+func (w *Worker) pendingRecordingChunkFinalizations() []recordingChunkFinalization {
+	w.mediaMu.Lock()
+	defer w.mediaMu.Unlock()
+
+	pendingFinalizations := make([]recordingChunkFinalization, 0, len(w.pendingFinalizations))
+	for _, pendingFinalization := range w.pendingFinalizations {
+		pendingFinalizations = append(pendingFinalizations, pendingFinalization)
+	}
+	return pendingFinalizations
+}
+
+func (w *Worker) removePendingRecordingChunkFinalization(mediaKey string, chunkID string) {
+	w.mediaMu.Lock()
+	defer w.mediaMu.Unlock()
+	delete(w.pendingFinalizations, recordingChunkFinalizationKey(mediaKey, chunkID))
+}
+
+func recordingChunkFinalizationKey(mediaKey string, chunkID string) string {
+	return safePathToken(mediaKey) + "/" + safePathToken(chunkID)
 }
 
 func (w *Worker) recordH264Track(ctx context.Context, roomID string, label string, track *webrtc.TrackRemote) {
@@ -247,6 +303,17 @@ func (w *Worker) closeAudioWriter(roomID string) {
 	defer w.mediaMu.Unlock()
 	activeWriter := w.audioWriters[roomID]
 	if activeWriter == nil || activeWriter.writer == nil {
+		return
+	}
+	_ = activeWriter.writer.Close()
+	delete(w.audioWriters, roomID)
+}
+
+func (w *Worker) closeAudioWriterForChunk(roomID string, chunkID string) {
+	w.mediaMu.Lock()
+	defer w.mediaMu.Unlock()
+	activeWriter := w.audioWriters[roomID]
+	if activeWriter == nil || activeWriter.writer == nil || activeWriter.chunkID != chunkID {
 		return
 	}
 	_ = activeWriter.writer.Close()

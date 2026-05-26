@@ -137,10 +137,8 @@ func (c *HTTPAppServerClient) MarkRecordingChunkUploaded(ctx context.Context, ch
 func (c *HTTPAppServerClient) PostDataChannelPayload(ctx context.Context, label string, payload []byte) error {
 	var path string
 	switch label {
-	case "sensor":
-		path = "/api/sensor-readings"
-	case "telemetry":
-		path = "/api/telemetry"
+	case "channel.telemetry", "channel.spatial":
+		path = "/api/sensor-samples"
 	default:
 		return nil
 	}

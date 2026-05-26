@@ -438,7 +438,7 @@ func (w *Worker) persistRecorderDataChannelMessage(ctx context.Context, roomID s
 	if storageLabel == "" {
 		return
 	}
-	if storageLabel == "sensor" || storageLabel == "telemetry" {
+	if storageLabel == "channel.telemetry" || storageLabel == "channel.spatial" {
 		robotCode := robotCodeFromDataPayload(payload)
 		if robotCode == "" {
 			robotCode = w.singleSubscriberRobotCode(roomID)
@@ -456,12 +456,15 @@ func (w *Worker) persistRecorderDataChannelMessage(ctx context.Context, roomID s
 			})
 			return
 		}
-		if err := w.appendDataChannelPayload(recorderMediaKey(roomID, robotCode), storageLabel, payload); err != nil {
-			w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
-				status.lastError = err.Error()
-			})
-			log.Printf("recorder-worker datachannel append failed room=%s label=%s: %v", roomID, storageLabel, err)
-			return
+		fileLabel := recorderDataChannelFileLabel(storageLabel)
+		if fileLabel != "" {
+			if err := w.appendDataChannelPayload(recorderMediaKey(roomID, robotCode), fileLabel, payload); err != nil {
+				w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
+					status.lastError = err.Error()
+				})
+				log.Printf("recorder-worker datachannel append failed room=%s label=%s: %v", roomID, fileLabel, err)
+				return
+			}
 		}
 		w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
 			status.robotCodes[robotCode] = struct{}{}
@@ -479,9 +482,7 @@ func (w *Worker) persistRecorderDataChannelMessage(ctx context.Context, roomID s
 	}
 	w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
 		switch storageLabel {
-		case "sensor":
-			status.sensorStoredCount++
-		case "telemetry":
+		case "channel.telemetry", "channel.spatial":
 			status.telemetryStoredCount++
 		}
 		status.lastPersistedLabel = storageLabel

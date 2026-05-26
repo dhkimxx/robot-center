@@ -1,6 +1,9 @@
 package sfu
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 func serverPeerPresentMessage(roomID string) signalMessage {
 	return signalMessage{
@@ -29,6 +32,13 @@ func peerPresencePayload(peer *peer) map[string]any {
 
 func isSubscriberRole(role string) bool {
 	return role == "operator" || role == "recorder"
+}
+
+func selectedRobotCodeForNewSubscriber(targetPeer *peer) string {
+	if targetPeer == nil || targetPeer.role != "operator" {
+		return ""
+	}
+	return strings.TrimSpace(targetPeer.robotCode)
 }
 
 func isTargetingServer(payload map[string]any) bool {

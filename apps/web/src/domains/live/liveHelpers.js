@@ -64,24 +64,6 @@ export function findRobotCodeFromDataMessage(message) {
   }
 }
 
-export function getSampleRobotCode(sample) {
-  return sample?.robotCode
-    ?? sample?.payload?.robotCode
-    ?? sample?.rawPayload?.robotCode
-    ?? sample?.rawPayload?.payload?.robotCode
-    ?? "";
-}
-
-export function findLatestSampleForRobot(samples, robotCode) {
-  if (!Array.isArray(samples) || samples.length === 0) {
-    return null;
-  }
-  if (!robotCode) {
-    return samples[0] ?? null;
-  }
-  return samples.find((sample) => getSampleRobotCode(sample) === robotCode) ?? null;
-}
-
 export function formatMediaChannelCount(streamingStatus) {
   const channelCount = streamingStatus?.publishedTracks?.length ?? 0;
   return channelCount > 0 ? `${channelCount}개 채널` : "송출 대기";

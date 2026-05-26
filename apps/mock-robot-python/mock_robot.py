@@ -770,7 +770,76 @@ class MockRobot:
             "missionId": self.mission["missionId"],
             "sequence": self.sequence,
             "sentAt": utc_now_iso(),
-            "state": "unsupported",
+            "descriptors": [
+                {
+                    "sensorId": "spatial.imu_1",
+                    "kind": "imu",
+                    "displayName": "IMU",
+                    "valueType": "object",
+                    "samplingRate": 5,
+                    "enabled": True,
+                    "metadata": {
+                        "frameId": "base_link",
+                        "axes": ["x", "y", "z"],
+                    },
+                },
+                {
+                    "sensorId": "spatial.odometry_1",
+                    "kind": "odometry",
+                    "displayName": "Odometry",
+                    "valueType": "object",
+                    "unit": "m",
+                    "samplingRate": 5,
+                    "enabled": True,
+                    "metadata": {
+                        "frameId": "odom",
+                    },
+                },
+                {
+                    "sensorId": "spatial.point_cloud_front_1",
+                    "kind": "point_cloud",
+                    "displayName": "Front Point Cloud",
+                    "valueType": "object_ref",
+                    "samplingRate": 0.2,
+                    "enabled": False,
+                    "metadata": {
+                        "state": "unsupported",
+                        "storage": "minio_object_key_placeholder",
+                    },
+                },
+            ],
+            "samples": [
+                {
+                    "sensorId": "spatial.imu_1",
+                    "timestamp": utc_now_iso(),
+                    "sequence": self.sequence,
+                    "quality": "mock",
+                    "values": {
+                        "linearAcceleration": {
+                            "x": math.sin(self.sequence / 4) * 0.05,
+                            "y": math.cos(self.sequence / 7) * 0.04,
+                            "z": 9.81,
+                        },
+                        "angularVelocity": {
+                            "x": 0.01,
+                            "y": 0.02,
+                            "z": math.sin(self.sequence / 9) * 0.03,
+                        },
+                    },
+                },
+                {
+                    "sensorId": "spatial.odometry_1",
+                    "timestamp": utc_now_iso(),
+                    "sequence": self.sequence,
+                    "quality": "mock",
+                    "values": {
+                        "x": (self.sequence % 200) * 0.04,
+                        "y": math.sin(self.sequence / 8) * 0.3,
+                        "yawDegree": (self.sequence * 3) % 360,
+                    },
+                },
+            ],
+            "state": "available",
         }
 
     def create_control_payload(self) -> dict[str, Any]:
@@ -784,24 +853,6 @@ class MockRobot:
             "sentAt": utc_now_iso(),
             "ack": {
                 "state": "idle",
-            },
-        }
-
-    def create_sensor_payload(self) -> dict[str, Any]:
-        return {
-            "messageId": f"{self.robot_code}-sensor-{self.sequence}",
-            "messageType": "sensor",
-            "robotCode": self.robot_code,
-            "missionId": self.mission["missionId"],
-            "sequence": self.sequence,
-            "sentAt": utc_now_iso(),
-            "payload": {
-                "batteryPercent": self.current_battery_percent(),
-                "temperatureCelsius": 28.5 + math.sin(self.sequence / 5) * 2,
-                "humidityPercent": 52.0 + math.cos(self.sequence / 8) * 5,
-                "oxygenPercent": 20.7,
-                "coPpm": 5 + self.sequence % 6,
-                "ch4Ppm": 1 + self.sequence % 3,
             },
         }
 

@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -72,10 +73,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/rtc-config", s.handleRTCConfig)
 	mux.HandleFunc("GET /api/recording-targets", s.handleRecordingTargets)
 	mux.HandleFunc("GET /api/streaming-statuses", s.handleListStreamingStatuses)
-	mux.HandleFunc("GET /api/telemetry", s.handleListTelemetry)
-	mux.HandleFunc("POST /api/telemetry", s.handleCreateTelemetry)
-	mux.HandleFunc("GET /api/sensor-readings", s.handleListSensorReadings)
-	mux.HandleFunc("POST /api/sensor-readings", s.handleCreateSensorReading)
+	mux.HandleFunc("GET /api/sensor-descriptors", s.handleListSensorDescriptors)
+	mux.HandleFunc("POST /api/sensor-descriptors", s.handleCreateSensorSamples)
+	mux.HandleFunc("GET /api/sensor-samples", s.handleListSensorSamples)
+	mux.HandleFunc("POST /api/sensor-samples", s.handleCreateSensorSamples)
+	mux.HandleFunc("GET /api/sensor-latest", s.handleListSensorLatest)
 	mux.HandleFunc("GET /api/recordings", s.handleListRecordings)
 	mux.HandleFunc("POST /api/recorder/tick", s.handleRecorderTick)
 	mux.HandleFunc("POST /api/recorder/chunks/{chunkID}/uploaded", s.handleRecorderChunkUploaded)
@@ -191,93 +193,62 @@ func (s *Server) handleListStreamingStatuses(w http.ResponseWriter, r *http.Requ
 	})
 }
 
-func (s *Server) handleListTelemetry(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleListSensorDescriptors(w http.ResponseWriter, r *http.Request) {
 	missionID := strings.TrimSpace(r.URL.Query().Get("missionId"))
-	telemetry, err := s.services.Telemetry.ListTelemetry(r.Context(), missionID)
+	robotCode := strings.TrimSpace(r.URL.Query().Get("robotCode"))
+	descriptors, err := s.services.Sensors.ListSensorDescriptors(r.Context(), missionID, robotCode)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"telemetry": dto.TelemetryList(telemetry),
+		"sensorDescriptors": dto.SensorDescriptors(descriptors),
 	})
 }
 
-func (s *Server) handleCreateTelemetry(w http.ResponseWriter, r *http.Request) {
-	envelope, rawPayload, err := decodeDataChannelEnvelope(r)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err)
-		return
-	}
-	position := mapValue(envelope.Payload, "position")
-	snapshot := domain.TelemetrySnapshot{
-		RobotCode:           envelope.RobotCode,
-		MissionID:           envelope.MissionID,
-		MessageID:           envelope.MessageID,
-		MessageType:         envelope.MessageType,
-		Sequence:            envelope.Sequence,
-		SentAt:              envelope.SentAt,
-		BatteryPercent:      floatPointer(envelope.Payload, "batteryPercent"),
-		NetworkState:        stringValue(envelope.Payload, "networkState"),
-		PositionAvailable:   boolValue(envelope.Payload, "positionAvailable"),
-		Latitude:            floatPointer(position, "latitude"),
-		Longitude:           floatPointer(position, "longitude"),
-		AltitudeMeter:       floatPointer(position, "altitudeMeter"),
-		AccuracyMeter:       floatPointer(position, "accuracyMeter"),
-		HeadingDegree:       floatPointer(position, "headingDegree"),
-		SpeedMeterPerSecond: floatPointer(position, "speedMeterPerSecond"),
-		RawPayload:          rawPayload,
-	}
-	snapshot, err = s.services.Telemetry.SaveTelemetry(r.Context(), snapshot)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, map[string]any{
-		"telemetry": dto.Telemetry(snapshot),
-	})
-}
-
-func (s *Server) handleListSensorReadings(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleListSensorSamples(w http.ResponseWriter, r *http.Request) {
 	missionID := strings.TrimSpace(r.URL.Query().Get("missionId"))
-	readings, err := s.services.Sensors.ListSensorReadings(r.Context(), missionID)
+	robotCode := strings.TrimSpace(r.URL.Query().Get("robotCode"))
+	sensorID := strings.TrimSpace(r.URL.Query().Get("sensorId"))
+	limit := intQueryValue(r, "limit", 100)
+	samples, err := s.services.Sensors.ListSensorSamples(r.Context(), missionID, robotCode, sensorID, limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"sensorReadings": dto.SensorReadings(readings),
+		"sensorSamples": dto.SensorSamples(samples),
 	})
 }
 
-func (s *Server) handleCreateSensorReading(w http.ResponseWriter, r *http.Request) {
-	envelope, rawPayload, err := decodeDataChannelEnvelope(r)
+func (s *Server) handleListSensorLatest(w http.ResponseWriter, r *http.Request) {
+	missionID := strings.TrimSpace(r.URL.Query().Get("missionId"))
+	robotCode := strings.TrimSpace(r.URL.Query().Get("robotCode"))
+	latest, err := s.services.Sensors.ListLatestSensorSamples(r.Context(), missionID, robotCode)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"missionId": missionID,
+		"robotCode": robotCode,
+		"sensors":   dto.SensorLatest(latest),
+	})
+}
+
+func (s *Server) handleCreateSensorSamples(w http.ResponseWriter, r *http.Request) {
+	envelope, err := decodeSensorEnvelope(r)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	reading := domain.SensorReading{
-		RobotCode:          envelope.RobotCode,
-		MissionID:          envelope.MissionID,
-		MessageID:          envelope.MessageID,
-		MessageType:        envelope.MessageType,
-		Sequence:           envelope.Sequence,
-		SentAt:             envelope.SentAt,
-		BatteryPercent:     floatPointer(envelope.Payload, "batteryPercent"),
-		TemperatureCelsius: floatPointer(envelope.Payload, "temperatureCelsius"),
-		HumidityPercent:    floatPointer(envelope.Payload, "humidityPercent"),
-		OxygenPercent:      floatPointer(envelope.Payload, "oxygenPercent"),
-		COPpm:              floatPointer(envelope.Payload, "coPpm"),
-		CH4Ppm:             floatPointer(envelope.Payload, "ch4Ppm"),
-		RawPayload:         rawPayload,
-	}
-	reading, err = s.services.Sensors.SaveSensorReading(r.Context(), reading)
+	samples, err := s.services.Sensors.SaveSensorEnvelope(r.Context(), envelope)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{
-		"sensorReading": dto.SensorReading(reading),
+		"sensorSamples": dto.SensorSamples(samples),
 	})
 }
 
@@ -835,80 +806,246 @@ func decodeJSON(r *http.Request, target any) error {
 	return nil
 }
 
-type dataChannelEnvelope struct {
-	MessageID   string         `json:"messageId"`
-	MessageType string         `json:"messageType"`
-	RobotCode   string         `json:"robotCode"`
-	MissionID   string         `json:"missionId"`
-	Sequence    int64          `json:"sequence"`
-	SentAt      *time.Time     `json:"sentAt"`
-	Payload     map[string]any `json:"payload"`
+type sensorDescriptorRequest struct {
+	SensorID     string         `json:"sensorId"`
+	ChannelRole  string         `json:"channelRole"`
+	DisplayName  string         `json:"displayName"`
+	Kind         string         `json:"kind"`
+	SensorType   string         `json:"sensorType"`
+	ValueType    string         `json:"valueType"`
+	Unit         string         `json:"unit"`
+	SamplingRate *float64       `json:"samplingRate"`
+	SampleRateHz *float64       `json:"sampleRateHz"`
+	Enabled      bool           `json:"enabled"`
+	Metadata     map[string]any `json:"metadata"`
 }
 
-func decodeDataChannelEnvelope(r *http.Request) (dataChannelEnvelope, json.RawMessage, error) {
+type sensorSampleRequest struct {
+	SensorID     string         `json:"sensorId"`
+	ChannelRole  string         `json:"channelRole"`
+	MessageID    string         `json:"messageId"`
+	Sequence     int64          `json:"sequence"`
+	Timestamp    *time.Time     `json:"timestamp"`
+	SentAt       *time.Time     `json:"sentAt"`
+	NumericValue *float64       `json:"numericValue"`
+	TextValue    string         `json:"textValue"`
+	BoolValue    *bool          `json:"boolValue"`
+	VectorValue  map[string]any `json:"vectorValue"`
+	ObjectValue  map[string]any `json:"objectValue"`
+	Values       any            `json:"values"`
+	ObjectKey    string         `json:"objectKey"`
+	RawPayload   map[string]any `json:"rawPayload"`
+}
+
+type sensorEnvelopeRequest struct {
+	MessageID   string                    `json:"messageId"`
+	MessageType string                    `json:"messageType"`
+	RobotCode   string                    `json:"robotCode"`
+	MissionID   string                    `json:"missionId"`
+	ChannelRole string                    `json:"channelRole"`
+	Sequence    int64                     `json:"sequence"`
+	SentAt      *time.Time                `json:"sentAt"`
+	Descriptors []sensorDescriptorRequest `json:"descriptors"`
+	Samples     []sensorSampleRequest     `json:"samples"`
+	Payload     map[string]any            `json:"payload"`
+}
+
+func decodeSensorEnvelope(r *http.Request) (domain.SensorEnvelope, error) {
 	defer r.Body.Close()
 	rawPayload, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {
-		return dataChannelEnvelope{}, nil, err
+		return domain.SensorEnvelope{}, err
+	}
+	var request sensorEnvelopeRequest
+	if err := json.Unmarshal(rawPayload, &request); err != nil {
+		return domain.SensorEnvelope{}, err
+	}
+	request.RobotCode = strings.TrimSpace(request.RobotCode)
+	request.MissionID = strings.TrimSpace(request.MissionID)
+	request.ChannelRole = strings.TrimSpace(request.ChannelRole)
+	if request.RobotCode == "" {
+		return domain.SensorEnvelope{}, errors.New("robotCode is required")
+	}
+	if request.MissionID == "" {
+		return domain.SensorEnvelope{}, errors.New("missionId is required")
+	}
+	if request.ChannelRole == "" {
+		request.ChannelRole = "channel.telemetry"
 	}
 
-	var envelope dataChannelEnvelope
-	if err := json.Unmarshal(rawPayload, &envelope); err != nil {
-		return dataChannelEnvelope{}, nil, err
+	envelope := domain.SensorEnvelope{
+		MessageID:   strings.TrimSpace(request.MessageID),
+		MessageType: strings.TrimSpace(request.MessageType),
+		RobotCode:   request.RobotCode,
+		MissionID:   request.MissionID,
+		ChannelRole: request.ChannelRole,
+		Sequence:    request.Sequence,
+		SentAt:      request.SentAt,
+		ReceivedAt:  time.Now().UTC(),
+		RawPayload:  append(json.RawMessage(nil), rawPayload...),
+		Descriptors: make([]domain.SensorDescriptor, 0, len(request.Descriptors)),
+		Samples:     make([]domain.SensorSample, 0, len(request.Samples)),
 	}
-	if envelope.Payload == nil {
-		envelope.Payload = map[string]any{}
+	for _, descriptor := range request.Descriptors {
+		sensorID := strings.TrimSpace(descriptor.SensorID)
+		if sensorID == "" {
+			continue
+		}
+		sampleRateHz := descriptor.SampleRateHz
+		if sampleRateHz == nil {
+			sampleRateHz = descriptor.SamplingRate
+		}
+		envelope.Descriptors = append(envelope.Descriptors, domain.SensorDescriptor{
+			MissionID:    request.MissionID,
+			RobotCode:    request.RobotCode,
+			SensorID:     sensorID,
+			ChannelRole:  firstText(descriptor.ChannelRole, request.ChannelRole),
+			DisplayName:  firstText(descriptor.DisplayName, sensorID),
+			SensorType:   inferSensorType(sensorID, firstText(descriptor.SensorType, descriptor.Kind)),
+			ValueType:    firstText(descriptor.ValueType, "object"),
+			Unit:         strings.TrimSpace(descriptor.Unit),
+			SampleRateHz: sampleRateHz,
+			Enabled:      descriptor.Enabled,
+			Metadata:     marshalJSONOrEmpty(descriptor.Metadata),
+		})
 	}
-	if strings.TrimSpace(envelope.RobotCode) == "" {
-		return dataChannelEnvelope{}, nil, errors.New("robotCode is required")
+	for _, sample := range request.Samples {
+		sensorID := strings.TrimSpace(sample.SensorID)
+		if sensorID == "" {
+			continue
+		}
+		sentAt := sample.SentAt
+		if sentAt == nil {
+			sentAt = sample.Timestamp
+		}
+		if sentAt == nil {
+			sentAt = request.SentAt
+		}
+		envelope.Samples = append(envelope.Samples, domain.SensorSample{
+			MissionID:    request.MissionID,
+			RobotCode:    request.RobotCode,
+			SensorID:     sensorID,
+			ChannelRole:  firstText(sample.ChannelRole, request.ChannelRole),
+			MessageID:    firstText(sample.MessageID, request.MessageID),
+			Sequence:     firstNonZero(sample.Sequence, request.Sequence),
+			SentAt:       sentAt,
+			ReceivedAt:   envelope.ReceivedAt,
+			NumericValue: sample.NumericValue,
+			TextValue:    strings.TrimSpace(sample.TextValue),
+			BoolValue:    sample.BoolValue,
+			VectorValue:  marshalJSONOrNil(sample.VectorValue),
+			ObjectValue:  marshalSensorSampleObjectValue(sample),
+			ObjectKey:    strings.TrimSpace(sample.ObjectKey),
+			RawPayload:   marshalJSONOrEmpty(sample),
+		})
 	}
-	if strings.TrimSpace(envelope.MissionID) == "" {
-		return dataChannelEnvelope{}, nil, errors.New("missionId is required")
+	if len(envelope.Descriptors) == 0 && len(envelope.Samples) == 0 && len(request.Payload) > 0 {
+		envelope.Descriptors = append(envelope.Descriptors, domain.SensorDescriptor{
+			MissionID:   request.MissionID,
+			RobotCode:   request.RobotCode,
+			SensorID:    "legacy.payload_1",
+			ChannelRole: request.ChannelRole,
+			DisplayName: "Legacy Payload",
+			SensorType:  "legacy",
+			ValueType:   "object",
+			Enabled:     true,
+			Metadata:    []byte("{}"),
+		})
+		envelope.Samples = append(envelope.Samples, domain.SensorSample{
+			MissionID:   request.MissionID,
+			RobotCode:   request.RobotCode,
+			SensorID:    "legacy.payload_1",
+			ChannelRole: request.ChannelRole,
+			MessageID:   request.MessageID,
+			Sequence:    request.Sequence,
+			SentAt:      request.SentAt,
+			ReceivedAt:  envelope.ReceivedAt,
+			ObjectValue: marshalJSONOrEmpty(request.Payload),
+			RawPayload:  envelope.RawPayload,
+		})
 	}
-	envelope.RobotCode = strings.TrimSpace(envelope.RobotCode)
-	envelope.MissionID = strings.TrimSpace(envelope.MissionID)
-	return envelope, append(json.RawMessage(nil), rawPayload...), nil
+	return envelope, nil
 }
 
-func mapValue(values map[string]any, key string) map[string]any {
-	value, ok := values[key]
-	if !ok {
-		return map[string]any{}
+func intQueryValue(r *http.Request, key string, fallback int) int {
+	value, err := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get(key)))
+	if err != nil || value <= 0 {
+		return fallback
 	}
-	asMap, ok := value.(map[string]any)
-	if !ok {
-		return map[string]any{}
-	}
-	return asMap
+	return value
 }
 
-func stringValue(values map[string]any, key string) string {
-	value, ok := values[key].(string)
-	if !ok {
-		return ""
+func firstText(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
 	}
-	return strings.TrimSpace(value)
+	return ""
 }
 
-func boolValue(values map[string]any, key string) bool {
-	value, ok := values[key].(bool)
-	return ok && value
+func firstNonZero(values ...int64) int64 {
+	for _, value := range values {
+		if value != 0 {
+			return value
+		}
+	}
+	return 0
 }
 
-func floatPointer(values map[string]any, key string) *float64 {
-	value, ok := values[key]
-	if !ok {
-		return nil
+func inferSensorType(sensorID string, explicitType string) string {
+	if strings.TrimSpace(explicitType) != "" {
+		return strings.TrimSpace(explicitType)
 	}
-	switch typedValue := value.(type) {
-	case float64:
-		return &typedValue
-	case int:
-		converted := float64(typedValue)
-		return &converted
+	sensorID = strings.ToLower(strings.TrimSpace(sensorID))
+	switch {
+	case strings.Contains(sensorID, "position"):
+		return "position"
+	case strings.Contains(sensorID, "imu"):
+		return "imu"
+	case strings.Contains(sensorID, "odometry"):
+		return "odometry"
+	case strings.Contains(sensorID, "point_cloud"):
+		return "point_cloud"
+	case strings.Contains(sensorID, "battery"):
+		return "battery"
+	case strings.Contains(sensorID, "network"):
+		return "network"
+	case strings.Contains(sensorID, "temperature"):
+		return "temperature"
+	case strings.Contains(sensorID, "humidity"):
+		return "humidity"
+	case strings.Contains(sensorID, "gas"):
+		return "gas"
 	default:
+		return "unknown"
+	}
+}
+
+func marshalSensorSampleObjectValue(sample sensorSampleRequest) json.RawMessage {
+	if sample.ObjectValue != nil {
+		return marshalJSONOrNil(sample.ObjectValue)
+	}
+	if sample.Values != nil {
+		return marshalJSONOrNil(sample.Values)
+	}
+	return nil
+}
+
+func marshalJSONOrEmpty(value any) json.RawMessage {
+	payload, err := json.Marshal(value)
+	if err != nil || len(payload) == 0 || string(payload) == "null" {
+		return []byte("{}")
+	}
+	return payload
+}
+
+func marshalJSONOrNil(value any) json.RawMessage {
+	payload, err := json.Marshal(value)
+	if err != nil || len(payload) == 0 || string(payload) == "null" {
 		return nil
 	}
+	return payload
 }
 
 func bearerToken(r *http.Request) string {

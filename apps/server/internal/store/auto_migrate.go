@@ -25,8 +25,8 @@ func (s *PostgresStore) runAutoMigrations(ctx context.Context) error {
 		&browserSessionRecord{},
 		&recorderSessionRecord{},
 		&streamingStatusRecord{},
-		&telemetrySnapshotRecord{},
-		&sensorReadingRecord{},
+		&sensorDescriptorRecord{},
+		&sensorSampleRecord{},
 		&recordingSessionRecord{},
 		&recordingChunkRecord{},
 		&storageObjectRecord{},
@@ -47,8 +47,6 @@ func (s *PostgresStore) applyPostAutoMigrateDDL(db *gorm.DB) error {
 		`CREATE UNIQUE INDEX IF NOT EXISTS mission_robots_active_unique
 			ON mission_robots(mission_id, robot_id)
 			WHERE status != 'removed'`,
-		`CREATE INDEX IF NOT EXISTS telemetry_snapshots_geom_idx
-			ON telemetry_snapshots USING gist(geom)`,
 		`CREATE INDEX IF NOT EXISTS events_geom_idx
 			ON events USING gist(geom)`,
 		`DO $$

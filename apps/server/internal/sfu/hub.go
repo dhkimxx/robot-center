@@ -298,7 +298,7 @@ func (h *Hub) ensureSubscriberOffer(roomID string, peerID string) {
 			log.Printf("sfu subscriber peer connection failed room=%s peer=%s: %v", roomID, peerID, err)
 			return
 		}
-		session = newSubscriberSession(peerID, targetPeer.role, "", peerConnection)
+		session = newSubscriberSession(peerID, targetPeer.role, selectedRobotCodeForNewSubscriber(targetPeer), peerConnection)
 		currentRoom.subscribers[peerID] = session
 		session.configureConnection(roomID, targetPeer)
 	}

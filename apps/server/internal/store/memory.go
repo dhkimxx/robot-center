@@ -24,26 +24,26 @@ type MemoryStore struct {
 	tokensByCode map[string]string
 	tokenHashes  map[string]string
 
-	missionsByCode        map[string]domain.Mission
-	streamingByRobotCode  map[string]domain.StreamingStatus
-	telemetryByMissionID  map[string][]domain.TelemetrySnapshot
-	sensorsByMissionID    map[string][]domain.SensorReading
-	recordingChunksByID   map[string]domain.RecordingChunk
-	recordingChunkKeyToID map[string]string
+	missionsByCode           map[string]domain.Mission
+	streamingByRobotCode     map[string]domain.StreamingStatus
+	sensorDescriptors        map[string]domain.SensorDescriptor
+	sensorSamplesByMissionID map[string][]domain.SensorSample
+	recordingChunksByID      map[string]domain.RecordingChunk
+	recordingChunkKeyToID    map[string]string
 }
 
 func NewMemoryStore(serverURL string) *MemoryStore {
 	return &MemoryStore{
-		serverURL:             serverURL,
-		robotsByCode:          map[string]domain.Robot{},
-		tokensByCode:          map[string]string{},
-		tokenHashes:           map[string]string{},
-		missionsByCode:        map[string]domain.Mission{},
-		streamingByRobotCode:  map[string]domain.StreamingStatus{},
-		telemetryByMissionID:  map[string][]domain.TelemetrySnapshot{},
-		sensorsByMissionID:    map[string][]domain.SensorReading{},
-		recordingChunksByID:   map[string]domain.RecordingChunk{},
-		recordingChunkKeyToID: map[string]string{},
+		serverURL:                serverURL,
+		robotsByCode:             map[string]domain.Robot{},
+		tokensByCode:             map[string]string{},
+		tokenHashes:              map[string]string{},
+		missionsByCode:           map[string]domain.Mission{},
+		streamingByRobotCode:     map[string]domain.StreamingStatus{},
+		sensorDescriptors:        map[string]domain.SensorDescriptor{},
+		sensorSamplesByMissionID: map[string][]domain.SensorSample{},
+		recordingChunksByID:      map[string]domain.RecordingChunk{},
+		recordingChunkKeyToID:    map[string]string{},
 	}
 }
 
@@ -390,60 +390,168 @@ func (s *MemoryStore) ListStreamingStatuses(_ context.Context) ([]domain.Streami
 	return statuses, nil
 }
 
-func (s *MemoryStore) SaveTelemetry(_ context.Context, snapshot domain.TelemetrySnapshot) (domain.TelemetrySnapshot, error) {
+func (s *MemoryStore) SaveSensorEnvelope(_ context.Context, envelope domain.SensorEnvelope) ([]domain.SensorSample, error) {
 	now := time.Now().UTC()
-	if snapshot.ID == "" {
-		snapshot.ID = "tel_" + randomHex(12)
+	envelope.RobotCode = strings.TrimSpace(envelope.RobotCode)
+	envelope.MissionID = strings.TrimSpace(envelope.MissionID)
+	envelope.ChannelRole = strings.TrimSpace(envelope.ChannelRole)
+	if envelope.RobotCode == "" || envelope.MissionID == "" {
+		return nil, ErrInvalidState
 	}
-	if snapshot.ReceivedAt.IsZero() {
-		snapshot.ReceivedAt = now
+	if envelope.ReceivedAt.IsZero() {
+		envelope.ReceivedAt = now
+	}
+	if len(envelope.RawPayload) == 0 {
+		envelope.RawPayload = []byte("{}")
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	items := append(s.telemetryByMissionID[snapshot.MissionID], snapshot)
-	s.telemetryByMissionID[snapshot.MissionID] = trimTelemetry(items)
-	return snapshot, nil
+	for _, descriptor := range envelope.Descriptors {
+		descriptor.SensorID = strings.TrimSpace(descriptor.SensorID)
+		if descriptor.SensorID == "" {
+			continue
+		}
+		key := sensorDescriptorKey(envelope.MissionID, envelope.RobotCode, descriptor.SensorID)
+		existing := s.sensorDescriptors[key]
+		if existing.ID == "" {
+			existing.ID = "sdesc_" + randomHex(12)
+			existing.FirstSeenAt = envelope.ReceivedAt
+		}
+		existing.MissionID = envelope.MissionID
+		existing.RobotCode = envelope.RobotCode
+		existing.SensorID = descriptor.SensorID
+		existing.ChannelRole = firstNonEmpty(descriptor.ChannelRole, envelope.ChannelRole, "channel.telemetry")
+		existing.DisplayName = firstNonEmpty(descriptor.DisplayName, descriptor.SensorID)
+		existing.SensorType = firstNonEmpty(descriptor.SensorType, "unknown")
+		existing.ValueType = firstNonEmpty(descriptor.ValueType, "object")
+		existing.Unit = descriptor.Unit
+		existing.SampleRateHz = descriptor.SampleRateHz
+		existing.Enabled = descriptor.Enabled
+		existing.Metadata = descriptor.Metadata
+		if len(existing.Metadata) == 0 {
+			existing.Metadata = []byte("{}")
+		}
+		existing.LastSeenAt = envelope.ReceivedAt
+		s.sensorDescriptors[key] = existing
+	}
+
+	samples := make([]domain.SensorSample, 0, len(envelope.Samples))
+	for _, sample := range envelope.Samples {
+		sample.SensorID = strings.TrimSpace(sample.SensorID)
+		if sample.SensorID == "" {
+			continue
+		}
+		key := sensorDescriptorKey(envelope.MissionID, envelope.RobotCode, sample.SensorID)
+		descriptor := s.sensorDescriptors[key]
+		if sample.ID == "" {
+			sample.ID = "ssam_" + randomHex(12)
+		}
+		sample.DescriptorID = descriptor.ID
+		sample.MissionID = envelope.MissionID
+		sample.RobotCode = envelope.RobotCode
+		sample.ChannelRole = firstNonEmpty(sample.ChannelRole, envelope.ChannelRole, "channel.telemetry")
+		sample.MessageID = firstNonEmpty(sample.MessageID, envelope.MessageID)
+		sample.Sequence = firstNonZeroInt64(sample.Sequence, envelope.Sequence)
+		sample.SentAt = firstTimePointer(sample.SentAt, envelope.SentAt)
+		if sample.ReceivedAt.IsZero() {
+			sample.ReceivedAt = envelope.ReceivedAt
+		}
+		if len(sample.RawPayload) == 0 {
+			sample.RawPayload = envelope.RawPayload
+		}
+		samples = append(samples, sample)
+	}
+	if len(samples) > 0 {
+		items := append(s.sensorSamplesByMissionID[envelope.MissionID], samples...)
+		s.sensorSamplesByMissionID[envelope.MissionID] = trimSensorSamples(items)
+	}
+	return samples, nil
 }
 
-func (s *MemoryStore) ListTelemetry(_ context.Context, missionID string) ([]domain.TelemetrySnapshot, error) {
+func (s *MemoryStore) ListSensorDescriptors(_ context.Context, missionID string, robotCode string) ([]domain.SensorDescriptor, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	items := append([]domain.TelemetrySnapshot(nil), s.telemetryByMissionID[missionID]...)
-	sort.Slice(items, func(i, j int) bool {
-		return items[i].ReceivedAt.After(items[j].ReceivedAt)
+	descriptors := make([]domain.SensorDescriptor, 0)
+	for _, descriptor := range s.sensorDescriptors {
+		if descriptor.MissionID != missionID {
+			continue
+		}
+		if strings.TrimSpace(robotCode) != "" && descriptor.RobotCode != strings.TrimSpace(robotCode) {
+			continue
+		}
+		descriptors = append(descriptors, descriptor)
+	}
+	sort.Slice(descriptors, func(i, j int) bool {
+		if descriptors[i].RobotCode == descriptors[j].RobotCode {
+			return descriptors[i].SensorID < descriptors[j].SensorID
+		}
+		return descriptors[i].RobotCode < descriptors[j].RobotCode
 	})
-	return items, nil
+	return descriptors, nil
 }
 
-func (s *MemoryStore) SaveSensorReading(_ context.Context, reading domain.SensorReading) (domain.SensorReading, error) {
-	now := time.Now().UTC()
-	if reading.ID == "" {
-		reading.ID = "sen_" + randomHex(12)
+func (s *MemoryStore) ListSensorSamples(_ context.Context, missionID string, robotCode string, sensorID string, limit int) ([]domain.SensorSample, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 100
 	}
-	if reading.ReceivedAt.IsZero() {
-		reading.ReceivedAt = now
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	items := append(s.sensorsByMissionID[reading.MissionID], reading)
-	s.sensorsByMissionID[reading.MissionID] = trimSensors(items)
-	return reading, nil
-}
-
-func (s *MemoryStore) ListSensorReadings(_ context.Context, missionID string) ([]domain.SensorReading, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	items := append([]domain.SensorReading(nil), s.sensorsByMissionID[missionID]...)
-	sort.Slice(items, func(i, j int) bool {
-		return items[i].ReceivedAt.After(items[j].ReceivedAt)
+	items := append([]domain.SensorSample(nil), s.sensorSamplesByMissionID[missionID]...)
+	filtered := make([]domain.SensorSample, 0, len(items))
+	for _, item := range items {
+		if strings.TrimSpace(robotCode) != "" && item.RobotCode != strings.TrimSpace(robotCode) {
+			continue
+		}
+		if strings.TrimSpace(sensorID) != "" && item.SensorID != strings.TrimSpace(sensorID) {
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+	sort.Slice(filtered, func(i, j int) bool {
+		return filtered[i].ReceivedAt.After(filtered[j].ReceivedAt)
 	})
-	return items, nil
+	if len(filtered) > limit {
+		filtered = filtered[:limit]
+	}
+	return filtered, nil
+}
+
+func (s *MemoryStore) ListLatestSensorSamples(_ context.Context, missionID string, robotCode string) ([]domain.SensorLatest, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	latestBySensorID := map[string]domain.SensorSample{}
+	for _, sample := range s.sensorSamplesByMissionID[missionID] {
+		if strings.TrimSpace(robotCode) != "" && sample.RobotCode != strings.TrimSpace(robotCode) {
+			continue
+		}
+		current := latestBySensorID[sample.SensorID]
+		if current.ID == "" || sample.ReceivedAt.After(current.ReceivedAt) {
+			latestBySensorID[sample.SensorID] = sample
+		}
+	}
+	latest := make([]domain.SensorLatest, 0)
+	for _, descriptor := range s.sensorDescriptors {
+		if descriptor.MissionID != missionID {
+			continue
+		}
+		if strings.TrimSpace(robotCode) != "" && descriptor.RobotCode != strings.TrimSpace(robotCode) {
+			continue
+		}
+		item := domain.SensorLatest{Descriptor: descriptor}
+		if sample, ok := latestBySensorID[descriptor.SensorID]; ok {
+			item.LatestSample = &sample
+		}
+		latest = append(latest, item)
+	}
+	sort.Slice(latest, func(i, j int) bool {
+		return latest[i].Descriptor.SensorID < latest[j].Descriptor.SensorID
+	})
+	return latest, nil
 }
 
 func (s *MemoryStore) FindRecordingTarget(_ context.Context, missionCode string, robotCode string) (RecordingTarget, error) {
@@ -654,18 +762,15 @@ func firstString(values []string) string {
 	return values[0]
 }
 
-func trimTelemetry(items []domain.TelemetrySnapshot) []domain.TelemetrySnapshot {
-	if len(items) <= 300 {
+func trimSensorSamples(items []domain.SensorSample) []domain.SensorSample {
+	if len(items) <= 1000 {
 		return items
 	}
-	return append([]domain.TelemetrySnapshot(nil), items[len(items)-300:]...)
+	return append([]domain.SensorSample(nil), items[len(items)-1000:]...)
 }
 
-func trimSensors(items []domain.SensorReading) []domain.SensorReading {
-	if len(items) <= 300 {
-		return items
-	}
-	return append([]domain.SensorReading(nil), items[len(items)-300:]...)
+func sensorDescriptorKey(missionID string, robotCode string, sensorID string) string {
+	return strings.TrimSpace(missionID) + "|" + strings.TrimSpace(robotCode) + "|" + strings.TrimSpace(sensorID)
 }
 
 func (s *MemoryStore) authorizedLocked(robotCode string, bearerToken string) bool {

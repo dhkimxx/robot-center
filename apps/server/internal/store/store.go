@@ -11,7 +11,6 @@ type Store interface {
 	RobotRepository
 	MissionRepository
 	StreamingRepository
-	TelemetryRepository
 	SensorRepository
 	RecordingRepository
 }
@@ -46,14 +45,11 @@ type StreamingRepository interface {
 	ListStreamingStatuses(ctx context.Context) ([]domain.StreamingStatus, error)
 }
 
-type TelemetryRepository interface {
-	SaveTelemetry(ctx context.Context, snapshot domain.TelemetrySnapshot) (domain.TelemetrySnapshot, error)
-	ListTelemetry(ctx context.Context, missionID string) ([]domain.TelemetrySnapshot, error)
-}
-
 type SensorRepository interface {
-	SaveSensorReading(ctx context.Context, reading domain.SensorReading) (domain.SensorReading, error)
-	ListSensorReadings(ctx context.Context, missionID string) ([]domain.SensorReading, error)
+	SaveSensorEnvelope(ctx context.Context, envelope domain.SensorEnvelope) ([]domain.SensorSample, error)
+	ListSensorDescriptors(ctx context.Context, missionID string, robotCode string) ([]domain.SensorDescriptor, error)
+	ListSensorSamples(ctx context.Context, missionID string, robotCode string, sensorID string, limit int) ([]domain.SensorSample, error)
+	ListLatestSensorSamples(ctx context.Context, missionID string, robotCode string) ([]domain.SensorLatest, error)
 }
 
 type RecordingRepository interface {

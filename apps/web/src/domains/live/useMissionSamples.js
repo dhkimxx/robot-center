@@ -1,29 +1,20 @@
 import { useEffect, useState } from "react";
-import {
-  fetchSensorReadings,
-  fetchTelemetrySamples
-} from "../../api/liveApi.js";
+import { fetchSensorLatest } from "../../api/liveApi.js";
 
 export function useMissionSamples({ appendLiveEvent, selectedLiveTarget }) {
-  const [serverTelemetry, setServerTelemetry] = useState([]);
-  const [serverSensors, setServerSensors] = useState([]);
+  const [serverSensorLatest, setServerSensorLatest] = useState([]);
 
   useEffect(() => {
     let cancelled = false;
     async function loadMissionSamples() {
       if (!selectedLiveTarget) {
-        setServerTelemetry([]);
-        setServerSensors([]);
+        setServerSensorLatest([]);
         return;
       }
       try {
-        const [telemetryPayload, sensorPayload] = await Promise.all([
-          fetchTelemetrySamples(selectedLiveTarget.mission.id),
-          fetchSensorReadings(selectedLiveTarget.mission.id)
-        ]);
+        const sensorLatestPayload = await fetchSensorLatest(selectedLiveTarget.mission.id, selectedLiveTarget.robotCode);
         if (!cancelled) {
-          setServerTelemetry(telemetryPayload.telemetry ?? []);
-          setServerSensors(sensorPayload.sensorReadings ?? []);
+          setServerSensorLatest(sensorLatestPayload.sensors ?? []);
         }
       } catch (error) {
         if (!cancelled) {
@@ -40,7 +31,6 @@ export function useMissionSamples({ appendLiveEvent, selectedLiveTarget }) {
   }, [selectedLiveTarget, appendLiveEvent]);
 
   return {
-    serverTelemetry,
-    serverSensors
+    serverSensorLatest
   };
 }

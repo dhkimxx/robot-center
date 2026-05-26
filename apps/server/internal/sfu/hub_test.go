@@ -68,7 +68,7 @@ func TestOperatorQueryRobotCodeDoesNotPreselectRobot(t *testing.T) {
 	hub.mu.RUnlock()
 }
 
-func TestNewOperatorSubscriberSessionIgnoresPeerRobotCode(t *testing.T) {
+func TestNewOperatorSubscriberSessionUsesValidatedSelectedRobotCode(t *testing.T) {
 	hub := NewHub()
 	roomID := "mission-001"
 	operatorPeer := testPeer("operator-peer", roomID, "operator", "robot-001")
@@ -103,8 +103,8 @@ func TestNewOperatorSubscriberSessionIgnoresPeerRobotCode(t *testing.T) {
 	if session == nil {
 		t.Fatal("expected subscriber session to be created")
 	}
-	if session.selectedRobotCode != "" {
-		t.Fatalf("selectedRobotCode = %q, want empty before select-robot ack", session.selectedRobotCode)
+	if session.selectedRobotCode != "robot-001" {
+		t.Fatalf("selectedRobotCode = %q, want selected robot from validated peer state", session.selectedRobotCode)
 	}
 }
 
@@ -210,6 +210,7 @@ func TestHubAcknowledgesSelectingPublishedRobotBundle(t *testing.T) {
 	if message.Type != "select-robot-ack" || message.Payload["robotCode"] != "robot-001" {
 		t.Fatalf("expected select-robot-ack, got %#v", message)
 	}
+	waitForSubscriberSelection(t, hub, roomID, operatorPeer.id, "robot-001")
 }
 
 func TestHubSelectionErrorsIncludeReason(t *testing.T) {
@@ -346,6 +347,26 @@ func waitForRoomSummary(t *testing.T, hub *Hub, roomID string) RoomSummary {
 	}
 	t.Fatalf("room %s summary not found", roomID)
 	return RoomSummary{}
+}
+
+func waitForSubscriberSelection(t *testing.T, hub *Hub, roomID string, peerID string, robotCode string) {
+	t.Helper()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		hub.mu.RLock()
+		currentRoom := hub.rooms[roomID]
+		var selectedRobotCode string
+		if currentRoom != nil && currentRoom.subscribers[peerID] != nil {
+			selectedRobotCode = currentRoom.subscribers[peerID].selectedRobotCode
+		}
+		hub.mu.RUnlock()
+		if selectedRobotCode == robotCode {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("subscriber %s did not select %s", peerID, robotCode)
 }
 
 func summaryHasRobot(summary RoomSummary, robotCode string) bool {

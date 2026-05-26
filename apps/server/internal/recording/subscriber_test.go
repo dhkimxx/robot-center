@@ -41,16 +41,28 @@ func TestRecorderMediaKeySeparatesRobotStorageWithinMissionRoom(t *testing.T) {
 	}
 }
 
-func TestRecorderStorageDataChannelLabelKeepsOnlyTelemetryPersistence(t *testing.T) {
+func TestRecorderStorageDataChannelLabelKeepsSensorSampleChannels(t *testing.T) {
 	cases := map[string]string{
-		"channel.telemetry": "telemetry",
+		"channel.telemetry": "channel.telemetry",
+		"channel.spatial":   "channel.spatial",
 		"channel.event":     "",
-		"channel.spatial":   "",
 		"channel.control":   "",
 	}
 	for input, want := range cases {
 		if got := recorderStorageDataChannelLabel(input); got != want {
 			t.Fatalf("recorderStorageDataChannelLabel(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
+func TestRecorderDataChannelFileLabelKeepsTelemetryJSONLOnly(t *testing.T) {
+	cases := map[string]string{
+		"channel.telemetry": "telemetry",
+		"channel.spatial":   "",
+	}
+	for input, want := range cases {
+		if got := recorderDataChannelFileLabel(input); got != want {
+			t.Fatalf("recorderDataChannelFileLabel(%q) = %q, want %q", input, got, want)
 		}
 	}
 }

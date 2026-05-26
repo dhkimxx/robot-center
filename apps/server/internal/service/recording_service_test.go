@@ -181,19 +181,19 @@ func (s *recordingStoreSpy) ListStreamingStatuses(_ context.Context) ([]domain.S
 	return nil, nil
 }
 
-func (s *recordingStoreSpy) SaveTelemetry(_ context.Context, snapshot domain.TelemetrySnapshot) (domain.TelemetrySnapshot, error) {
-	return snapshot, nil
+func (s *recordingStoreSpy) SaveSensorEnvelope(_ context.Context, envelope domain.SensorEnvelope) ([]domain.SensorSample, error) {
+	return envelope.Samples, nil
 }
 
-func (s *recordingStoreSpy) ListTelemetry(_ context.Context, _ string) ([]domain.TelemetrySnapshot, error) {
+func (s *recordingStoreSpy) ListSensorDescriptors(_ context.Context, _ string, _ string) ([]domain.SensorDescriptor, error) {
 	return nil, nil
 }
 
-func (s *recordingStoreSpy) SaveSensorReading(_ context.Context, reading domain.SensorReading) (domain.SensorReading, error) {
-	return reading, nil
+func (s *recordingStoreSpy) ListSensorSamples(_ context.Context, _ string, _ string, _ string, _ int) ([]domain.SensorSample, error) {
+	return nil, nil
 }
 
-func (s *recordingStoreSpy) ListSensorReadings(_ context.Context, _ string) ([]domain.SensorReading, error) {
+func (s *recordingStoreSpy) ListLatestSensorSamples(_ context.Context, _ string, _ string) ([]domain.SensorLatest, error) {
 	return nil, nil
 }
 
