@@ -38,8 +38,12 @@ class FakePeerConnection {
     this.iceConnectionState = "new";
     this.localDescription = null;
     this.signalingState = "stable";
+    this.receiverTrack = { stop: vi.fn() };
+    this.senderTrack = { stop: vi.fn() };
     this.addIceCandidate = vi.fn(async () => {});
     this.createAnswer = vi.fn(async () => ({ sdp: "answer-sdp", type: "answer" }));
+    this.getReceivers = vi.fn(() => [{ track: this.receiverTrack }]);
+    this.getSenders = vi.fn(() => [{ track: this.senderTrack }]);
     this.setLocalDescription = vi.fn(async (description) => {
       this.localDescription = description;
     });
@@ -124,5 +128,48 @@ describe("createLiveConnectionClient", () => {
     expect(onClose).toHaveBeenCalledWith(expect.objectContaining({
       reason: LiveCloseReason.CONNECTION_FAILED
     }));
+  });
+
+  it("stops peer tracks and removes handlers when closed", () => {
+    const client = createTestClient();
+    const websocket = FakeWebSocket.instances[0];
+    const peerConnection = FakePeerConnection.instances[0];
+
+    client.close(LiveCloseReason.NAVIGATION);
+
+    expect(peerConnection.receiverTrack.stop).toHaveBeenCalledTimes(1);
+    expect(peerConnection.senderTrack.stop).toHaveBeenCalledTimes(1);
+    expect(peerConnection.closed).toBe(true);
+    expect(peerConnection.ontrack).toBeNull();
+    expect(peerConnection.onicecandidate).toBeNull();
+    expect(peerConnection.oniceconnectionstatechange).toBeNull();
+    expect(peerConnection.ondatachannel).toBeNull();
+    expect(websocket.onopen).toBeNull();
+    expect(websocket.onerror).toBeNull();
+    expect(websocket.onmessage).toBeNull();
+    expect(websocket.onclose).toBeNull();
+  });
+
+  it("clears data channel handlers when closed", () => {
+    const client = createTestClient();
+    const peerConnection = FakePeerConnection.instances[0];
+    const channel = {
+      label: "channel.telemetry",
+      readyState: "open",
+      close: vi.fn()
+    };
+
+    peerConnection.ondatachannel({ channel });
+    expect(channel.onopen).toEqual(expect.any(Function));
+    expect(channel.onclose).toEqual(expect.any(Function));
+    expect(channel.onmessage).toEqual(expect.any(Function));
+
+    client.close(LiveCloseReason.NAVIGATION);
+
+    expect(channel.close).toHaveBeenCalledTimes(1);
+    expect(channel.onopen).toBeNull();
+    expect(channel.onclose).toBeNull();
+    expect(channel.onmessage).toBeNull();
+    expect(channel.onerror).toBeNull();
   });
 });

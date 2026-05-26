@@ -13,15 +13,17 @@ robotToken
 그 다음 REST API로 heartbeat와 mission 조회를 수행하고, active mission을 받으면 app-server/SFU로 WebRTC publish를 시작한다.
 센서와 위치 데이터는 REST로 직접 저장하지 않고 WebRTC DataChannel로만 보낸다.
 
-Mission 단위 multi-robot 구조에서는 여러 Android Mock Robot이 같은 `roomId=missionCode`로 publish한다. 각 앱 인스턴스는 서로 다른 `robotCode`와 `robotToken`으로 실행하고, sensor/telemetry payload에는 해당 `robotCode`를 유지한다.
+Mission 단위 multi-robot 구조에서는 여러 Android Mock Robot이 같은 `roomId=missionCode`로 publish한다. 각 앱 인스턴스는 서로 다른 `robotCode`와 `robotToken`으로 실행하고, telemetry/spatial/event payload에는 해당 `robotCode`를 유지한다.
 
 ## 송신 범위
 
 - RGB: Android 실제 카메라
 - Thermal: 앱 내부 synthetic thermal video track
 - Audio: Android microphone Opus track
-- Sensor: `sensor` DataChannel, 1Hz
-- Telemetry: `telemetry` DataChannel, Android LocationManager 기반 GPS, 1Hz
+- Telemetry: `channel.telemetry` DataChannel, Android LocationManager 기반 GPS, 1Hz
+- Spatial: `channel.spatial` DataChannel, IMU/공간 계열 sensor sample, 1Hz
+- Event: `channel.event` DataChannel
+- Control: `channel.control` DataChannel reserved
 - Video codec: H.264 우선
 - ICE 정책: TURN relay only
 
@@ -35,9 +37,8 @@ Mission 단위 multi-robot 구조에서는 여러 Android Mock Robot이 같은 `
 5. POST /api/robot-gateway/heartbeat
 6. GET /api/robot-gateway/mission
 7. active mission이면 mission 응답의 `roomId`로 app-server/SFU WebRTC publish
-8. POST /api/robot-gateway/streaming-status
-9. sensor/telemetry DataChannel 송신
-10. recorder-worker가 SFU subscriber로 sensor/telemetry를 받아 저장
+8. telemetry/spatial/event DataChannel 송신
+9. recorder-worker가 SFU subscriber로 telemetry/spatial을 받아 저장
 ```
 
 ## 빌드
@@ -107,12 +108,11 @@ adb shell 'am start -n com.sst.robotcenter.androidrobot/.MainActivity \
 - mission 응답 기반 SFU signaling URL/TURN 설정 적용
 - mission 응답의 `roomId`를 signaling URL의 `room` query에 반영
 - RGB/Thermal/Audio WebRTC publish
-- streaming status 보고
 - active mission 중 heartbeat state를 `streaming`으로 유지
-- sensor/telemetry DataChannel payload에 `robotCode`, `missionId` 포함
+- telemetry/spatial DataChannel payload에 `robotCode`, `missionId` 포함
 - 위치/센서 데이터는 WebRTC DataChannel 경로로만 저장
-- React Live UI에서 RGB/Thermal/Audio와 sensor/telemetry 수신 확인
-- recorder-worker에서 RGB/Thermal/Audio track과 sensor/telemetry DataChannel 수신 확인
+- React Live UI에서 RGB/Thermal/Audio와 telemetry/spatial 수신 확인
+- recorder-worker에서 RGB/Thermal/Audio track과 telemetry/spatial DataChannel 수신 확인
 - recorder-worker에서 RGB/Audio MP4, Thermal MP4 생성과 MinIO 업로드 확인
 
 현재 한계:

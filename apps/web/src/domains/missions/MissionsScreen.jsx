@@ -7,24 +7,22 @@ import Surface from "../../components/ui/Surface.jsx";
 
 export default function MissionsScreen({
   controlMission,
-  latestRecording,
   latestSensor,
   latestTelemetry,
   liveEvents,
   liveSessions,
   missionTargets,
   missions,
+  observedStreams,
   onBackToMissionList,
   onEndMission,
   onOpenMissionControl,
   onOpenMissionReplay,
   onOpenPlaybackFile,
-  onPlayLatestRecording,
   onReconnectSelectedMissionTarget,
   onSelectMission,
   onStartMission,
   operationStatuses,
-  playbackRecording,
   recordings,
   replayMission,
   replayMissionCode,
@@ -41,6 +39,7 @@ export default function MissionsScreen({
         mission={replayMission}
         onBackToMissionList={onBackToMissionList}
         onOpenPlaybackFile={onOpenPlaybackFile}
+        observedStreams={observedStreams}
         recordings={recordings}
         robots={robots}
         streamingStatuses={streamingStatuses}
@@ -51,18 +50,15 @@ export default function MissionsScreen({
   if (controlMission) {
     return (
       <MissionControlView
-        latestRecording={latestRecording}
         latestSensor={latestSensor}
         latestTelemetry={latestTelemetry}
         liveEvents={liveEvents}
         liveSessions={liveSessions}
         mission={controlMission}
         missionTargets={missionTargets}
-        onOpenMissionReplay={onOpenMissionReplay}
-        onPlayLatestRecording={onPlayLatestRecording}
         onReconnectSelectedMissionTarget={onReconnectSelectedMissionTarget}
         operationStatuses={operationStatuses}
-        playbackRecording={playbackRecording}
+        recordings={recordings}
         selectedMissionTargetKey={selectedMissionTargetKey}
         setSelectedMissionTargetKey={setSelectedMissionTargetKey}
       />
@@ -76,6 +72,7 @@ export default function MissionsScreen({
         onSelectMission={onSelectMission}
         robots={robots}
         selectedMission={selectedMission}
+        observedStreams={observedStreams}
         streamingStatuses={streamingStatuses}
       />
 
@@ -96,7 +93,7 @@ export default function MissionsScreen({
               onOpenMissionControl={onOpenMissionControl}
               onOpenMissionReplay={onOpenMissionReplay}
               onStartMission={onStartMission}
-              robotDetails={getMissionRobotDetails(selectedMission, robots, streamingStatuses)}
+              robotDetails={getMissionRobotDetails(selectedMission, robots, streamingStatuses, observedStreams)}
             />
           )}
         </div>

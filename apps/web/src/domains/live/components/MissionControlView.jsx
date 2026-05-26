@@ -1,7 +1,6 @@
 import Button from "../../../components/ui/Button.jsx";
 import EmptyState from "../../../components/ui/EmptyState.jsx";
 import Surface from "../../../components/ui/Surface.jsx";
-import { makeLiveStatusLabel } from "../../../utils/formatters.js";
 import {
   connectedLiveConnectionStatuses,
   reconnectableLiveStatuses
@@ -10,25 +9,21 @@ import { createEmptyLiveSession } from "../liveHelpers.js";
 import { AudioSink } from "./AudioSink.jsx";
 import { ConnectionStatusPanel } from "./ConnectionStatusPanel.jsx";
 import { EventPanel } from "./EventPanel.jsx";
-import { LatestRecordingPanel } from "./LatestRecordingPanel.jsx";
-import { MissionRobotSelector } from "./MissionRobotSelector.jsx";
+import { MissionRobotDropdown } from "./MissionRobotDropdown.jsx";
 import { RobotMap } from "./RobotMap.jsx";
 import { SensorPanel } from "./SensorPanel.jsx";
 import { VideoPane } from "./VideoPane.jsx";
 
 export function MissionControlView({
-  latestRecording,
   latestSensor,
   latestTelemetry,
   liveEvents,
   liveSessions,
   mission,
   missionTargets,
-  onOpenMissionReplay,
-  onPlayLatestRecording,
   onReconnectSelectedMissionTarget,
   operationStatuses,
-  playbackRecording,
+  recordings,
   selectedMissionTargetKey,
   setSelectedMissionTargetKey
 }) {
@@ -45,70 +40,54 @@ export function MissionControlView({
 
   return (
     <section className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)_336px] items-stretch gap-3.5 max-[1240px]:grid-cols-1">
-      <Surface className="grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] gap-3 overflow-hidden">
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-500/20 bg-white/[0.045] p-3 max-[900px]:grid">
-          <div className="min-w-0">
-            <strong className="block truncate text-sm font-bold text-slate-50">{mission.missionCode}</strong>
-            <span className="mt-1 block truncate text-xs font-bold text-slate-400">
-              {selectedTarget ? `선택 ${selectedTarget.robotCode} ${makeLiveStatusLabel(selectedSession.status)} / 연결 ${connectedCount}/${missionTargets.length}대` : "임무에 배정된 로봇이 없습니다."}
-            </span>
-          </div>
-          <div className="grid min-w-[min(100%,520px)] gap-2 max-[900px]:min-w-0">
-            <label className="grid gap-1">
-              <span className="text-xs font-bold text-slate-400">관제 로봇</span>
-              <select
-                className="min-w-[220px] max-[900px]:min-w-0"
-                disabled={missionTargets.length === 0}
-                value={selectedTarget?.key ?? ""}
-                onChange={(event) => setSelectedMissionTargetKey(event.target.value)}
-              >
-                {missionTargets.length === 0 ? (
-                  <option value="">선택 없음</option>
-                ) : (
-                  missionTargets.map((target) => (
-                    <option key={target.key} value={target.key}>
-                      {target.robot?.displayName ?? target.robotCode} / {target.robotCode}
-                    </option>
-                  ))
-                )}
-              </select>
-            </label>
-            {canReconnectSelectedRobot ? (
-              <div className="flex justify-end">
-                <Button size="sm" onClick={onReconnectSelectedMissionTarget}>재연결</Button>
+      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden">
+        <div className="grid min-w-0 grid-cols-2 gap-3 max-[960px]:grid-cols-1">
+          <Surface className="flex min-h-[58px] items-center px-3 py-2.5">
+            <div className="min-w-0">
+              <strong className="block truncate text-sm font-extrabold text-slate-50">{mission.missionCode}</strong>
+              <span className="mt-0.5 block truncate text-xs font-bold text-slate-500">
+                {missionTargets.length > 0 ? `연결 ${connectedCount}/${missionTargets.length}대` : "임무에 배정된 로봇이 없습니다."}
+              </span>
+            </div>
+          </Surface>
+          <Surface className="flex min-h-[58px] min-w-0 items-center gap-3 px-3 py-2.5">
+            <span className="shrink-0 text-xs font-bold text-slate-500">관제 로봇</span>
+            <div className="min-w-0 flex-1">
+              <div className="w-full min-w-0">
+                <MissionRobotDropdown
+                  liveSessions={liveSessions}
+                  missionTargets={missionTargets}
+                  recordings={recordings}
+                  selectedMissionTargetKey={selectedMissionTargetKey}
+                  setSelectedMissionTargetKey={setSelectedMissionTargetKey}
+                />
               </div>
+            </div>
+            {canReconnectSelectedRobot ? (
+              <Button size="sm" onClick={onReconnectSelectedMissionTarget}>재연결</Button>
             ) : null}
-          </div>
+          </Surface>
         </div>
 
-        <MissionRobotSelector
-          liveSessions={liveSessions}
-          missionTargets={missionTargets}
-          selectedTarget={selectedTarget}
-          setSelectedMissionTargetKey={setSelectedMissionTargetKey}
-        />
-
         {!selectedTarget ? (
-          <EmptyState>관제할 로봇을 선택할 수 없습니다.</EmptyState>
+          <Surface className="grid min-h-0">
+            <EmptyState>관제할 로봇을 선택할 수 없습니다.</EmptyState>
+          </Surface>
         ) : (
-          <div className="grid min-h-0 grid-cols-2 grid-rows-2 gap-3 max-[900px]:grid-cols-1 max-[900px]:grid-rows-none">
+          <Surface className="grid min-h-0 overflow-hidden p-0">
+            <div className="grid min-h-0 grid-cols-2 grid-rows-2 gap-3 p-0 max-[900px]:grid-cols-1 max-[900px]:grid-rows-none">
             <VideoPane className="min-h-0" label="RGB" stream={selectedSession.videoStreams.rgb} />
             <VideoPane className="min-h-0" label="Thermal" stream={selectedSession.videoStreams.thermal} thermal />
             <RobotMap className="min-h-0" telemetry={latestTelemetry} />
             <SensorPanel className="min-h-0" sensor={latestSensor} />
-          </div>
+            </div>
+          </Surface>
         )}
         <AudioSink stream={selectedSession.videoStreams.audio} />
-      </Surface>
+      </div>
 
-      <aside className="grid min-h-0 content-start gap-3 overflow-auto">
+      <aside className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden">
         <ConnectionStatusPanel statuses={operationStatuses} />
-        <LatestRecordingPanel
-          onOpenReplay={() => onOpenMissionReplay(mission)}
-          onPlayRecording={onPlayLatestRecording}
-          playbackRecording={playbackRecording}
-          recording={latestRecording}
-        />
         <EventPanel liveEvents={liveEvents} />
       </aside>
     </section>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   archiveRobotRequest,
   createRobotRequest,
@@ -6,7 +6,7 @@ import {
   rotateRobotConnectionToken,
   updateRobotRequest
 } from "../../api/robotsApi.js";
-import { createInitialRobotForm, createRobotEditForm } from "./robotHelpers.js";
+import { createInitialRobotForm, createRobotEditForm, shouldRefreshRobotEditForm } from "./robotHelpers.js";
 
 export function useRobotManagementController({
   connectionInfo,
@@ -20,11 +20,13 @@ export function useRobotManagementController({
   const [robotEditForm, setRobotEditForm] = useState(() => createRobotEditForm(null));
   const [robotModal, setRobotModal] = useState(null);
   const [pendingArchiveRobotCode, setPendingArchiveRobotCode] = useState("");
+  const previousRobotEditCodeRef = useRef("");
 
   const selectedRobot = useMemo(
     () => robots.find((robot) => robot.robotCode === selectedRobotManagementCode) ?? robots[0] ?? null,
     [robots, selectedRobotManagementCode]
   );
+  const selectedRobotCode = selectedRobot?.robotCode ?? "";
   const pendingArchiveRobot = useMemo(
     () => robots.find((robot) => robot.robotCode === pendingArchiveRobotCode) ?? null,
     [pendingArchiveRobotCode, robots]
@@ -41,8 +43,16 @@ export function useRobotManagementController({
   }, [robots, selectedRobotManagementCode]);
 
   useEffect(() => {
+    if (!shouldRefreshRobotEditForm({
+      nextRobotCode: selectedRobotCode,
+      previousRobotCode: previousRobotEditCodeRef.current,
+      robotModal
+    })) {
+      return;
+    }
+    previousRobotEditCodeRef.current = selectedRobotCode;
     setRobotEditForm(createRobotEditForm(selectedRobot));
-  }, [selectedRobot]);
+  }, [robotModal, selectedRobot, selectedRobotCode]);
 
   const closeRobotModal = useCallback(() => {
     setRobotModal(null);
@@ -58,6 +68,7 @@ export function useRobotManagementController({
       showNotification("수정할 로봇을 선택하세요.", "warning");
       return;
     }
+    previousRobotEditCodeRef.current = selectedRobot.robotCode;
     setRobotEditForm(createRobotEditForm(selectedRobot));
     setRobotModal("edit");
   }

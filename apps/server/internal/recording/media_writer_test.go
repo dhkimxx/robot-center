@@ -48,6 +48,27 @@ func TestUpdateH264ParameterSets(t *testing.T) {
 	}
 }
 
+func TestH264TrackTimingObservedFPS(t *testing.T) {
+	worker := NewWorker(config.RecorderWorkerConfig{})
+	for index := 0; index < 16; index++ {
+		worker.updateH264TrackTimingLocked("chunk-001", "rgb", uint32(index*6000))
+	}
+
+	got := worker.observedH264FPSLocked("chunk-001", "rgb")
+	if got < 14.99 || got > 15.01 {
+		t.Fatalf("observed FPS = %f, want 15", got)
+	}
+}
+
+func TestFormatH264InputFPSFallsBackForInvalidValues(t *testing.T) {
+	if got := formatH264InputFPS(15); got != "15.000" {
+		t.Fatalf("formatH264InputFPS(15) = %q, want 15.000", got)
+	}
+	if got := formatH264InputFPS(0); got != "30.000" {
+		t.Fatalf("formatH264InputFPS(0) = %q, want 30.000", got)
+	}
+}
+
 func TestRecordingStorageMediaLabelMapsCanonicalVideoSlots(t *testing.T) {
 	cases := map[string]string{
 		"track.video_1": "rgb",

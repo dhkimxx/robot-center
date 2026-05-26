@@ -55,7 +55,7 @@ type SensorRepository interface {
 
 type RecordingRepository interface {
 	FindRecordingTarget(ctx context.Context, missionCode string, robotCode string) (RecordingTarget, error)
-	FindOrCreateRecordingSession(ctx context.Context, missionID string, robotID string, chunkDurationSeconds int, startedAt time.Time) (string, error)
+	FindOrCreateRecordingSession(ctx context.Context, missionID string, robotID string, chunkDurationSeconds int, startedAt time.Time) (RecordingSession, error)
 	FindRecordingChunk(ctx context.Context, recordingSessionID string, chunkIndex int) (domain.RecordingChunk, bool, error)
 	CreateRecordingChunk(ctx context.Context, input CreateRecordingChunkInput) (domain.RecordingChunk, error)
 	MarkRecordingChunkUploaded(ctx context.Context, chunkID string, metadata RecordingUploadMetadata) (domain.RecordingChunk, error)

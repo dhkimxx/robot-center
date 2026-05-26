@@ -91,6 +91,11 @@ type RecordingTarget struct {
 	RobotCode string
 }
 
+type RecordingSession struct {
+	ID        string
+	StartedAt time.Time
+}
+
 type CreateRecordingChunkInput struct {
 	RecordingSessionID string
 	MissionID          string

@@ -257,14 +257,6 @@ public class MainActivity extends Activity {
             activeMissionCode = mission.missionCode;
             setStatus("streaming / " + mission.missionCode + " / " + mission.roomId);
         });
-        centerExecutor.execute(() -> {
-            try {
-                apiClient.sendStreamingStatus(mission);
-                appendLog("streaming status reported");
-            } catch (Exception exception) {
-                appendLog("streaming status failed: " + exception.getMessage());
-            }
-        });
     }
 
     private void switchRgbCamera() {

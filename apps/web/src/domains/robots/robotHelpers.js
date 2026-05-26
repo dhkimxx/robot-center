@@ -11,3 +11,10 @@ export function createRobotEditForm(robot) {
     modelName: robot?.modelName ?? ""
   };
 }
+
+export function shouldRefreshRobotEditForm({ nextRobotCode, previousRobotCode, robotModal }) {
+  if (robotModal === "edit") {
+    return false;
+  }
+  return previousRobotCode !== nextRobotCode;
+}

@@ -78,9 +78,17 @@ export function mapLiveDataChannelPayload(label, message) {
     };
   }
 
+  if (spatialChannelRoles.has(channelRole)) {
+    return {
+      channelRole,
+      eventMessage: createChannelEventMessage(channelRole, payload),
+      ok: true,
+      sensor: payload
+    };
+  }
+
   if (
     eventChannelRoles.has(channelRole)
-    || spatialChannelRoles.has(channelRole)
     || controlChannelRoles.has(channelRole)
   ) {
     return {

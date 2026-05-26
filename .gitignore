@@ -4,6 +4,7 @@ __pycache__/
 .runtime/
 .agents/
 .agents/skills/*/.venv/
+skills-lock.json
 apps/server/.runtime/
 
 apps/web/node_modules/

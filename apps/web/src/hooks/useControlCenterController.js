@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getTelemetryPositionState } from "../utils/formatters.js";
 import { createMissionRobotTargets } from "../domains/missions/missionHelpers.js";
-import {
-  createRecordingPlaybackFile,
-  findLatestRecordingForTarget
-} from "../domains/recordings/recordingHelpers.js";
 import { useMissionManagementController } from "../domains/missions/useMissionManagementController.js";
 import { useRecordingsController } from "../domains/recordings/useRecordingsController.js";
 import { useRobotManagementController } from "../domains/robots/useRobotManagementController.js";
@@ -30,10 +26,13 @@ export function useControlCenterController({
     systemStatus,
     robots,
     missions,
+    missionLiveStatuses,
+    observedStreams,
     streamingStatuses,
     recordings,
     statusError,
-    loadAll
+    loadAll,
+    loadMissionLiveStatus
   } = useControlCenterData();
   const {
     notifications,
@@ -60,21 +59,22 @@ export function useControlCenterController({
     () => missions.find((mission) => mission.missionCode === missionControlCode) ?? null,
     [missionControlCode, missions]
   );
+  const missionControlLiveStatus = missionControlCode ? missionLiveStatuses[missionControlCode] ?? null : null;
   const missionReplayMission = useMemo(
     () => missions.find((mission) => mission.missionCode === routeMissionReplayCode) ?? null,
     [missions, routeMissionReplayCode]
   );
   const activeLiveTargets = useMemo(
     () => activeMissions
-      .flatMap((mission) => createMissionRobotTargets(mission, robots, streamingStatuses)),
-    [activeMissions, robots, streamingStatuses]
+      .flatMap((mission) => createMissionRobotTargets(mission, robots, streamingStatuses, observedStreams)),
+    [activeMissions, observedStreams, robots, streamingStatuses]
   );
   const missionControlTargets = useMemo(() => {
     if (!missionControlMission) {
       return [];
     }
-    return createMissionRobotTargets(missionControlMission, robots, streamingStatuses);
-  }, [missionControlMission, robots, streamingStatuses]);
+    return createMissionRobotTargets(missionControlMission, robots, streamingStatuses, observedStreams, missionControlLiveStatus);
+  }, [missionControlLiveStatus, missionControlMission, observedStreams, robots, streamingStatuses]);
   const liveTargets = useMemo(
     () => (missionControlMission ? missionControlTargets : activeLiveTargets),
     [activeLiveTargets, missionControlMission, missionControlTargets]
@@ -99,13 +99,12 @@ export function useControlCenterController({
   const {
     serverSensorLatest
   } = useMissionSamples({ appendLiveEvent, selectedLiveTarget });
-  const activeStreamingStatus = useMemo(() => {
+  const activeObservedStream = useMemo(() => {
     if (!selectedLiveTarget) {
       return null;
     }
-    return selectedLiveTarget.streamingStatus;
+    return selectedLiveTarget.observedPublisher;
   }, [selectedLiveTarget]);
-  const selectedMissionCode = selectedLiveTarget?.mission?.missionCode ?? "";
   const selectedRobotCode = selectedLiveTarget?.robotCode ?? "";
   const latestServerTelemetryFromSensors = useMemo(
     () => createTelemetryFromSensorLatest(serverSensorLatest, selectedRobotCode),
@@ -118,23 +117,7 @@ export function useControlCenterController({
   const latestTelemetry = selectedLiveSession.telemetry ?? latestServerTelemetryFromSensors;
   const latestSensor = selectedLiveSession.sensor ?? latestServerSensorPanel;
   const latestPositionState = getTelemetryPositionState(latestTelemetry);
-  const latestRecording = useMemo(
-    () => findLatestRecordingForTarget(recordings, selectedMissionCode, selectedRobotCode),
-    [recordings, selectedMissionCode, selectedRobotCode]
-  );
-  const latestPlayableRecording = useMemo(
-    () => findLatestRecordingForTarget(
-      recordings,
-      selectedMissionCode,
-      selectedRobotCode,
-      (recording) => Boolean(createRecordingPlaybackFile(recording))
-    ),
-    [recordings, selectedMissionCode, selectedRobotCode]
-  );
-  const recordingsController = useRecordingsController({
-    latestPlayableRecording,
-    showNotification
-  });
+  const recordingsController = useRecordingsController();
 
   useEffect(() => {
     const previousMissionCode = previousRouteMissionControlCodeRef.current;
@@ -156,6 +139,7 @@ export function useControlCenterController({
     setMissionControlCode,
     setSelectedLiveTargetKey,
     showNotification,
+    observedStreams,
     streamingStatuses
   });
 
@@ -169,8 +153,37 @@ export function useControlCenterController({
     }
   }, [missionControlCode, missions]);
 
+  useEffect(() => {
+    if (!missionControlCode) {
+      return undefined;
+    }
+    let cancelled = false;
+    let timer = null;
+
+    async function loadLiveStatus() {
+      try {
+        await loadMissionLiveStatus(missionControlCode, { isCancelled: () => cancelled });
+      } catch {
+        // The live screen can still render SFU/session state if the aggregate
+        // endpoint is briefly unavailable. Polling will retry shortly.
+      }
+      if (!cancelled) {
+        timer = window.setTimeout(loadLiveStatus, 3000);
+      }
+    }
+
+    loadLiveStatus();
+    return () => {
+      cancelled = true;
+      if (timer) {
+        window.clearTimeout(timer);
+      }
+    };
+  }, [loadMissionLiveStatus, missionControlCode]);
+
+
   const operationStatuses = useOperationStatuses({
-    activeStreamingStatus,
+    activeObservedStream,
     latestPositionState,
     primaryRobot,
     selectedLiveSession,
@@ -184,25 +197,24 @@ export function useControlCenterController({
     dismissNotification,
     missionRouteProps: {
       controlMission: missionControlMission,
-      latestRecording,
       latestSensor,
       latestTelemetry,
       liveEvents: selectedLiveSession.events,
+      liveStatus: missionControlLiveStatus,
       liveSessions,
       missionTargets: missionControlTargets,
       missions,
+      observedStreams,
       onBackToMissionList: closeMissionControl,
       onEndMission: missionController.endMission,
       onOpenCreateMissionModal: missionController.openMissionCreateModal,
       onOpenMissionControl: missionController.openMissionControl,
       onOpenMissionReplay: missionController.openMissionReplay,
       onOpenPlaybackFile: recordingsController.setRecordingPlaybackFile,
-      onPlayLatestRecording: recordingsController.playLatestRecording,
       onReconnectSelectedMissionTarget: reconnectLive,
       onSelectMission: missionController.setSelectedMissionManagementCode,
       onStartMission: missionController.startMission,
       operationStatuses,
-      playbackRecording: latestPlayableRecording,
       recordings,
       replayMission: missionReplayMission,
       replayMissionCode: routeMissionReplayCode,
@@ -217,6 +229,7 @@ export function useControlCenterController({
       missionForm: missionController.missionForm,
       missionModal: missionController.missionModal,
       missions,
+      observedStreams,
       onClose: missionController.closeMissionModal,
       robots,
       setMissionForm: missionController.setMissionForm,

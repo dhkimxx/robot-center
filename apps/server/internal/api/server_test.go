@@ -36,6 +36,10 @@ func TestControlPlaneFlow(t *testing.T) {
 	if !componentHasStatus(components, "recorder-worker", "ok") {
 		t.Fatalf("expected recorder-worker component status ok, got %#v", components)
 	}
+	observedPayload := requestJSON[map[string]any](t, server.URL, http.MethodGet, "/api/observed-streams", "", nil)
+	if _, ok := observedPayload["rooms"].([]any); !ok {
+		t.Fatalf("expected observed stream rooms array, got %#v", observedPayload)
+	}
 
 	createRobotPayload := requestJSON[map[string]any](t, server.URL, http.MethodPost, "/api/robots", "", map[string]any{
 		"displayName": "Test Robot",
@@ -268,6 +272,17 @@ func TestControlPlaneFlow(t *testing.T) {
 	chunk := recordingTickPayload["chunk"].(map[string]any)
 	if chunk["status"] != "recording" {
 		t.Fatalf("expected recording chunk, got %#v", chunk)
+	}
+	liveStatusPayload := requestJSON[map[string]any](t, server.URL, http.MethodGet, "/api/missions/"+missionCode+"/live-status", "", nil)
+	liveStatusRobots := liveStatusPayload["robots"].([]any)
+	liveStatusRobot := liveStatusRobots[0].(map[string]any)
+	liveStreamStatus := liveStatusRobot["stream"].(map[string]any)
+	liveRecordingStatus := liveStatusRobot["recording"].(map[string]any)
+	if liveStreamStatus["state"] != "waiting" {
+		t.Fatalf("expected live stream waiting without SFU publisher, got %#v", liveStatusPayload)
+	}
+	if liveRecordingStatus["state"] != "idle" || liveRecordingStatus["latestChunkStatus"] != "recording" {
+		t.Fatalf("expected live recording idle with recording chunk metadata, got %#v", liveStatusPayload)
 	}
 
 	uploadedPayload := requestJSON[map[string]any](t, server.URL, http.MethodPost, "/api/recorder/chunks/"+chunk["id"].(string)+"/uploaded", "", nil)

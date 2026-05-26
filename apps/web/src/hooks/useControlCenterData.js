@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchStreamingStatuses } from "../api/liveApi.js";
+import { fetchMissionLiveStatus, fetchObservedStreams, fetchStreamingStatuses } from "../api/liveApi.js";
 import { fetchMissions } from "../api/missionsApi.js";
 import { fetchRecordings } from "../api/recordingsApi.js";
 import { fetchRobots } from "../api/robotsApi.js";
@@ -9,6 +9,8 @@ export function useControlCenterData() {
   const [systemStatus, setSystemStatus] = useState(null);
   const [robots, setRobots] = useState([]);
   const [missions, setMissions] = useState([]);
+  const [missionLiveStatuses, setMissionLiveStatuses] = useState({});
+  const [observedStreams, setObservedStreams] = useState([]);
   const [streamingStatuses, setStreamingStatuses] = useState([]);
   const [recordings, setRecordings] = useState([]);
   const [statusError, setStatusError] = useState("");
@@ -23,6 +25,7 @@ export function useControlCenterData() {
         fetchSystemStatus(),
         fetchRobots(),
         fetchMissions(),
+        fetchObservedStreams(),
         fetchStreamingStatuses(),
         fetchRecordings()
       ]);
@@ -35,14 +38,30 @@ export function useControlCenterData() {
     if (requestSequence !== requestSequenceRef.current || options.isCancelled?.()) {
       return false;
     }
-    const [statusPayload, robotPayload, missionPayload, streamingPayload, recordingPayload] = payloads;
+    const [statusPayload, robotPayload, missionPayload, observedStreamsPayload, streamingPayload, recordingPayload] = payloads;
     setSystemStatus(statusPayload);
     setRobots(robotPayload.robots ?? []);
     setMissions(missionPayload.missions ?? []);
+    setObservedStreams(observedStreamsPayload.rooms ?? []);
     setStreamingStatuses(streamingPayload.streamingStatuses ?? []);
     setRecordings(recordingPayload.recordings ?? []);
     setStatusError("");
     return true;
+  }, []);
+
+  const loadMissionLiveStatus = useCallback(async (missionCode, options = {}) => {
+    if (!missionCode) {
+      return null;
+    }
+    const payload = await fetchMissionLiveStatus(missionCode);
+    if (options.isCancelled?.()) {
+      return null;
+    }
+    setMissionLiveStatuses((current) => ({
+      ...current,
+      [missionCode]: payload
+    }));
+    return payload;
   }, []);
 
   useEffect(() => {
@@ -78,12 +97,17 @@ export function useControlCenterData() {
     setRobots,
     missions,
     setMissions,
+    missionLiveStatuses,
+    setMissionLiveStatuses,
+    observedStreams,
+    setObservedStreams,
     streamingStatuses,
     setStreamingStatuses,
     recordings,
     setRecordings,
     statusError,
     setStatusError,
-    loadAll
+    loadAll,
+    loadMissionLiveStatus
   };
 }

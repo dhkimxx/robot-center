@@ -73,6 +73,29 @@ describe("mapLiveDataChannelPayload", () => {
     expect(result.eventMessage).toBe("이벤트: mock robot streaming");
   });
 
+  it("maps spatial channel to event message and sensor payload", () => {
+    const payload = {
+      channelRole: "channel.spatial",
+      state: "available",
+      samples: [
+        {
+          sensorId: "spatial.imu_1",
+          values: {
+            linearAcceleration: {
+              x: 0.1
+            }
+          }
+        }
+      ]
+    };
+
+    const result = mapLiveDataChannelPayload("channel.spatial", JSON.stringify(payload));
+
+    expect(result.ok).toBe(true);
+    expect(result.eventMessage).toBe("공간 상태: available");
+    expect(result.sensor).toEqual(payload);
+  });
+
   it("returns failed result for malformed JSON", () => {
     const result = mapLiveDataChannelPayload("channel.telemetry", "{");
 

@@ -328,7 +328,6 @@ class MockRobot:
         self.stop_event = asyncio.Event()
         self.sequence = 0
         self.offer_sent = False
-        self.stopped_reported = False
 
     async def run(self) -> None:
         timeout = aiohttp.ClientTimeout(total=10)
@@ -342,7 +341,6 @@ class MockRobot:
                 self.mission = await self.create_override_mission()
             else:
                 self.mission = await self.wait_for_active_mission()
-            await self.send_streaming_status()
             await self.send_heartbeat("streaming")
             await self.connect_signaling()
         finally:
@@ -418,52 +416,6 @@ class MockRobot:
         if mission.get("missionStatus") == "active":
             return mission
         return {}
-
-    async def send_streaming_status(self, status: str = "streaming") -> None:
-        if not self.mission:
-            return
-        payload = {
-            "robotCode": self.robot_code,
-            "missionId": self.mission["missionId"],
-            "roomId": self.mission["roomId"],
-            "status": status,
-            "publishedTracks": [
-                {
-                    "name": "track.video_1",
-                    "displayName": "RGB",
-                    "kind": "video",
-                    "codec": "h264",
-                    "width": self.rgb_width,
-                    "height": self.rgb_height,
-                    "fps": self.fps,
-                    "bitrateKbps": 2500,
-                },
-                {
-                    "name": "track.video_2",
-                    "displayName": "Thermal",
-                    "kind": "video",
-                    "codec": "h264",
-                    "width": self.thermal_width,
-                    "height": self.thermal_height,
-                    "fps": self.fps,
-                    "bitrateKbps": 900,
-                },
-                {
-                    "name": "track.audio_1",
-                    "displayName": "Audio",
-                    "kind": "audio",
-                    "codec": "opus",
-                },
-            ],
-            "publishedDataChannels": [
-                "channel.telemetry",
-                "channel.event",
-                "channel.spatial",
-                "channel.control",
-            ],
-            "sentAt": utc_now_iso(),
-        }
-        await self.post_json("/api/robot-gateway/streaming-status", payload)
 
     async def send_heartbeat(self, state: str) -> None:
         payload = {
@@ -671,11 +623,8 @@ class MockRobot:
                 return
             try:
                 await self.send_heartbeat("streaming")
-                await self.send_streaming_status()
             except Exception as error:
-                self.log(f"streaming status rejected; stopping publish: {error}")
-                await self.stop_publish("streaming status rejected")
-                return
+                self.log(f"heartbeat failed: {error}")
 
     def create_telemetry_payload(self) -> dict[str, Any]:
         latitude, longitude = self.current_position()
@@ -890,11 +839,9 @@ class MockRobot:
             return await response.json()
 
     async def report_publish_stopped(self) -> None:
-        if self.stopped_reported or not self.mission or self.session is None or self.session.closed:
+        if not self.mission or self.session is None or self.session.closed:
             return
-        self.stopped_reported = True
         try:
-            await self.send_streaming_status("stopped")
             await self.send_heartbeat("online")
             self.log("publish stopped")
         except Exception as error:
@@ -925,7 +872,7 @@ class MockRobot:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Robot Center Python Mock Robot")
-    parser.add_argument("--server-url", default="http://127.0.0.1:18080")
+    parser.add_argument("--server-url", required=True)
     parser.add_argument("--robot-code", required=True)
     parser.add_argument("--robot-token", required=True)
     parser.add_argument("--rgb-width", type=int, default=1280)

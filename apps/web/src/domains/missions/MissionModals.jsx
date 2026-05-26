@@ -7,6 +7,7 @@ export function MissionModals({
   missionForm,
   missionModal,
   missions,
+  observedStreams,
   onClose,
   robots,
   setMissionForm,
@@ -28,6 +29,7 @@ export function MissionModals({
         <MissionFormFields
           form={missionForm}
           missions={missions}
+          observedStreams={observedStreams}
           robots={robots}
           setForm={setMissionForm}
           streamingStatuses={streamingStatuses}

@@ -9,7 +9,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pion/rtp"
 	"github.com/pion/rtp/codecs"
@@ -34,6 +36,18 @@ type h264ParameterSets struct {
 	pps []byte
 }
 
+type h264TrackTiming struct {
+	haveTimestamp  bool
+	firstTimestamp uint32
+	lastTimestamp  uint32
+	frameCount     int
+}
+
+type h264Snapshot struct {
+	path string
+	fps  float64
+}
+
 type recordingChunkFinalization struct {
 	mediaKey string
 	chunk    domain.RecordingChunk
@@ -44,7 +58,7 @@ type MediaUploader interface {
 }
 
 type mediaSnapshotter interface {
-	createH264Snapshot(roomID string, chunkID string, label string) (string, error)
+	createH264Snapshot(roomID string, chunkID string, label string) (h264Snapshot, error)
 	createOggSnapshot(chunkID string) (string, error)
 	createDataChannelSnapshot(chunkID string, label string) (string, error)
 }
@@ -72,6 +86,55 @@ func (w *Worker) setActiveRecordingChunk(roomID string, chunk domain.RecordingCh
 		return domain.RecordingChunk{}, false
 	}
 	return previousChunk, true
+}
+
+func (w *Worker) currentRecordingChunk(mediaKey string, observedAt time.Time) (domain.RecordingChunk, bool) {
+	w.mediaMu.Lock()
+	defer w.mediaMu.Unlock()
+	chunk, ok := w.activeChunks[mediaKey]
+	if !ok || strings.TrimSpace(chunk.ID) == "" {
+		return domain.RecordingChunk{}, false
+	}
+	if chunk.EndedAt.IsZero() || observedAt.Before(chunk.EndedAt) {
+		return chunk, true
+	}
+	return domain.RecordingChunk{}, false
+}
+
+func (w *Worker) recordingTarget(mediaKey string) (domain.Mission, bool) {
+	w.mediaMu.Lock()
+	defer w.mediaMu.Unlock()
+	target, ok := w.activeTargets[mediaKey]
+	return target, ok
+}
+
+func (w *Worker) ensureActiveRecordingChunk(ctx context.Context, mediaKey string, observedAt time.Time) (domain.RecordingChunk, bool, error) {
+	if observedAt.IsZero() {
+		observedAt = time.Now().UTC()
+	}
+	if chunk, ok := w.currentRecordingChunk(mediaKey, observedAt); ok {
+		return chunk, true, nil
+	}
+
+	w.chunkMu.Lock()
+	defer w.chunkMu.Unlock()
+	if chunk, ok := w.currentRecordingChunk(mediaKey, observedAt); ok {
+		return chunk, true, nil
+	}
+
+	target, ok := w.recordingTarget(mediaKey)
+	if !ok {
+		return domain.RecordingChunk{}, false, nil
+	}
+	result, err := w.appServerClient.CreateRecordingTick(ctx, target, w.config.RecordingChunkDuration, observedAt)
+	if err != nil {
+		return domain.RecordingChunk{}, false, err
+	}
+	previousChunk, shouldFinalizePreviousChunk := w.setActiveRecordingChunk(mediaKey, result.Chunk)
+	if shouldFinalizePreviousChunk {
+		w.queueRecordingChunkFinalization(mediaKey, previousChunk)
+	}
+	return result.Chunk, true, nil
 }
 
 func (w *Worker) queueInactiveRecordingChunks(activeTargetKeys map[string]struct{}) {
@@ -143,7 +206,7 @@ func (w *Worker) recordH264Track(ctx context.Context, roomID string, label strin
 		if len(payload) == 0 {
 			continue
 		}
-		if err := w.appendH264Payload(roomID, label, payload); err != nil {
+		if err := w.appendH264Payload(ctx, roomID, label, payload, packet.Timestamp); err != nil {
 			w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
 				status.lastError = err.Error()
 			})
@@ -164,7 +227,7 @@ func (w *Worker) recordOpusTrack(ctx context.Context, roomID string, label strin
 		if err != nil {
 			return
 		}
-		if err := w.appendOpusPacket(roomID, label, packet); err != nil {
+		if err := w.appendOpusPacket(ctx, roomID, label, packet); err != nil {
 			w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
 				status.lastError = err.Error()
 			})
@@ -173,20 +236,29 @@ func (w *Worker) recordOpusTrack(ctx context.Context, roomID string, label strin
 	}
 }
 
-func (w *Worker) appendH264Payload(roomID string, label string, payload []byte) error {
+func (w *Worker) appendH264Payload(ctx context.Context, roomID string, label string, payload []byte, rtpTimestamp uint32) error {
 	storageLabel := recordingStorageMediaLabel(label)
 	if storageLabel != "rgb" && storageLabel != "thermal" {
+		return nil
+	}
+
+	chunk, ok, err := w.ensureActiveRecordingChunk(ctx, roomID, time.Now().UTC())
+	if err != nil {
+		return err
+	}
+	if !ok {
 		return nil
 	}
 
 	w.mediaMu.Lock()
 	defer w.mediaMu.Unlock()
 
-	chunk, ok := w.activeChunks[roomID]
-	if !ok {
+	activeChunk, ok := w.activeChunks[roomID]
+	if !ok || activeChunk.ID != chunk.ID {
 		return nil
 	}
 	w.updateH264ParameterSetsLocked(roomID, storageLabel, payload)
+	w.updateH264TrackTimingLocked(chunk.ID, storageLabel, rtpTimestamp)
 	directory := recordingChunkDirectory(chunk.ID)
 	if err := os.MkdirAll(directory, 0o755); err != nil {
 		return err
@@ -211,16 +283,24 @@ func recordingStorageMediaLabel(label string) string {
 	}
 }
 
-func (w *Worker) appendOpusPacket(roomID string, label string, packet *rtp.Packet) error {
+func (w *Worker) appendOpusPacket(ctx context.Context, roomID string, label string, packet *rtp.Packet) error {
 	if recordingStorageAudioLabel(label) != "audio" {
+		return nil
+	}
+
+	chunk, ok, err := w.ensureActiveRecordingChunk(ctx, roomID, time.Now().UTC())
+	if err != nil {
+		return err
+	}
+	if !ok {
 		return nil
 	}
 
 	w.mediaMu.Lock()
 	defer w.mediaMu.Unlock()
 
-	chunk, ok := w.activeChunks[roomID]
-	if !ok {
+	activeChunk, ok := w.activeChunks[roomID]
+	if !ok || activeChunk.ID != chunk.ID {
 		return nil
 	}
 	writer, err := w.getAudioWriterLocked(roomID, chunk.ID)
@@ -341,14 +421,14 @@ func (u *recordingMediaUploader) muxAndUploadH264Snapshot(ctx context.Context, r
 	if strings.TrimSpace(objectKey) == "" {
 		return nil
 	}
-	snapshotPath, err := u.snapshotter.createH264Snapshot(roomID, chunk.ID, label)
+	snapshot, err := u.snapshotter.createH264Snapshot(roomID, chunk.ID, label)
 	if err != nil {
 		return err
 	}
-	if snapshotPath == "" {
+	if snapshot.path == "" {
 		return nil
 	}
-	defer os.Remove(snapshotPath)
+	defer os.Remove(snapshot.path)
 
 	audioSnapshotPath := ""
 	if label == "rgb" {
@@ -361,7 +441,7 @@ func (u *recordingMediaUploader) muxAndUploadH264Snapshot(ctx context.Context, r
 		}
 	}
 	outputPath := filepath.Join(recordingChunkDirectory(chunk.ID), label+".mp4")
-	if err := muxH264ToMP4(ctx, snapshotPath, audioSnapshotPath, outputPath); err != nil {
+	if err := muxH264ToMP4(ctx, snapshot.path, audioSnapshotPath, outputPath, snapshot.fps); err != nil {
 		return fmt.Errorf("%s mp4 mux failed: %w", label, err)
 	}
 	sizeBytes, err := u.objectStorage.UploadFile(ctx, objectKey, outputPath, "video/mp4")
@@ -399,7 +479,7 @@ func (u *recordingMediaUploader) uploadDataChannelSnapshot(ctx context.Context, 
 	return nil
 }
 
-func (w *Worker) createH264Snapshot(roomID string, chunkID string, label string) (string, error) {
+func (w *Worker) createH264Snapshot(roomID string, chunkID string, label string) (h264Snapshot, error) {
 	sourcePath := h264TrackPath(chunkID, label)
 	snapshotPath := filepath.Join(recordingChunkDirectory(chunkID), label+"_snapshot.h264")
 
@@ -408,46 +488,47 @@ func (w *Worker) createH264Snapshot(roomID string, chunkID string, label string)
 
 	stat, err := os.Stat(sourcePath)
 	if errors.Is(err, os.ErrNotExist) {
-		return "", nil
+		return h264Snapshot{}, nil
 	}
 	if err != nil {
-		return "", err
+		return h264Snapshot{}, err
 	}
 	if stat.Size() < minH264SnapshotBytes {
-		return "", nil
+		return h264Snapshot{}, nil
 	}
 
 	source, err := os.Open(sourcePath)
 	if err != nil {
-		return "", err
+		return h264Snapshot{}, err
 	}
 	defer source.Close()
 
 	snapshot, err := os.Create(snapshotPath)
 	if err != nil {
-		return "", err
+		return h264Snapshot{}, err
 	}
 	parameterSets := w.h264ParameterSets[h264ParameterSetKey(roomID, label)]
+	observedFPS := w.observedH264FPSLocked(chunkID, label)
 	if len(parameterSets.sps) > 0 {
 		if _, err := snapshot.Write(parameterSets.sps); err != nil {
 			_ = snapshot.Close()
-			return "", err
+			return h264Snapshot{}, err
 		}
 	}
 	if len(parameterSets.pps) > 0 {
 		if _, err := snapshot.Write(parameterSets.pps); err != nil {
 			_ = snapshot.Close()
-			return "", err
+			return h264Snapshot{}, err
 		}
 	}
 	if _, err := io.Copy(snapshot, source); err != nil {
 		_ = snapshot.Close()
-		return "", err
+		return h264Snapshot{}, err
 	}
 	if err := snapshot.Close(); err != nil {
-		return "", err
+		return h264Snapshot{}, err
 	}
-	return snapshotPath, nil
+	return h264Snapshot{path: snapshotPath, fps: observedFPS}, nil
 }
 
 func (w *Worker) createDataChannelSnapshot(chunkID string, label string) (string, error) {
@@ -526,7 +607,7 @@ func (w *Worker) createOggSnapshot(chunkID string) (string, error) {
 	return snapshotPath, nil
 }
 
-func muxH264ToMP4(ctx context.Context, inputPath string, audioPath string, outputPath string) error {
+func muxH264ToMP4(ctx context.Context, inputPath string, audioPath string, outputPath string, inputFPS float64) error {
 	ffmpegPath, err := exec.LookPath("ffmpeg")
 	if err != nil {
 		return err
@@ -538,7 +619,7 @@ func muxH264ToMP4(ctx context.Context, inputPath string, audioPath string, outpu
 		"-hide_banner",
 		"-loglevel", "error",
 		"-fflags", "+genpts",
-		"-r", "30",
+		"-r", formatH264InputFPS(inputFPS),
 		"-i", inputPath,
 	}
 	if audioPath != "" {
@@ -587,6 +668,10 @@ func h264ParameterSetKey(roomID string, label string) string {
 	return safePathToken(roomID) + "/" + safePathToken(label)
 }
 
+func h264TrackTimingKey(chunkID string, label string) string {
+	return safePathToken(chunkID) + "/" + safePathToken(label)
+}
+
 func (w *Worker) updateH264ParameterSetsLocked(roomID string, label string, payload []byte) {
 	parameterSets := w.h264ParameterSets[h264ParameterSetKey(roomID, label)]
 	changed := false
@@ -607,6 +692,46 @@ func (w *Worker) updateH264ParameterSetsLocked(roomID string, label string, payl
 	if changed {
 		w.h264ParameterSets[h264ParameterSetKey(roomID, label)] = parameterSets
 	}
+}
+
+func (w *Worker) updateH264TrackTimingLocked(chunkID string, label string, timestamp uint32) {
+	timing := w.h264Timings[h264TrackTimingKey(chunkID, label)]
+	if !timing.haveTimestamp {
+		timing.haveTimestamp = true
+		timing.firstTimestamp = timestamp
+		timing.lastTimestamp = timestamp
+		timing.frameCount = 1
+		w.h264Timings[h264TrackTimingKey(chunkID, label)] = timing
+		return
+	}
+	if timestamp == timing.lastTimestamp {
+		return
+	}
+	timing.lastTimestamp = timestamp
+	timing.frameCount++
+	w.h264Timings[h264TrackTimingKey(chunkID, label)] = timing
+}
+
+func (w *Worker) observedH264FPSLocked(chunkID string, label string) float64 {
+	return w.h264Timings[h264TrackTimingKey(chunkID, label)].observedFPS()
+}
+
+func (t h264TrackTiming) observedFPS() float64 {
+	if !t.haveTimestamp || t.frameCount < 2 {
+		return 0
+	}
+	elapsedSeconds := float64(uint32(t.lastTimestamp-t.firstTimestamp)) / 90000
+	if elapsedSeconds <= 0 {
+		return 0
+	}
+	return float64(t.frameCount-1) / elapsedSeconds
+}
+
+func formatH264InputFPS(fps float64) string {
+	if fps < 1 || fps > 120 {
+		fps = 30
+	}
+	return strconv.FormatFloat(fps, 'f', 3, 64)
 }
 
 func splitAnnexBNALUs(payload []byte) [][]byte {

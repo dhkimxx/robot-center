@@ -11,6 +11,8 @@ history:
 - "2026-05-26 danya.kim <danya.kim@thundersoft.com>: mission scoped robot gateway and WebRTC interface 정리"
 - "2026-05-26 danya.kim <danya.kim@thundersoft.com>: missionId UUID, roomId missionCode, streaming freshness updatedAt 기준 명시"
 - "2026-05-26 danya.kim <danya.kim@thundersoft.com>: moved into docs/stable lifecycle structure"
+- '2026-05-26 danya.kim <danya.kim@thundersoft.com>: simplified robot WebRTC connection by making SFU observed streams the live source of truth'
+- '2026-05-26 danya.kim <danya.kim@thundersoft.com>: clarified live-status API and optional streaming metadata responsibility'
 ---
 
 # Robot Gateway Interface
@@ -31,7 +33,9 @@ P0에서는 Python Mock Robot을 기본 로컬 검증 샘플로 사용하고, An
 - QR 등록은 P0에서 제외한다.
 - gatewayVersion, capabilities, hardware fingerprint는 P0 필수값에서 제외한다.
 - WebRTC 송출 스펙은 `robot_defined`로 둔다.
-- 실제 송출/수신/저장된 codec, 해상도, FPS, bitrate는 status/metadata로 남긴다.
+- 실제 송출 여부는 app-server 내부 SFU가 관측한 publisher/track/DataChannel 상태를 기준으로 판단한다.
+- 관제 Live 화면의 통합 상태는 `GET /api/missions/{missionCode}/live-status`에서 확인한다.
+- codec, 해상도, FPS, bitrate 같은 상세 송출 metadata 보고는 선택 기능으로 둔다.
 
 ## 3. 전체 연결 흐름
 
@@ -44,8 +48,7 @@ P0에서는 Python Mock Robot을 기본 로컬 검증 샘플로 사용하고, An
 6. Backend가 로봇 online 표시
 7. Mock Robot 또는 Robot Gateway가 mission 조회
 8. active mission이면 mission room으로 SFU publish 시작
-9. Mock Robot 또는 Robot Gateway가 streaming status 보고
-10. Browser와 Recorder가 SFU subscriber로 수신
+9. Browser와 Recorder가 SFU subscriber로 수신
 ```
 
 ## 4. Mock Robot / Robot Gateway에 입력할 값
@@ -156,9 +159,13 @@ active mission이 없을 때:
 }
 ```
 
-### 6.3 Streaming Status
+### 6.3 Optional Streaming Metadata
 
-로봇이 WebRTC publish 상태와 실제 송출 스펙을 보고한다.
+로봇이 실제 송출 스펙 metadata를 별도로 남기고 싶을 때 사용하는 선택 API다.
+
+관제 UI의 “송출 중/송출 대기” 판단은 이 API가 아니라 SFU가 관측한 WebRTC publisher, media track, DataChannel 상태를 기준으로 한다. 따라서 Robot Gateway의 필수 연결 절차에는 포함하지 않는다.
+
+Live 화면은 `GET /api/missions/{missionCode}/live-status`를 사용한다. 이 API는 app-server가 SFU observed stream, recorder-worker runtime, mission assignment, robot heartbeat를 합성한 상태다. Robot Gateway는 `streaming-status`를 주기적으로 보고하지 않아도 WebRTC publish만 정상 수행하면 송출 상태가 관측된다.
 
 ```http
 POST /api/robot-gateway/streaming-status
@@ -209,12 +216,12 @@ Content-Type: application/json
 
 `publishedTracks`와 `publishedDataChannels`는 실제 mock/robot이 송출한 값을 보고하는 metadata다. 슬롯명은 `track.video_1`, `channel.telemetry` 같은 canonical role을 사용하고, 화면 표시 의미는 `displayName` 등 metadata로 분리한다.
 
-Streaming status 수락 규칙:
+Optional streaming metadata 수락 규칙:
 
 - `status=streaming` 또는 `publishing`은 `missionId`가 active mission이고 해당 robot이 active assignment일 때만 수락한다.
 - `roomId`는 반드시 mission 조회 응답의 `roomId`, 즉 `missionCode`와 같아야 한다.
-- 이전 호환 room 형식인 `missionCode__robotCode`는 streaming status와 SFU publish 기준으로 사용하지 않는다.
-- 서버는 로봇이 보낸 `sentAt`을 metadata로 보존하지만, 송출 freshness와 임무 생성 차단 판단은 서버가 status를 받은 `updatedAt` 기준 30초 window로 판단한다.
+- 이전 호환 room 형식인 `missionCode__robotCode`는 metadata와 SFU publish 기준으로 사용하지 않는다.
+- 서버는 로봇이 보낸 `sentAt`을 metadata로 보존한다. live freshness 판단은 SFU observed stream의 `lastTrackAt` 또는 `lastDataAt` 기준 30초 window로 판단한다.
 - `stopped`, `failed`, `stale` 같은 종료성 status는 현재 저장된 robot streaming row의 `missionId + roomId`가 보고값과 같을 때만 반영한다. 늦게 도착한 이전 임무의 stop 보고가 새 임무 송출 상태를 덮어쓰면 안 된다.
 
 응답:
@@ -366,7 +373,7 @@ Browser WebSocket은 실시간 센서 표시의 필수 경로가 아니다.
 | `online` | heartbeat 성공 또는 최근 gateway 통신 성공 |
 | `fault` | 오류 상태 |
 
-`robots.status`는 장치 online/offline/fault 성격의 상태다. 임무 배정 상태는 `mission_robots.status`, WebRTC 송출 상태는 `streaming_statuses.status`에서 판단한다.
+`robots.status`는 장치 online/offline/fault 성격의 상태다. 임무 배정 상태는 `mission_robots.status`, WebRTC live 송출 상태는 app-server 내부 SFU의 observed stream 상태에서 판단한다. `streaming_statuses`는 선택 metadata 저장소이며 live 판정의 source of truth가 아니다.
 
 ## 10. 재시도 정책
 
@@ -376,7 +383,7 @@ Mock Robot / Robot Gateway 기본 재시도:
 - mission 조회 실패: 2초, 5초, 10초 backoff
 - signaling 끊김: mission이 active이면 재접속
 - ICE failed: PeerConnection 재생성
-- publish 실패: streaming status를 `failed`로 보고
+- publish 실패: 연결 로그를 남기고 mission이 active이면 재시도
 
 ## 11. 실제 로봇 연동 시 협의 항목
 

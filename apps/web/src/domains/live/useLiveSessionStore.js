@@ -3,6 +3,8 @@ import { makeLiveChannelLabel } from "../../utils/formatters.js";
 import { createEmptyLiveSession, makeLiveTargetKey } from "./liveHelpers.js";
 import { LiveSessionStatus } from "./liveConnectionStates.js";
 import { applyLiveAttemptUpdate } from "./liveSessionAttempts.js";
+import { replaceVideoStreamSlot, resetVideoStreams } from "./liveMediaCleanup.js";
+import { mergeSensorSnapshots } from "./sensorDisplayMetrics.js";
 
 export function useLiveSessionStore() {
   const [liveSessions, setLiveSessions] = useState({});
@@ -37,7 +39,7 @@ export function useLiveSessionStore() {
     updateLiveSession(targetKey, (session) => ({
       ...session,
       status,
-      ...(options.resetStreams ? { videoStreams: { rgb: null, thermal: null, audio: null } } : {})
+      ...(options.resetStreams ? { videoStreams: resetVideoStreams(session.videoStreams) } : {})
     }), options);
   }, [updateLiveSession]);
 
@@ -53,7 +55,7 @@ export function useLiveSessionStore() {
   const applyTrackStream = useCallback((targetKey, slot, stream, options = {}) => {
     updateLiveSession(targetKey, (session) => ({
       ...session,
-      videoStreams: { ...session.videoStreams, [slot]: stream }
+      videoStreams: replaceVideoStreamSlot(session.videoStreams, slot, stream)
     }), options);
   }, [updateLiveSession]);
 
@@ -67,7 +69,7 @@ export function useLiveSessionStore() {
       updateLiveSession(targetKey, (session) => ({
         ...session,
         ...(mappedPayload.telemetry ? { telemetry: mappedPayload.telemetry } : {}),
-        ...(mappedPayload.sensor ? { sensor: mappedPayload.sensor } : {})
+        ...(mappedPayload.sensor ? { sensor: mergeSensorSnapshots(session.sensor, mappedPayload.sensor) } : {})
       }), options);
     }
 

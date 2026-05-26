@@ -43,7 +43,7 @@ func (s *PostgresStore) FindRecordingTarget(ctx context.Context, missionCode str
 	}, nil
 }
 
-func (s *PostgresStore) FindOrCreateRecordingSession(ctx context.Context, missionID string, robotID string, chunkDurationSeconds int, startedAt time.Time) (string, error) {
+func (s *PostgresStore) FindOrCreateRecordingSession(ctx context.Context, missionID string, robotID string, chunkDurationSeconds int, startedAt time.Time) (RecordingSession, error) {
 	return s.findOrCreateRecordingSession(ctx, s.sqlRunner(), missionID, robotID, chunkDurationSeconds, startedAt)
 }
 
@@ -353,32 +353,32 @@ func (s *PostgresStore) findMissionRobotForRecording(ctx context.Context, runner
 	return mission, robotID, err
 }
 
-func (s *PostgresStore) findOrCreateRecordingSession(ctx context.Context, runner sqlContextRunner, missionID string, robotID string, chunkDurationSeconds int, startedAt time.Time) (string, error) {
-	var recordingSessionID string
+func (s *PostgresStore) findOrCreateRecordingSession(ctx context.Context, runner sqlContextRunner, missionID string, robotID string, chunkDurationSeconds int, startedAt time.Time) (RecordingSession, error) {
+	var recordingSession RecordingSession
 	err := runner.QueryRowContext(ctx, `
-		SELECT id::text
+		SELECT id::text, started_at
 		FROM recording_sessions
 		WHERE mission_id = $1::uuid AND robot_id = $2::uuid AND ended_at IS NULL
 		ORDER BY started_at DESC
 		LIMIT 1
-	`, missionID, robotID).Scan(&recordingSessionID)
+	`, missionID, robotID).Scan(&recordingSession.ID, &recordingSession.StartedAt)
 	if err == nil {
 		_, updateErr := runner.ExecContext(ctx, `
 			UPDATE recording_sessions
 			SET status = 'recording', chunk_duration_seconds = $2
 			WHERE id = $1::uuid
-		`, recordingSessionID, chunkDurationSeconds)
-		return recordingSessionID, updateErr
+		`, recordingSession.ID, chunkDurationSeconds)
+		return recordingSession, updateErr
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
-		return "", err
+		return RecordingSession{}, err
 	}
 	err = runner.QueryRowContext(ctx, `
 		INSERT INTO recording_sessions (mission_id, robot_id, status, chunk_duration_seconds, started_at)
 		VALUES ($1::uuid, $2::uuid, 'recording', $3, $4)
-		RETURNING id::text
-	`, missionID, robotID, chunkDurationSeconds, startedAt).Scan(&recordingSessionID)
-	return recordingSessionID, err
+		RETURNING id::text, started_at
+	`, missionID, robotID, chunkDurationSeconds, startedAt).Scan(&recordingSession.ID, &recordingSession.StartedAt)
+	return recordingSession, err
 }
 
 func (s *PostgresStore) findRecordingChunk(ctx context.Context, runner sqlContextRunner, recordingSessionID string, chunkIndex int) (domain.RecordingChunk, bool, error) {

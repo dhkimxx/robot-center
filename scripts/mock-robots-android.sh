@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/dev-common.sh"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 ANDROID_DIR="$ROOT_DIR/apps/android-robot"
-APP_SERVER_URL="http://$(detect_host_ip):$APP_PORT"
-LOCAL_APP_SERVER_URL="http://127.0.0.1:$APP_PORT"
+APP_SERVER_URL="${APP_SERVER_URL:-}"
 APK_PATH="$ANDROID_DIR/app/build/outputs/apk/debug/app-debug.apk"
 ROBOT_PACKAGE="com.sst.robotcenter.androidrobot"
 ROBOT_ACTIVITY="com.sst.robotcenter.androidrobot/.MainActivity"
@@ -14,6 +13,15 @@ json_get() {
   local code="$1"
   shift
   /usr/bin/python3 -c "$code" "$@"
+}
+
+require_app_server_url() {
+  if [[ -z "$APP_SERVER_URL" ]]; then
+    printf 'APP_SERVER_URL is required.\n' >&2
+    printf 'example: APP_SERVER_URL=http://control-server.example:18080 %s\n' "$0" >&2
+    exit 1
+  fi
+  APP_SERVER_URL="${APP_SERVER_URL%/}"
 }
 
 require_adb() {
@@ -30,9 +38,9 @@ list_adb_devices() {
 ensure_robot_count() {
   local required_count="$1"
   local robot_count
-  robot_count="$(curl -fsS "$LOCAL_APP_SERVER_URL/api/robots" | json_get 'import json,sys; print(len(json.load(sys.stdin).get("robots", [])))')"
+  robot_count="$(curl -fsS "$APP_SERVER_URL/api/robots" | json_get 'import json,sys; print(len(json.load(sys.stdin).get("robots", [])))')"
   while (( robot_count < required_count )); do
-    curl -fsS -X POST "$LOCAL_APP_SERVER_URL/api/robots" \
+    curl -fsS -X POST "$APP_SERVER_URL/api/robots" \
       -H 'Content-Type: application/json' \
       -d '{"displayName":"Android Mock Robot","modelName":"Android Mock"}' >/dev/null
     robot_count=$((robot_count + 1))
@@ -41,7 +49,7 @@ ensure_robot_count() {
 
 robot_code_at() {
   local index="$1"
-  curl -fsS "$LOCAL_APP_SERVER_URL/api/robots" | json_get '
+  curl -fsS "$APP_SERVER_URL/api/robots" | json_get '
 import json,sys
 index = int(sys.argv[1])
 robots = sorted(json.load(sys.stdin).get("robots", []), key=lambda item: item.get("robotCode", ""))
@@ -51,14 +59,14 @@ print(robots[index]["robotCode"])
 
 connection_token_for() {
   local robot_code="$1"
-  curl -fsS "$LOCAL_APP_SERVER_URL/api/robots/$robot_code/connection-info" | json_get '
+  curl -fsS "$APP_SERVER_URL/api/robots/$robot_code/connection-info" | json_get '
 import json,sys
 print(json.load(sys.stdin)["connectionInfo"]["robotToken"])
 '
 }
 
 select_mission_for_robots() {
-  curl -fsS "$LOCAL_APP_SERVER_URL/api/missions" | json_get '
+  curl -fsS "$APP_SERVER_URL/api/missions" | json_get '
 import json,sys
 required = set(sys.argv[1:])
 missions = json.load(sys.stdin).get("missions", [])
@@ -99,7 +107,7 @@ print(json.dumps({
     "robotCodes": robot_codes,
 }))
 ' "$@")"
-  curl -fsS -X POST "$LOCAL_APP_SERVER_URL/api/missions" \
+  curl -fsS -X POST "$APP_SERVER_URL/api/missions" \
     -H 'Content-Type: application/json' \
     -d "$payload" \
     | json_get 'import json,sys; print(json.dumps(json.load(sys.stdin)["mission"]))'
@@ -117,7 +125,7 @@ ensure_shared_active_mission() {
   local mission_code
   mission_code="$(printf '%s' "$mission_payload" | mission_field missionCode)"
   if [[ "$mission_status" == "ready" ]]; then
-    curl -fsS -X POST "$LOCAL_APP_SERVER_URL/api/missions/$mission_code/start" \
+    curl -fsS -X POST "$APP_SERVER_URL/api/missions/$mission_code/start" \
       | json_get 'import json,sys; print(json.dumps(json.load(sys.stdin)["mission"]))'
     return
   fi
@@ -149,8 +157,9 @@ start_android_robot() {
     --ez autoConnect true >/dev/null
 }
 
+require_app_server_url
 require_adb
-wait_for_http "$LOCAL_APP_SERVER_URL/healthz" "app-server"
+wait_for_http "$APP_SERVER_URL/healthz" "app-server"
 
 mapfile -t adb_devices < <(list_adb_devices)
 if (( ${#adb_devices[@]} == 0 )); then
@@ -175,8 +184,6 @@ for index in "${!adb_devices[@]}"; do
 done
 
 printf '\nready\n'
-printf 'serverUrl: %s\n' "$APP_SERVER_URL"
+printf 'control server: %s\n' "$APP_SERVER_URL"
 printf 'mission: %s\n' "$mission_code"
 printf 'robots: %s\n' "${robot_codes[*]}"
-printf 'UI: %s\n' "$APP_SERVER_URL"
-printf 'status: %s\n' "$ROOT_DIR/scripts/dev-status.sh"

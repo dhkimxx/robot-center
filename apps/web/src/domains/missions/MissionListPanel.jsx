@@ -17,6 +17,7 @@ import {
 
 export function MissionListPanel({
   missions,
+  observedStreams,
   onSelectMission,
   robots,
   selectedMission,
@@ -38,6 +39,7 @@ export function MissionListPanel({
             <MissionListGroup
               emptyLabel="진행 중이거나 시작 가능한 임무가 없습니다."
               missions={openMissions}
+              observedStreams={observedStreams}
               onSelectMission={onSelectMission}
               robots={robots}
               selectedMission={selectedMission}
@@ -47,6 +49,7 @@ export function MissionListPanel({
             <MissionListGroup
               emptyLabel="종료된 임무가 없습니다."
               missions={closedMissions}
+              observedStreams={observedStreams}
               onSelectMission={onSelectMission}
               robots={robots}
               selectedMission={selectedMission}
@@ -63,6 +66,7 @@ export function MissionListPanel({
 function MissionListGroup({
   emptyLabel,
   missions,
+  observedStreams,
   onSelectMission,
   robots,
   selectedMission,
@@ -84,7 +88,7 @@ function MissionListGroup({
           {missions.map((mission) => {
             const isSelectedMission = selectedMission?.missionCode === mission.missionCode;
             const isClosed = isClosedMission(mission);
-            const robotDetails = getMissionRobotDetails(mission, robots, streamingStatuses);
+            const robotDetails = getMissionRobotDetails(mission, robots, streamingStatuses, observedStreams);
             const missionMeta = `${mission.missionCode} · ${missionTypeLabel(mission.missionType)} · ${formatMissionRobotCount(robotDetails)}`;
             const robotSummary = robotDetails.map((robot) => `${robot.robotCode} ${robot.liveLabel}`).join(" · ");
             return (

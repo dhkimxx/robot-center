@@ -50,18 +50,18 @@ describe("sensorLatestMapper", () => {
     const sensor = createSensorPanelSnapshot(sensorLatest, "robot-001");
 
     expect(sensor.sensors).toEqual([
-      {
+      expect.objectContaining({
         label: "CO",
         receivedAt: "2026-05-26T01:00:01Z",
         unit: "ppm",
         value: 9
-      },
-      {
+      }),
+      expect.objectContaining({
         label: "O2",
         receivedAt: "2026-05-26T01:00:01Z",
         unit: "%",
         value: 20.8
-      }
+      })
     ]);
   });
 });

@@ -20,24 +20,35 @@ type SubscriberStatus struct {
 }
 
 type SubscriberRoomStatus struct {
-	RoomID               string    `json:"roomId"`
-	MissionCode          string    `json:"missionCode"`
-	RobotCode            string    `json:"robotCode"`
-	RobotCodes           []string  `json:"robotCodes,omitempty"`
-	SignalingState       string    `json:"signalingState"`
-	ICEState             string    `json:"iceState"`
-	TrackCount           int       `json:"trackCount"`
-	DataChannelCount     int       `json:"dataChannelCount"`
-	DataMessageCount     int       `json:"dataMessageCount"`
-	SensorStoredCount    int       `json:"sensorStoredCount"`
-	TelemetryStoredCount int       `json:"telemetryStoredCount"`
-	LastTrackLabel       string    `json:"lastTrackLabel"`
-	LastDataLabel        string    `json:"lastDataLabel"`
-	LastDataMessageAt    time.Time `json:"lastDataMessageAt,omitempty"`
-	LastPersistedLabel   string    `json:"lastPersistedLabel,omitempty"`
-	LastPersistedAt      time.Time `json:"lastPersistedAt,omitempty"`
-	LastError            string    `json:"lastError,omitempty"`
-	UpdatedAt            time.Time `json:"updatedAt"`
+	RoomID               string                  `json:"roomId"`
+	MissionCode          string                  `json:"missionCode"`
+	RobotCode            string                  `json:"robotCode"`
+	RobotCodes           []string                `json:"robotCodes,omitempty"`
+	Robots               []SubscriberRobotStatus `json:"robots,omitempty"`
+	SignalingState       string                  `json:"signalingState"`
+	ICEState             string                  `json:"iceState"`
+	TrackCount           int                     `json:"trackCount"`
+	DataChannelCount     int                     `json:"dataChannelCount"`
+	DataMessageCount     int                     `json:"dataMessageCount"`
+	SensorStoredCount    int                     `json:"sensorStoredCount"`
+	TelemetryStoredCount int                     `json:"telemetryStoredCount"`
+	LastTrackLabel       string                  `json:"lastTrackLabel"`
+	LastDataLabel        string                  `json:"lastDataLabel"`
+	LastDataMessageAt    time.Time               `json:"lastDataMessageAt,omitempty"`
+	LastPersistedLabel   string                  `json:"lastPersistedLabel,omitempty"`
+	LastPersistedAt      time.Time               `json:"lastPersistedAt,omitempty"`
+	LastError            string                  `json:"lastError,omitempty"`
+	UpdatedAt            time.Time               `json:"updatedAt"`
+}
+
+type SubscriberRobotStatus struct {
+	RobotCode        string    `json:"robotCode"`
+	TrackCount       int       `json:"trackCount"`
+	DataChannelCount int       `json:"dataChannelCount"`
+	LastTrackAt      time.Time `json:"lastTrackAt,omitempty"`
+	LastDataAt       time.Time `json:"lastDataAt,omitempty"`
+	LastPersistedAt  time.Time `json:"lastPersistedAt,omitempty"`
+	UpdatedAt        time.Time `json:"updatedAt"`
 }
 
 type recorderSignalMessage struct {
@@ -53,6 +64,7 @@ type recorderSessionStatus struct {
 	iceState             string
 	trackLabels          map[string]struct{}
 	dataChannelLabels    map[string]struct{}
+	robotStatuses        map[string]recorderRobotRuntime
 	dataMessageCount     int
 	sensorStoredCount    int
 	telemetryStoredCount int
@@ -63,6 +75,15 @@ type recorderSessionStatus struct {
 	lastPersistedAt      time.Time
 	lastError            string
 	updatedAt            time.Time
+}
+
+type recorderRobotRuntime struct {
+	trackLabels       map[string]struct{}
+	dataChannelLabels map[string]struct{}
+	lastTrackAt       time.Time
+	lastDataAt        time.Time
+	lastPersistedAt   time.Time
+	updatedAt         time.Time
 }
 
 func (w *Worker) runSubscriberLoop(ctx context.Context) {
@@ -139,6 +160,7 @@ func (w *Worker) ensureSubscriberSession(ctx context.Context, roomID string, tar
 		iceState:          "new",
 		trackLabels:       map[string]struct{}{},
 		dataChannelLabels: map[string]struct{}{},
+		robotStatuses:     map[string]recorderRobotRuntime{},
 		updatedAt:         time.Now().UTC(),
 	}
 	w.subscriberMu.Unlock()
@@ -176,6 +198,7 @@ func (w *Worker) SubscriberStatus() SubscriberStatus {
 			MissionCode:          roomStatus.missionCode,
 			RobotCode:            roomStatus.robotCode,
 			RobotCodes:           sortedRobotCodes(roomStatus.robotCodes),
+			Robots:               subscriberRobotStatuses(roomStatus),
 			SignalingState:       roomStatus.signalingState,
 			ICEState:             roomStatus.iceState,
 			TrackCount:           len(roomStatus.trackLabels),
@@ -212,6 +235,9 @@ func (w *Worker) updateSubscriberStatus(roomID string, update func(*recorderSess
 	}
 	if status.dataChannelLabels == nil {
 		status.dataChannelLabels = map[string]struct{}{}
+	}
+	if status.robotStatuses == nil {
+		status.robotStatuses = map[string]recorderRobotRuntime{}
 	}
 	update(&status)
 	status.updatedAt = time.Now().UTC()
@@ -379,12 +405,18 @@ func (w *Worker) createRecorderPeerConnection(ctx context.Context, roomID string
 			robotCode = w.singleSubscriberRobotCode(roomID)
 		}
 		trackLabel := recorderTrackLabel(robotCode, label)
+		observedAt := time.Now().UTC()
 		w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
 			if robotCode != "" {
 				status.robotCodes[robotCode] = struct{}{}
 				if status.robotCode == "" {
 					status.robotCode = robotCode
 				}
+				robotStatus := ensureRecorderRobotRuntime(status, robotCode)
+				robotStatus.trackLabels[label] = struct{}{}
+				robotStatus.lastTrackAt = observedAt
+				robotStatus.updatedAt = observedAt
+				status.robotStatuses[robotCode] = robotStatus
 			}
 			status.trackLabels[trackLabel] = struct{}{}
 			status.lastTrackLabel = trackLabel
@@ -471,6 +503,12 @@ func (w *Worker) persistRecorderDataChannelMessage(ctx context.Context, roomID s
 			if status.robotCode == "" {
 				status.robotCode = robotCode
 			}
+			observedAt := time.Now().UTC()
+			robotStatus := ensureRecorderRobotRuntime(status, robotCode)
+			robotStatus.dataChannelLabels[storageLabel] = struct{}{}
+			robotStatus.lastDataAt = observedAt
+			robotStatus.updatedAt = observedAt
+			status.robotStatuses[robotCode] = robotStatus
 		})
 	}
 	if err := w.appServerClient.PostDataChannelPayload(ctx, storageLabel, payload); err != nil {
@@ -484,6 +522,13 @@ func (w *Worker) persistRecorderDataChannelMessage(ctx context.Context, roomID s
 		switch storageLabel {
 		case "channel.telemetry", "channel.spatial":
 			status.telemetryStoredCount++
+		}
+		if robotCode := robotCodeFromDataPayload(payload); robotCode != "" {
+			persistedAt := time.Now().UTC()
+			robotStatus := ensureRecorderRobotRuntime(status, robotCode)
+			robotStatus.lastPersistedAt = persistedAt
+			robotStatus.updatedAt = persistedAt
+			status.robotStatuses[robotCode] = robotStatus
 		}
 		status.lastPersistedLabel = storageLabel
 		status.lastPersistedAt = time.Now().UTC()

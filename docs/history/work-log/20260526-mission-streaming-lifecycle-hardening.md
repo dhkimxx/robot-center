@@ -12,6 +12,7 @@ history:
 - "2026-05-26 danya.kim <danya.kim@thundersoft.com>: moved into docs/history lifecycle structure"
 - "2026-05-26 danya.kim <danya.kim@thundersoft.com>: renamed log file to YYYYMMDD-title format"
 - '2026-05-26 danya.kim <danya.kim@thundersoft.com>: standardized work log path and filename'
+- '2026-05-26 danya.kim <danya.kim@thundersoft.com>: script entrypoint names updated after scripts cleanup'
 ---
 
 # Mission Streaming Lifecycle Hardening
@@ -35,8 +36,8 @@ cd /Users/dhkim/workspace/sst/robot-center/apps/web
 npm test
 
 cd /Users/dhkim/workspace/sst/robot-center
-./scripts/dev-up.sh
-./scripts/python-mock-robots-up.sh
+./scripts/start.sh
+./scripts/mock-robots-python.sh
 curl -fsS http://127.0.0.1:18080/api/system/status
 curl -fsS http://127.0.0.1:18080/api/streaming-statuses
 ```
@@ -45,7 +46,7 @@ curl -fsS http://127.0.0.1:18080/api/streaming-statuses
 
 - Go server tests: `go test ./...` 통과
 - Web tests: `npm test` 통과, 9 files / 29 tests
-- Web build/dev stack: `./scripts/dev-up.sh` 통과
+- Web build/start script: `./scripts/start.sh` 통과
 - Python Mock Robot: robot-001, robot-002가 `mission-006` / `roomId=mission-006`에 publish
 - SFU room: `mission-006`, robot publisher 2, recorder subscriber 1
 - Recorder worker: `mission-006` subscriber `iceState=connected`, `trackCount=6`, `dataChannelCount=4`

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { componentLabels } from "../config/controlCenterConfig.js";
+import { countFreshObservedPublishers } from "../domains/missions/missionHelpers.js";
 
 function formatClock(date) {
   return new Intl.DateTimeFormat("ko-KR", {
@@ -18,12 +19,12 @@ function makeComponentLabel(component) {
   return `${label} ${component.status}`;
 }
 
-export default function AppStatusBar({ robots, statusError, streamingStatuses, systemStatus }) {
+export default function AppStatusBar({ observedStreams, robots, statusError, systemStatus }) {
   const [clockText, setClockText] = useState(() => formatClock(new Date()));
   const components = systemStatus?.components ?? [];
   const rooms = systemStatus?.sfuRooms ?? [];
   const onlineRobotCount = robots.filter((robot) => ["online", "streaming"].includes(robot.status)).length;
-  const streamingRobotCount = streamingStatuses.filter((status) => status.status === "streaming").length;
+  const streamingRobotCount = countFreshObservedPublishers(observedStreams);
   const componentSummary = components.slice(0, 2).map(makeComponentLabel).join(" · ");
   const leftSummary = statusError ? `서버 응답 대기 · ${statusError}` : componentSummary || "서비스 상태 확인 중";
   const rightSummary = `실시간 연결 ${rooms.length}개 · 로봇 ${onlineRobotCount}대 online · 송출 ${streamingRobotCount}개`;

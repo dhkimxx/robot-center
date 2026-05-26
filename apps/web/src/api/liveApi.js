@@ -8,6 +8,14 @@ export function fetchStreamingStatuses() {
   return requestJson("/api/streaming-statuses");
 }
 
+export function fetchObservedStreams() {
+  return requestJson("/api/observed-streams");
+}
+
+export function fetchMissionLiveStatus(missionCode) {
+  return requestJson(`/api/missions/${encodeURIComponent(missionCode)}/live-status`);
+}
+
 export function fetchSensorLatest(missionId, robotCode = "") {
   const params = new URLSearchParams({ missionId });
   if (robotCode) {

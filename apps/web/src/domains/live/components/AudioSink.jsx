@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { stopMediaStreamTracks } from "../liveMediaCleanup.js";
 
 export function AudioSink({ stream }) {
   const audioRef = useRef(null);
@@ -12,7 +13,10 @@ export function AudioSink({ stream }) {
       void audio.play().catch(() => {});
     }
     return () => {
-      audio.srcObject = null;
+      if (audio.srcObject === stream) {
+        audio.srcObject = null;
+      }
+      stopMediaStreamTracks(stream);
     };
   }, [stream]);
   return <audio ref={audioRef} autoPlay />;

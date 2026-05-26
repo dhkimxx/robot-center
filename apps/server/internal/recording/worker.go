@@ -19,11 +19,14 @@ type Worker struct {
 	subscriberMu         sync.RWMutex
 	subscriberCancels    map[string]context.CancelFunc
 	subscriberStatuses   map[string]recorderSessionStatus
+	chunkMu              sync.Mutex
 	mediaMu              sync.Mutex
+	activeTargets        map[string]domain.Mission
 	activeChunks         map[string]domain.RecordingChunk
 	pendingFinalizations map[string]recordingChunkFinalization
 	audioWriters         map[string]*activeAudioWriter
 	h264ParameterSets    map[string]h264ParameterSets
+	h264Timings          map[string]h264TrackTiming
 }
 
 func NewWorker(cfg config.RecorderWorkerConfig) *Worker {
@@ -47,10 +50,12 @@ func newWorkerWithCollaborators(cfg config.RecorderWorkerConfig, appServerClient
 		objectStorage:        objectStorage,
 		subscriberCancels:    map[string]context.CancelFunc{},
 		subscriberStatuses:   map[string]recorderSessionStatus{},
+		activeTargets:        map[string]domain.Mission{},
 		activeChunks:         map[string]domain.RecordingChunk{},
 		pendingFinalizations: map[string]recordingChunkFinalization{},
 		audioWriters:         map[string]*activeAudioWriter{},
 		h264ParameterSets:    map[string]h264ParameterSets{},
+		h264Timings:          map[string]h264TrackTiming{},
 	}
 	worker.mediaUploader = NewMediaUploader(appServerClient, objectStorage, worker)
 	return worker
@@ -82,27 +87,31 @@ func (w *Worker) tick(ctx context.Context) {
 	}
 	activeTargetKeys := map[string]struct{}{}
 	if len(targets) == 0 {
+		w.updateActiveRecordingTargets(nil)
 		w.finalizeInactiveRecordingChunks(activeTargetKeys)
 		w.processPendingRecordingChunkFinalizations(ctx)
 		log.Println("recorder-worker tick: no active recording targets")
 		return
 	}
 
+	activeTargetKeys = w.updateActiveRecordingTargets(targets)
+	w.finalizeInactiveRecordingChunks(activeTargetKeys)
+	w.processPendingRecordingChunkFinalizations(ctx)
+}
+
+func (w *Worker) updateActiveRecordingTargets(targets []domain.Mission) map[string]struct{} {
+	activeTargetKeys := map[string]struct{}{}
+	activeTargets := map[string]domain.Mission{}
 	for _, target := range targets {
 		mediaKey := recorderMediaKey(target.MissionCode, target.RobotCode)
 		activeTargetKeys[mediaKey] = struct{}{}
-		result, err := w.appServerClient.CreateRecordingTick(ctx, target, w.config.RecordingChunkDuration, time.Now().UTC())
-		if err != nil {
-			log.Printf("recorder-worker tick failed mission=%s robot=%s: %v", target.MissionCode, target.RobotCode, err)
-			continue
-		}
-		previousChunk, shouldFinalizePreviousChunk := w.setActiveRecordingChunk(mediaKey, result.Chunk)
-		if shouldFinalizePreviousChunk {
-			w.queueRecordingChunkFinalization(mediaKey, previousChunk)
-		}
+		activeTargets[mediaKey] = target
 	}
-	w.finalizeInactiveRecordingChunks(activeTargetKeys)
-	w.processPendingRecordingChunkFinalizations(ctx)
+
+	w.mediaMu.Lock()
+	w.activeTargets = activeTargets
+	w.mediaMu.Unlock()
+	return activeTargetKeys
 }
 
 func (w *Worker) finalizeInactiveRecordingChunks(activeTargetKeys map[string]struct{}) {

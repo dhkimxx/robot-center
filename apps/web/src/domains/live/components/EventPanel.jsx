@@ -2,12 +2,13 @@ import EmptyState from "../../../components/ui/EmptyState.jsx";
 import SectionHeader from "../../../components/ui/SectionHeader.jsx";
 import Surface from "../../../components/ui/Surface.jsx";
 import { formatDateTime } from "../../../utils/formatters.js";
+import { cn } from "../../../utils/cn.js";
 
-export function EventPanel({ liveEvents }) {
+export function EventPanel({ className = "", liveEvents }) {
   return (
-    <Surface className="grid gap-3">
+    <Surface className={cn("grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden", className)}>
       <SectionHeader className="mb-0" title="이벤트" meta={`${liveEvents.length}건`} />
-      <div className="grid max-h-[220px] content-start gap-2 overflow-auto pr-1">
+      <div className="grid min-h-0 content-start gap-2 overflow-auto pr-1">
         {liveEvents.length === 0 ? (
           <EmptyState>관제 연결 이벤트가 없습니다.</EmptyState>
         ) : (

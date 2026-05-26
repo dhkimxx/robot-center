@@ -278,6 +278,9 @@ func (h *Hub) publishRobotTrack(roomID string, robotCode string, remoteTrack *we
 	if publisher.streamBundle != nil {
 		publisher.streamBundle.Tracks[label] = publishedTrack
 	}
+	now := time.Now().UTC()
+	publisher.lastTrackAt = &now
+	publisher.updatedAt = now
 	h.mu.Unlock()
 
 	log.Printf("sfu robot track published room=%s robot=%s label=%s key=%s kind=%s codec=%s", roomID, robotCode, label, trackKey, remoteTrack.Kind().String(), remoteTrack.Codec().MimeType)
@@ -286,11 +289,17 @@ func (h *Hub) publishRobotTrack(roomID string, robotCode string, remoteTrack *we
 }
 
 func (h *Hub) forwardRTP(roomID string, trackKey string, remoteTrack *webrtc.TrackRemote, localTrack *webrtc.TrackLocalStaticRTP) {
+	lastObservedAt := time.Time{}
 	for {
 		packet, _, err := remoteTrack.ReadRTP()
 		if err != nil {
 			log.Printf("sfu robot track ended room=%s track=%s: %v", roomID, trackKey, err)
 			return
+		}
+		now := time.Now().UTC()
+		if now.Sub(lastObservedAt) >= time.Second {
+			lastObservedAt = now
+			h.markPublisherTrackActivity(roomID, trackKey, now)
 		}
 		if err := localTrack.WriteRTP(cloneRTPPacket(packet)); err != nil {
 			log.Printf("sfu rtp forward failed room=%s track=%s: %v", roomID, trackKey, err)
@@ -601,6 +610,67 @@ func (h *Hub) forwardDataChannelMessage(roomID string, robotCode string, label s
 			log.Printf("sfu datachannel send failed room=%s robot=%s label=%s: %v", roomID, robotCode, label, err)
 		}
 	}
+}
+
+func (h *Hub) markPublisherICEState(roomID string, robotCode string, peerID string, iceState string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	publisher := h.findPublisherLocked(roomID, robotCode, peerID)
+	if publisher == nil {
+		return
+	}
+	now := time.Now().UTC()
+	publisher.iceState = iceState
+	publisher.updatedAt = now
+}
+
+func (h *Hub) markPublisherTrackActivity(roomID string, trackKey string, observedAt time.Time) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	currentRoom := h.rooms[roomID]
+	if currentRoom == nil {
+		return
+	}
+	publisher, _ := currentRoom.findPublishedTrack(trackKey)
+	if publisher == nil {
+		return
+	}
+	now := observedAt.UTC()
+	publisher.lastTrackAt = &now
+	publisher.updatedAt = now
+}
+
+func (h *Hub) markPublisherDataChannel(roomID string, robotCode string, peerID string, label string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	publisher := h.findPublisherLocked(roomID, robotCode, peerID)
+	if publisher == nil {
+		return
+	}
+	if publisher.streamBundle != nil {
+		publisher.streamBundle.DataChannels[label] = &PublishedDataChannel{Role: label}
+	}
+	now := time.Now().UTC()
+	publisher.updatedAt = now
+}
+
+func (h *Hub) markPublisherDataActivity(roomID string, robotCode string, peerID string, label string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	publisher := h.findPublisherLocked(roomID, robotCode, peerID)
+	if publisher == nil {
+		return
+	}
+	if publisher.streamBundle != nil {
+		publisher.streamBundle.DataChannels[label] = &PublishedDataChannel{Role: label}
+	}
+	now := time.Now().UTC()
+	publisher.lastDataAt = &now
+	publisher.updatedAt = now
 }
 
 func (h *Hub) createPeerConnection() (*webrtc.PeerConnection, error) {

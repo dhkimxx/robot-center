@@ -28,6 +28,7 @@ type MemoryStore struct {
 	streamingByRobotCode     map[string]domain.StreamingStatus
 	sensorDescriptors        map[string]domain.SensorDescriptor
 	sensorSamplesByMissionID map[string][]domain.SensorSample
+	recordingSessionsByKey   map[string]RecordingSession
 	recordingChunksByID      map[string]domain.RecordingChunk
 	recordingChunkKeyToID    map[string]string
 }
@@ -42,6 +43,7 @@ func NewMemoryStore(serverURL string) *MemoryStore {
 		streamingByRobotCode:     map[string]domain.StreamingStatus{},
 		sensorDescriptors:        map[string]domain.SensorDescriptor{},
 		sensorSamplesByMissionID: map[string][]domain.SensorSample{},
+		recordingSessionsByKey:   map[string]RecordingSession{},
 		recordingChunksByID:      map[string]domain.RecordingChunk{},
 		recordingChunkKeyToID:    map[string]string{},
 	}
@@ -693,8 +695,20 @@ func (s *MemoryStore) FindRecordingTarget(_ context.Context, missionCode string,
 	}, nil
 }
 
-func (s *MemoryStore) FindOrCreateRecordingSession(_ context.Context, missionID string, robotID string, _ int, _ time.Time) (string, error) {
-	return fmt.Sprintf("session-%s-%s", missionID, robotID), nil
+func (s *MemoryStore) FindOrCreateRecordingSession(_ context.Context, missionID string, robotID string, _ int, startedAt time.Time) (RecordingSession, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	sessionKey := fmt.Sprintf("%s|%s", missionID, robotID)
+	if session, ok := s.recordingSessionsByKey[sessionKey]; ok {
+		return session, nil
+	}
+	session := RecordingSession{
+		ID:        fmt.Sprintf("session-%s-%s", missionID, robotID),
+		StartedAt: startedAt,
+	}
+	s.recordingSessionsByKey[sessionKey] = session
+	return session, nil
 }
 
 func (s *MemoryStore) FindRecordingChunk(_ context.Context, recordingSessionID string, chunkIndex int) (domain.RecordingChunk, bool, error) {

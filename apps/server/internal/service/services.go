@@ -15,6 +15,7 @@ type Services struct {
 	Streaming *StreamingService
 	Sensors   *SensorService
 	Recording *RecordingService
+	Live      *LiveStatusService
 
 	transactionRunner store.TransactionRunner
 }
@@ -27,6 +28,7 @@ func NewServices(repository store.Store) *Services {
 		Streaming:         &StreamingService{repository: repository},
 		Sensors:           &SensorService{repository: repository},
 		Recording:         &RecordingService{repository: repository, transactionRunner: transactionRunner},
+		Live:              &LiveStatusService{},
 		transactionRunner: transactionRunner,
 	}
 }
@@ -182,17 +184,17 @@ func (s *RecordingService) applyRecordingTick(ctx context.Context, repository st
 		return domain.RecordingTickResult{}, store.ErrInvalidState
 	}
 
-	recordingSessionID, err := repository.FindOrCreateRecordingSession(ctx, target.Mission.ID, target.RobotID, input.ChunkDurationSeconds, input.TickAt)
+	recordingSession, err := repository.FindOrCreateRecordingSession(ctx, target.Mission.ID, target.RobotID, input.ChunkDurationSeconds, input.TickAt)
 	if err != nil {
 		return domain.RecordingTickResult{}, err
 	}
 
-	chunkBase := input.TickAt
-	if target.Mission.StartedAt != nil {
-		chunkBase = *target.Mission.StartedAt
+	chunkBase := recordingSession.StartedAt
+	if chunkBase.IsZero() {
+		chunkBase = input.TickAt
 	}
 	chunkWindow := domain.NewRecordingChunkWindow(chunkBase, input.TickAt, input.ChunkDurationSeconds)
-	existingChunk, found, err := repository.FindRecordingChunk(ctx, recordingSessionID, chunkWindow.Index)
+	existingChunk, found, err := repository.FindRecordingChunk(ctx, recordingSession.ID, chunkWindow.Index)
 	if err != nil {
 		return domain.RecordingTickResult{}, err
 	}
@@ -205,7 +207,7 @@ func (s *RecordingService) applyRecordingTick(ctx context.Context, repository st
 
 	mediaKeys := domain.NewRecordingObjectKeys(target.Mission.MissionCode, input.RobotCode, chunkWindow.StartedAt, chunkWindow.EndedAt)
 	chunk, err := repository.CreateRecordingChunk(ctx, store.CreateRecordingChunkInput{
-		RecordingSessionID: recordingSessionID,
+		RecordingSessionID: recordingSession.ID,
 		MissionID:          target.Mission.ID,
 		MissionCode:        target.Mission.MissionCode,
 		RobotID:            target.RobotID,

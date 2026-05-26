@@ -21,7 +21,8 @@ type recordingRepositorySpy struct {
 		chunkDurationSeconds int
 		startedAt            time.Time
 	}
-	findChunkInput struct {
+	sessionStartedAt time.Time
+	findChunkInput   struct {
 		recordingSessionID string
 		chunkIndex         int
 	}
@@ -60,12 +61,16 @@ func (r *recordingRepositorySpy) FindRecordingTarget(_ context.Context, missionC
 	}, nil
 }
 
-func (r *recordingRepositorySpy) FindOrCreateRecordingSession(_ context.Context, missionID string, robotID string, chunkDurationSeconds int, startedAt time.Time) (string, error) {
+func (r *recordingRepositorySpy) FindOrCreateRecordingSession(_ context.Context, missionID string, robotID string, chunkDurationSeconds int, startedAt time.Time) (store.RecordingSession, error) {
 	r.sessionInput.missionID = missionID
 	r.sessionInput.robotID = robotID
 	r.sessionInput.chunkDurationSeconds = chunkDurationSeconds
 	r.sessionInput.startedAt = startedAt
-	return "session-001", nil
+	sessionStartedAt := r.sessionStartedAt
+	if sessionStartedAt.IsZero() {
+		sessionStartedAt = startedAt
+	}
+	return store.RecordingSession{ID: "session-001", StartedAt: sessionStartedAt}, nil
 }
 
 func (r *recordingRepositorySpy) FindRecordingChunk(_ context.Context, recordingSessionID string, chunkIndex int) (domain.RecordingChunk, bool, error) {
@@ -264,7 +269,9 @@ func TestRecordingServiceApplyRecordingTickPreservesExplicitInput(t *testing.T) 
 }
 
 func TestRecordingServiceApplyRecordingTickCreatesChunkWithDomainRules(t *testing.T) {
-	repository := &recordingRepositorySpy{}
+	repository := &recordingRepositorySpy{
+		sessionStartedAt: time.Date(2026, 5, 23, 1, 10, 0, 0, time.UTC),
+	}
 	service := &RecordingService{repository: repository}
 	tickAt := time.Date(2026, 5, 23, 1, 22, 0, 0, time.UTC)
 
@@ -281,8 +288,8 @@ func TestRecordingServiceApplyRecordingTickCreatesChunkWithDomainRules(t *testin
 	if repository.findChunkInput.recordingSessionID != "session-001" {
 		t.Fatalf("FindRecordingChunk session = %q", repository.findChunkInput.recordingSessionID)
 	}
-	if repository.findChunkInput.chunkIndex != 2 {
-		t.Fatalf("FindRecordingChunk chunkIndex = %d, want 2", repository.findChunkInput.chunkIndex)
+	if repository.findChunkInput.chunkIndex != 1 {
+		t.Fatalf("FindRecordingChunk chunkIndex = %d, want 1", repository.findChunkInput.chunkIndex)
 	}
 	if repository.createInput.MediaObjectKeys["manifest"] == "" {
 		t.Fatal("expected manifest object key")

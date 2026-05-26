@@ -32,6 +32,28 @@ type RoomSummary struct {
 	Peers           []PeerSummary `json:"peers"`
 }
 
+type ObservedRoomSummary struct {
+	RoomID     string                     `json:"roomId"`
+	MediaMode  string                     `json:"mediaMode"`
+	Publishers []ObservedPublisherSummary `json:"publishers"`
+}
+
+type ObservedPublisherSummary struct {
+	RobotCode        string     `json:"robotCode"`
+	PublisherPeerID  string     `json:"publisherPeerId"`
+	State            string     `json:"state"`
+	ICEState         string     `json:"iceState,omitempty"`
+	TrackCount       int        `json:"trackCount"`
+	DataChannelCount int        `json:"dataChannelCount"`
+	SubscriberCount  int        `json:"subscriberCount"`
+	Tracks           []string   `json:"tracks"`
+	DataChannels     []string   `json:"dataChannels"`
+	JoinedAt         time.Time  `json:"joinedAt"`
+	LastTrackAt      *time.Time `json:"lastTrackAt,omitempty"`
+	LastDataAt       *time.Time `json:"lastDataAt,omitempty"`
+	UpdatedAt        time.Time  `json:"updatedAt"`
+}
+
 type PeerSummary struct {
 	PeerID            string    `json:"peerId"`
 	Role              string    `json:"role"`
@@ -64,6 +86,11 @@ type publisherSession struct {
 	peerConnection  *webrtc.PeerConnection
 	streamBundle    *RobotStreamBundle
 	publishedTracks map[string]*publishedTrack
+	joinedAt        time.Time
+	iceState        string
+	lastTrackAt     *time.Time
+	lastDataAt      *time.Time
+	updatedAt       time.Time
 }
 
 type publishedTrack struct {

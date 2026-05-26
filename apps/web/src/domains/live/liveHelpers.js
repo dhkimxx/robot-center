@@ -1,5 +1,6 @@
 import { makeMissionRobotKey } from "../missions/missionHelpers.js";
 import { LiveSessionStatus } from "./liveConnectionStates.js";
+import { createEmptyVideoStreams } from "./liveMediaCleanup.js";
 
 export function createEmptyLiveSession() {
   return {
@@ -8,7 +9,7 @@ export function createEmptyLiveSession() {
     sensor: null,
     status: LiveSessionStatus.DISCONNECTED,
     telemetry: null,
-    videoStreams: { rgb: null, thermal: null, audio: null }
+    videoStreams: createEmptyVideoStreams()
   };
 }
 
@@ -64,20 +65,36 @@ export function findRobotCodeFromDataMessage(message) {
   }
 }
 
-export function formatMediaChannelCount(streamingStatus) {
-  const channelCount = streamingStatus?.publishedTracks?.length ?? 0;
-  return channelCount > 0 ? `${channelCount}개 채널` : "송출 대기";
+export function formatMediaChannelCount(streamSource) {
+  const mediaCount = streamSource?.trackCount
+    ?? streamSource?.tracks?.length
+    ?? streamSource?.publishedTracks?.length
+    ?? 0;
+  const dataChannelCount = streamSource?.dataChannelCount
+    ?? streamSource?.dataChannels?.length
+    ?? streamSource?.publishedDataChannels?.length
+    ?? 0;
+  if (mediaCount > 0 && dataChannelCount > 0) {
+    return `미디어 ${mediaCount} / 데이터 ${dataChannelCount}`;
+  }
+  if (mediaCount > 0) {
+    return `미디어 ${mediaCount}`;
+  }
+  if (dataChannelCount > 0) {
+    return `데이터 ${dataChannelCount}`;
+  }
+  return "송출 대기";
 }
 
-export function getStreamingSubscriberCount(streamingStatus) {
-  return streamingStatus?.subscriberCount
-    ?? streamingStatus?.operatorCount
-    ?? streamingStatus?.browserCount
-    ?? streamingStatus?.viewerCount
+export function getStreamingSubscriberCount(streamSource) {
+  return streamSource?.subscriberCount
+    ?? streamSource?.operatorCount
+    ?? streamSource?.browserCount
+    ?? streamSource?.viewerCount
     ?? null;
 }
 
-export function formatStreamingSubscriberCount(streamingStatus) {
-  const subscriberCount = getStreamingSubscriberCount(streamingStatus);
+export function formatStreamingSubscriberCount(streamSource) {
+  const subscriberCount = getStreamingSubscriberCount(streamSource);
   return subscriberCount === null ? "관제 -" : `관제 ${subscriberCount}명`;
 }

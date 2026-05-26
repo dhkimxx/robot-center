@@ -176,6 +176,46 @@ func TestHubSummarizesMultiPublisherMissionRoom(t *testing.T) {
 	}
 }
 
+func TestHubObservedRoomsSummarizePublisherActivity(t *testing.T) {
+	hub := NewHub()
+	roomID := "mission-001"
+	observedAt := time.Now().UTC()
+
+	hub.mu.Lock()
+	currentRoom := hub.ensureRoomLocked(roomID)
+	publisher := newPublisherSession("robot-peer", "robot-001", nil)
+	publisher.iceState = "connected"
+	publisher.lastTrackAt = &observedAt
+	publisher.lastDataAt = &observedAt
+	publisher.updatedAt = observedAt
+	publisher.publishedTracks[publishedTrackKey("robot-001", StreamRoleTrackVideo1)] = &publishedTrack{
+		key:       publishedTrackKey("robot-001", StreamRoleTrackVideo1),
+		robotCode: "robot-001",
+		label:     StreamRoleTrackVideo1,
+	}
+	publisher.streamBundle.DataChannels[StreamRoleChannelTelemetry] = &PublishedDataChannel{Role: StreamRoleChannelTelemetry}
+	currentRoom.publishers[publisher.robotCode] = publisher
+	currentRoom.subscribers["operator-peer"] = newSubscriberSession("operator-peer", "operator", "robot-001", nil)
+	currentRoom.subscribers["recorder-peer"] = newSubscriberSession("recorder-peer", "recorder", "", nil)
+	hub.mu.Unlock()
+
+	rooms := hub.ObservedRooms()
+	if len(rooms) != 1 {
+		t.Fatalf("expected one observed room, got %#v", rooms)
+	}
+	publishers := rooms[0].Publishers
+	if len(publishers) != 1 {
+		t.Fatalf("expected one observed publisher, got %#v", rooms[0])
+	}
+	publisherSummary := publishers[0]
+	if publisherSummary.State != "publishing" || publisherSummary.TrackCount != 1 || publisherSummary.DataChannelCount != 1 {
+		t.Fatalf("unexpected observed publisher summary: %#v", publisherSummary)
+	}
+	if publisherSummary.SubscriberCount != 2 {
+		t.Fatalf("expected operator and recorder subscriber count, got %#v", publisherSummary)
+	}
+}
+
 func TestHubPublishedTrackKeysAreRobotScoped(t *testing.T) {
 	rgbA := publishedTrackKey("robot-001", StreamRoleTrackVideo1)
 	rgbB := publishedTrackKey("robot-002", StreamRoleTrackVideo1)

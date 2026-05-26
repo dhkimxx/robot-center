@@ -78,6 +78,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/system/status", s.handleSystemStatus)
 	mux.HandleFunc("GET /api/rtc-config", s.handleRTCConfig)
 	mux.HandleFunc("GET /api/recording-targets", s.handleRecordingTargets)
+	mux.HandleFunc("GET /api/observed-streams", s.handleObservedStreams)
 	mux.HandleFunc("GET /api/streaming-statuses", s.handleListStreamingStatuses)
 	mux.HandleFunc("GET /api/sensor-descriptors", s.handleListSensorDescriptors)
 	mux.HandleFunc("POST /api/sensor-descriptors", s.handleCreateSensorSamples)
@@ -95,6 +96,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/robots/{robotCode}/connection-info", s.handleGetRobotConnectionInfo)
 	mux.HandleFunc("POST /api/robots/{robotCode}/connection-token", s.handleRotateRobotConnectionToken)
 	mux.HandleFunc("GET /api/missions", s.handleListMissions)
+	mux.HandleFunc("GET /api/missions/{missionCode}/live-status", s.handleMissionLiveStatus)
 	mux.HandleFunc("POST /api/missions", s.handleCreateMission)
 	mux.HandleFunc("POST /api/missions/{missionCode}/start", s.handleStartMission)
 	mux.HandleFunc("POST /api/missions/{missionCode}/end", s.handleEndMission)
@@ -197,6 +199,47 @@ func (s *Server) handleListStreamingStatuses(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusOK, map[string]any{
 		"streamingStatuses": dto.StreamingStatuses(statuses),
 	})
+}
+
+func (s *Server) handleObservedStreams(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"rooms":      s.sfuHub.ObservedRooms(),
+		"observedAt": time.Now().UTC().Format(time.RFC3339Nano),
+	})
+}
+
+func (s *Server) handleMissionLiveStatus(w http.ResponseWriter, r *http.Request) {
+	missionCode := strings.TrimSpace(r.PathValue("missionCode"))
+	missions, err := s.services.Missions.ListMissions(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	mission, found := findMissionByCode(missions, missionCode)
+	if !found {
+		writeError(w, http.StatusNotFound, store.ErrNotFound)
+		return
+	}
+	robots, err := s.services.Robots.ListRobots(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	recordings, err := s.services.Recording.ListRecordingChunks(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	liveStatus := s.services.Live.BuildMissionLiveStatus(service.LiveStatusInput{
+		Mission:         mission,
+		Robots:          robots,
+		RecordingChunks: recordings,
+		ObservedRooms:   s.sfuHub.ObservedRooms(),
+		Recorder:        s.fetchRecorderRuntimeSnapshot(r.Context()),
+		Now:             time.Now().UTC(),
+		FreshnessWindow: 30 * time.Second,
+	})
+	writeJSON(w, http.StatusOK, dto.MissionLiveStatus(liveStatus))
 }
 
 func (s *Server) handleListSensorDescriptors(w http.ResponseWriter, r *http.Request) {
@@ -769,6 +812,102 @@ func (s *Server) componentHTTPStatus(ctx context.Context, targetURL string) stri
 		return "ok"
 	}
 	return "degraded"
+}
+
+type recorderHealthResponse struct {
+	Subscriber recorderSubscriberHealth `json:"subscriber"`
+}
+
+type recorderSubscriberHealth struct {
+	Rooms []recorderRoomHealth `json:"rooms"`
+}
+
+type recorderRoomHealth struct {
+	RoomID      string                `json:"roomId"`
+	MissionCode string                `json:"missionCode"`
+	Robots      []recorderRobotHealth `json:"robots"`
+}
+
+type recorderRobotHealth struct {
+	RobotCode        string    `json:"robotCode"`
+	TrackCount       int       `json:"trackCount"`
+	DataChannelCount int       `json:"dataChannelCount"`
+	LastTrackAt      time.Time `json:"lastTrackAt"`
+	LastDataAt       time.Time `json:"lastDataAt"`
+	LastPersistedAt  time.Time `json:"lastPersistedAt"`
+}
+
+func (s *Server) fetchRecorderRuntimeSnapshot(ctx context.Context) service.RecorderRuntimeSnapshot {
+	targetURL := strings.TrimSpace(s.config.RecorderWorkerURL)
+	if targetURL == "" {
+		return service.RecorderRuntimeSnapshot{}
+	}
+	recorderURL, err := url.JoinPath(targetURL, "healthz")
+	if err != nil {
+		return service.RecorderRuntimeSnapshot{}
+	}
+	requestContext, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+	defer cancel()
+	request, err := http.NewRequestWithContext(requestContext, http.MethodGet, recorderURL, nil)
+	if err != nil {
+		return service.RecorderRuntimeSnapshot{}
+	}
+	response, err := (&http.Client{Timeout: 500 * time.Millisecond}).Do(request)
+	if err != nil {
+		return service.RecorderRuntimeSnapshot{}
+	}
+	defer response.Body.Close()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		return service.RecorderRuntimeSnapshot{}
+	}
+	var payload recorderHealthResponse
+	if err := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&payload); err != nil {
+		return service.RecorderRuntimeSnapshot{}
+	}
+	return service.RecorderRuntimeSnapshot{
+		Available: true,
+		Rooms:     recorderRuntimeRooms(payload.Subscriber.Rooms),
+	}
+}
+
+func recorderRuntimeRooms(rooms []recorderRoomHealth) []service.RecorderRoomRuntime {
+	output := make([]service.RecorderRoomRuntime, 0, len(rooms))
+	for _, room := range rooms {
+		robots := make([]service.RecorderRobotRuntime, 0, len(room.Robots))
+		for _, robot := range room.Robots {
+			robots = append(robots, service.RecorderRobotRuntime{
+				RobotCode:        strings.TrimSpace(robot.RobotCode),
+				TrackCount:       robot.TrackCount,
+				DataChannelCount: robot.DataChannelCount,
+				LastTrackAt:      nonZeroTimePointer(robot.LastTrackAt),
+				LastDataAt:       nonZeroTimePointer(robot.LastDataAt),
+				LastPersistedAt:  nonZeroTimePointer(robot.LastPersistedAt),
+			})
+		}
+		output = append(output, service.RecorderRoomRuntime{
+			RoomID:      strings.TrimSpace(room.RoomID),
+			MissionCode: strings.TrimSpace(room.MissionCode),
+			Robots:      robots,
+		})
+	}
+	return output
+}
+
+func nonZeroTimePointer(value time.Time) *time.Time {
+	if value.IsZero() {
+		return nil
+	}
+	normalized := value.UTC()
+	return &normalized
+}
+
+func findMissionByCode(missions []domain.Mission, missionCode string) (domain.Mission, bool) {
+	for _, mission := range missions {
+		if mission.MissionCode == missionCode {
+			return mission, true
+		}
+	}
+	return domain.Mission{}, false
 }
 
 func writeError(w http.ResponseWriter, status int, err error) {

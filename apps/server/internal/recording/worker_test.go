@@ -86,24 +86,13 @@ func (u *fakeMediaUploader) UploadMediaSnapshots(_ context.Context, mediaKey str
 	return nil
 }
 
-func TestWorkerTickSetsActiveChunkWithoutUploadingCurrentChunk(t *testing.T) {
+func TestWorkerTickCachesTargetsWithoutOpeningChunk(t *testing.T) {
 	target := domain.Mission{
 		MissionCode: "mission-001",
 		RobotCode:   "robot-001",
 	}
-	chunk := domain.RecordingChunk{
-		ID:                "chunk-001",
-		MissionCode:       "mission-001",
-		RobotCode:         "robot-001",
-		ManifestObjectKey: "missions/mission-001/robots/robot-001/manifest.json",
-		MediaObjectKeys:   map[string]string{},
-	}
 	appServerClient := &fakeAppServerClient{
 		targets: []domain.Mission{target},
-		tickResult: domain.RecordingTickResult{
-			Chunk:    chunk,
-			Manifest: map[string]any{"chunkId": chunk.ID},
-		},
 	}
 	objectStorage := &fakeObjectStorage{manifestSize: 42}
 	mediaUploader := &fakeMediaUploader{}
@@ -116,14 +105,8 @@ func TestWorkerTickSetsActiveChunkWithoutUploadingCurrentChunk(t *testing.T) {
 
 	worker.tick(context.Background())
 
-	if appServerClient.tickTarget.MissionCode != target.MissionCode || appServerClient.tickTarget.RobotCode != target.RobotCode {
-		t.Fatalf("tick target = %#v, want %#v", appServerClient.tickTarget, target)
-	}
-	if appServerClient.tickDuration != 10*time.Minute {
-		t.Fatalf("tick duration = %s, want 10m", appServerClient.tickDuration)
-	}
-	if appServerClient.tickAt.IsZero() {
-		t.Fatal("tickAt was not populated")
+	if len(appServerClient.tickTargets) != 0 {
+		t.Fatalf("tick opened recording chunks before media arrived: %#v", appServerClient.tickTargets)
 	}
 	if objectStorage.manifestUploads != 0 {
 		t.Fatalf("manifest uploads = %d, want 0", objectStorage.manifestUploads)
@@ -134,23 +117,75 @@ func TestWorkerTickSetsActiveChunkWithoutUploadingCurrentChunk(t *testing.T) {
 	if appServerClient.markedChunkID != "" {
 		t.Fatalf("marked chunk id = %q, want empty", appServerClient.markedChunkID)
 	}
-	activeChunk := worker.activeChunks[recorderMediaKey(target.MissionCode, target.RobotCode)]
-	if activeChunk.ID != chunk.ID {
-		t.Fatalf("active chunk id = %q, want %q", activeChunk.ID, chunk.ID)
+	mediaKey := recorderMediaKey(target.MissionCode, target.RobotCode)
+	if _, ok := worker.activeChunks[mediaKey]; ok {
+		t.Fatal("active chunk was created before media arrived")
+	}
+	if cachedTarget, ok := worker.activeTargets[mediaKey]; !ok || cachedTarget.MissionCode != target.MissionCode {
+		t.Fatalf("active target was not cached: %#v", worker.activeTargets)
 	}
 }
 
-func TestWorkerTickFinalizesPreviousChunkOnRollover(t *testing.T) {
+func TestWorkerOpensChunkWhenMediaArrives(t *testing.T) {
 	target := domain.Mission{
 		MissionCode: "mission-001",
 		RobotCode:   "robot-001",
 	}
+	observedAt := time.Date(2026, 5, 26, 1, 0, 0, 0, time.UTC)
 	chunk1 := domain.RecordingChunk{
 		ID:                "chunk-001",
 		MissionCode:       "mission-001",
 		RobotCode:         "robot-001",
 		ManifestObjectKey: "missions/mission-001/robots/robot-001/chunk-001_manifest.json",
 		MediaObjectKeys:   map[string]string{},
+		EndedAt:           observedAt.Add(10 * time.Minute),
+	}
+	appServerClient := &fakeAppServerClient{
+		targets:    []domain.Mission{target},
+		tickResult: domain.RecordingTickResult{Chunk: chunk1},
+	}
+	objectStorage := &fakeObjectStorage{manifestSize: 42}
+	worker := newWorkerWithCollaborators(
+		config.RecorderWorkerConfig{RecordingChunkDuration: 10 * time.Minute},
+		appServerClient,
+		objectStorage,
+	)
+
+	worker.tick(context.Background())
+	chunk, ok, err := worker.ensureActiveRecordingChunk(context.Background(), recorderMediaKey(target.MissionCode, target.RobotCode), observedAt)
+	if err != nil {
+		t.Fatalf("ensureActiveRecordingChunk returned error: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected media arrival to open a recording chunk")
+	}
+	if chunk.ID != chunk1.ID {
+		t.Fatalf("active chunk id = %q, want %q", chunk.ID, chunk1.ID)
+	}
+	if appServerClient.tickTarget.MissionCode != target.MissionCode || appServerClient.tickTarget.RobotCode != target.RobotCode {
+		t.Fatalf("tick target = %#v, want %#v", appServerClient.tickTarget, target)
+	}
+	if appServerClient.tickDuration != 10*time.Minute {
+		t.Fatalf("tick duration = %s, want 10m", appServerClient.tickDuration)
+	}
+	if !appServerClient.tickAt.Equal(observedAt) {
+		t.Fatalf("tickAt = %s, want %s", appServerClient.tickAt, observedAt)
+	}
+}
+
+func TestWorkerFinalizesPreviousChunkOnRollover(t *testing.T) {
+	target := domain.Mission{
+		MissionCode: "mission-001",
+		RobotCode:   "robot-001",
+	}
+	observedAt := time.Date(2026, 5, 26, 1, 0, 0, 0, time.UTC)
+	chunk1 := domain.RecordingChunk{
+		ID:                "chunk-001",
+		MissionCode:       "mission-001",
+		RobotCode:         "robot-001",
+		ManifestObjectKey: "missions/mission-001/robots/robot-001/chunk-001_manifest.json",
+		MediaObjectKeys:   map[string]string{},
+		EndedAt:           observedAt.Add(10 * time.Minute),
 	}
 	chunk2 := domain.RecordingChunk{
 		ID:                "chunk-002",
@@ -158,6 +193,7 @@ func TestWorkerTickFinalizesPreviousChunkOnRollover(t *testing.T) {
 		RobotCode:         "robot-001",
 		ManifestObjectKey: "missions/mission-001/robots/robot-001/chunk-002_manifest.json",
 		MediaObjectKeys:   map[string]string{},
+		EndedAt:           observedAt.Add(20 * time.Minute),
 	}
 	appServerClient := &fakeAppServerClient{
 		targets: []domain.Mission{target},
@@ -176,7 +212,13 @@ func TestWorkerTickFinalizesPreviousChunkOnRollover(t *testing.T) {
 	worker.mediaUploader = mediaUploader
 
 	worker.tick(context.Background())
-	worker.tick(context.Background())
+	if _, _, err := worker.ensureActiveRecordingChunk(context.Background(), recorderMediaKey(target.MissionCode, target.RobotCode), observedAt); err != nil {
+		t.Fatalf("first chunk open failed: %v", err)
+	}
+	if _, _, err := worker.ensureActiveRecordingChunk(context.Background(), recorderMediaKey(target.MissionCode, target.RobotCode), observedAt.Add(11*time.Minute)); err != nil {
+		t.Fatalf("second chunk open failed: %v", err)
+	}
+	worker.processPendingRecordingChunkFinalizations(context.Background())
 
 	if len(mediaUploader.finalizedChunks) != 1 {
 		t.Fatalf("finalized chunks = %d, want 1", len(mediaUploader.finalizedChunks))
@@ -204,12 +246,14 @@ func TestWorkerTickFinalizesActiveChunkWhenTargetDisappears(t *testing.T) {
 		MissionCode: "mission-001",
 		RobotCode:   "robot-001",
 	}
+	observedAt := time.Date(2026, 5, 26, 1, 0, 0, 0, time.UTC)
 	chunk := domain.RecordingChunk{
 		ID:                "chunk-001",
 		MissionCode:       "mission-001",
 		RobotCode:         "robot-001",
 		ManifestObjectKey: "missions/mission-001/robots/robot-001/chunk-001_manifest.json",
 		MediaObjectKeys:   map[string]string{},
+		EndedAt:           observedAt.Add(10 * time.Minute),
 	}
 	appServerClient := &fakeAppServerClient{
 		targets:    []domain.Mission{target},
@@ -225,6 +269,9 @@ func TestWorkerTickFinalizesActiveChunkWhenTargetDisappears(t *testing.T) {
 	worker.mediaUploader = mediaUploader
 
 	worker.tick(context.Background())
+	if _, _, err := worker.ensureActiveRecordingChunk(context.Background(), recorderMediaKey(target.MissionCode, target.RobotCode), observedAt); err != nil {
+		t.Fatalf("chunk open failed: %v", err)
+	}
 	appServerClient.targets = nil
 	worker.tick(context.Background())
 
@@ -247,12 +294,14 @@ func TestWorkerTickRetriesFailedChunkFinalization(t *testing.T) {
 		MissionCode: "mission-001",
 		RobotCode:   "robot-001",
 	}
+	observedAt := time.Date(2026, 5, 26, 1, 0, 0, 0, time.UTC)
 	chunk1 := domain.RecordingChunk{
 		ID:                "chunk-001",
 		MissionCode:       "mission-001",
 		RobotCode:         "robot-001",
 		ManifestObjectKey: "missions/mission-001/robots/robot-001/chunk-001_manifest.json",
 		MediaObjectKeys:   map[string]string{},
+		EndedAt:           observedAt.Add(10 * time.Minute),
 	}
 	chunk2 := domain.RecordingChunk{
 		ID:                "chunk-002",
@@ -260,6 +309,7 @@ func TestWorkerTickRetriesFailedChunkFinalization(t *testing.T) {
 		RobotCode:         "robot-001",
 		ManifestObjectKey: "missions/mission-001/robots/robot-001/chunk-002_manifest.json",
 		MediaObjectKeys:   map[string]string{},
+		EndedAt:           observedAt.Add(20 * time.Minute),
 	}
 	appServerClient := &fakeAppServerClient{
 		targets: []domain.Mission{target},
@@ -279,7 +329,13 @@ func TestWorkerTickRetriesFailedChunkFinalization(t *testing.T) {
 	worker.mediaUploader = mediaUploader
 
 	worker.tick(context.Background())
-	worker.tick(context.Background())
+	if _, _, err := worker.ensureActiveRecordingChunk(context.Background(), recorderMediaKey(target.MissionCode, target.RobotCode), observedAt); err != nil {
+		t.Fatalf("first chunk open failed: %v", err)
+	}
+	if _, _, err := worker.ensureActiveRecordingChunk(context.Background(), recorderMediaKey(target.MissionCode, target.RobotCode), observedAt.Add(11*time.Minute)); err != nil {
+		t.Fatalf("second chunk open failed: %v", err)
+	}
+	worker.processPendingRecordingChunkFinalizations(context.Background())
 
 	if objectStorage.manifestUploads != 0 {
 		t.Fatalf("manifest uploads = %d, want 0 after failed media upload", objectStorage.manifestUploads)
@@ -289,7 +345,7 @@ func TestWorkerTickRetriesFailedChunkFinalization(t *testing.T) {
 	}
 
 	mediaUploader.err = nil
-	worker.tick(context.Background())
+	worker.processPendingRecordingChunkFinalizations(context.Background())
 
 	if objectStorage.manifestUploads != 1 {
 		t.Fatalf("manifest uploads = %d, want 1 after retry", objectStorage.manifestUploads)

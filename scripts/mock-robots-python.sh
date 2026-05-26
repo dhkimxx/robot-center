@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/dev-common.sh"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 MOCK_SESSION_PREFIX="robot-center-pyrobot"
 PYTHON_MOCK_DIR="$ROOT_DIR/apps/mock-robot-python"
@@ -14,7 +14,7 @@ if [[ -z "${PYTHON_BIN:-}" ]]; then
     PYTHON_BIN="$(command -v python3)"
   fi
 fi
-APP_SERVER_URL="${APP_SERVER_URL:-http://127.0.0.1:$APP_PORT}"
+APP_SERVER_URL="${APP_SERVER_URL:-}"
 MOCK_ROBOT_COUNT="${MOCK_ROBOT_COUNT:-2}"
 MOCK_SHARED_MISSION="${MOCK_SHARED_MISSION:-1}"
 MOCK_MISSION_CODE="${MOCK_MISSION_CODE:-}"
@@ -29,6 +29,15 @@ json_get() {
   local code="$1"
   shift
   /usr/bin/python3 -c "$code" "$@"
+}
+
+require_app_server_url() {
+  if [[ -z "$APP_SERVER_URL" ]]; then
+    printf 'APP_SERVER_URL is required.\n' >&2
+    printf 'example: APP_SERVER_URL=http://control-server.example:18080 %s\n' "$0" >&2
+    exit 1
+  fi
+  APP_SERVER_URL="${APP_SERVER_URL%/}"
 }
 
 ensure_python_venv() {
@@ -301,6 +310,7 @@ start_mock_robot() {
   $mission_args"
 }
 
+require_app_server_url
 wait_for_http "$APP_SERVER_URL/healthz" "app-server"
 ensure_python_venv
 ensure_robot_count
@@ -348,6 +358,5 @@ for index in $(seq 0 "$((MOCK_ROBOT_COUNT - 1))"); do
 done
 
 printf '\nready\n'
-printf 'UI: http://%s:%s\n' "$(detect_host_ip)" "$APP_PORT"
-printf 'status: %s\n' "$ROOT_DIR/scripts/dev-status.sh"
+printf 'control server: %s\n' "$APP_SERVER_URL"
 printf 'logs: screen -r %s-001 / screen -r %s-002\n' "$MOCK_SESSION_PREFIX" "$MOCK_SESSION_PREFIX"

@@ -4,7 +4,7 @@ import { missionTypes } from "../../config/controlCenterConfig.js";
 import { makeStatusLabel } from "../../utils/formatters.js";
 import { getBusyRobotReasonForMissionCreate } from "./missionHelpers.js";
 
-export function MissionFormFields({ form, missions, robots, setForm, streamingStatuses }) {
+export function MissionFormFields({ form, missions, observedStreams, robots, setForm, streamingStatuses }) {
   return (
     <>
       <label className="grid gap-1.5 text-xs font-extrabold text-slate-400">
@@ -23,7 +23,7 @@ export function MissionFormFields({ form, missions, robots, setForm, streamingSt
       <MultiSelectField
         label="배정 로봇"
         options={robots.map((robot) => {
-          const busyReason = getBusyRobotReasonForMissionCreate(robot.robotCode, missions, streamingStatuses);
+          const busyReason = getBusyRobotReasonForMissionCreate(robot.robotCode, missions, streamingStatuses, Date.now(), observedStreams);
           return {
             value: robot.robotCode,
             label: robot.displayName || robot.robotCode,

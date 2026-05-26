@@ -11,12 +11,15 @@ import (
 
 func newPublisherSession(peerID string, robotCode string, peerConnection *webrtc.PeerConnection) *publisherSession {
 	streamBundle := newRobotStreamBundle("", robotCode)
+	now := time.Now().UTC()
 	return &publisherSession{
 		peerID:          peerID,
 		robotCode:       robotCode,
 		peerConnection:  peerConnection,
 		streamBundle:    streamBundle,
 		publishedTracks: map[string]*publishedTrack{},
+		joinedAt:        now,
+		updatedAt:       now,
 	}
 }
 
@@ -40,17 +43,17 @@ func (s *publisherSession) prepareConnection(roomID string, hub *Hub) {
 	})
 	s.peerConnection.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
 		log.Printf("sfu robot ICE room=%s robot=%s peer=%s state=%s", roomID, s.robotCode, s.peerID, state.String())
+		hub.markPublisherICEState(roomID, s.robotCode, s.peerID, state.String())
 	})
 	s.peerConnection.OnTrack(func(track *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
 		hub.publishRobotTrack(roomID, s.robotCode, track)
 	})
 	s.peerConnection.OnDataChannel(func(dataChannel *webrtc.DataChannel) {
 		label := normalizeDataChannelRole(dataChannel.Label())
-		if s.streamBundle != nil {
-			s.streamBundle.DataChannels[label] = &PublishedDataChannel{Role: label}
-		}
+		hub.markPublisherDataChannel(roomID, s.robotCode, s.peerID, label)
 		log.Printf("sfu robot datachannel room=%s robot=%s label=%s", roomID, s.robotCode, label)
 		dataChannel.OnMessage(func(message webrtc.DataChannelMessage) {
+			hub.markPublisherDataActivity(roomID, s.robotCode, s.peerID, label)
 			hub.forwardDataChannelMessage(roomID, s.robotCode, label, message.Data)
 		})
 	})

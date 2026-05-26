@@ -84,8 +84,10 @@ public final class RobotWebRtcClient {
         private final String peerId;
         private final String role;
         private final PeerConnection peerConnection;
-        private DataChannel sensorDataChannel;
+        private DataChannel spatialDataChannel;
         private DataChannel telemetryDataChannel;
+        private DataChannel eventDataChannel;
+        private DataChannel controlDataChannel;
         private boolean pendingOfferUntilIceGatheringComplete;
 
         private PeerSession(String peerId, String role, PeerConnection peerConnection) {
@@ -188,7 +190,7 @@ public final class RobotWebRtcClient {
             RobotMediaProfile.RGB_HEIGHT,
             RobotMediaProfile.RGB_FPS
         );
-        rgbVideoTrack = peerConnectionFactory.createVideoTrack("android-rgb-video", rgbVideoSource);
+        rgbVideoTrack = peerConnectionFactory.createVideoTrack(RobotStreamRoles.TRACK_VIDEO_1, rgbVideoSource);
         rgbVideoTrack.setEnabled(true);
 
         thermalVideoSource = peerConnectionFactory.createVideoSource(false);
@@ -200,11 +202,11 @@ public final class RobotWebRtcClient {
             RobotMediaProfile.THERMAL_HEIGHT,
             RobotMediaProfile.THERMAL_FPS
         );
-        thermalVideoTrack = peerConnectionFactory.createVideoTrack("android-thermal-video", thermalVideoSource);
+        thermalVideoTrack = peerConnectionFactory.createVideoTrack(RobotStreamRoles.TRACK_VIDEO_2, thermalVideoSource);
         thermalVideoTrack.setEnabled(true);
 
         audioSource = peerConnectionFactory.createAudioSource(new MediaConstraints());
-        audioTrack = peerConnectionFactory.createAudioTrack("android-opus-audio", audioSource);
+        audioTrack = peerConnectionFactory.createAudioTrack(RobotStreamRoles.TRACK_AUDIO_1, audioSource);
         audioTrack.setEnabled(true);
 
         log("local media started: RGB " + RobotMediaProfile.RGB_WIDTH + "x"
@@ -363,7 +365,7 @@ public final class RobotWebRtcClient {
         addVideoTrackWithH264Preference(
             peerConnection,
             rgbVideoTrack,
-            "robot-rgb",
+            RobotStreamRoles.TRACK_VIDEO_1,
             "RGB",
             RobotMediaProfile.RGB_MAX_BITRATE_BPS,
             RobotMediaProfile.RGB_MIN_BITRATE_BPS,
@@ -373,18 +375,18 @@ public final class RobotWebRtcClient {
         addVideoTrackWithH264Preference(
             peerConnection,
             thermalVideoTrack,
-            "robot-thermal",
-            "thermal",
+            RobotStreamRoles.TRACK_VIDEO_2,
+            "Thermal",
             RobotMediaProfile.THERMAL_MAX_BITRATE_BPS,
             RobotMediaProfile.THERMAL_MIN_BITRATE_BPS,
             RobotMediaProfile.THERMAL_FPS,
             1.0
         );
-        peerConnection.addTrack(audioTrack, Collections.singletonList("robot-audio"));
-        session.sensorDataChannel = peerConnection.createDataChannel("sensor", new DataChannel.Init());
-        session.sensorDataChannel.registerObserver(createDataChannelObserver(session, "sensor"));
-        session.telemetryDataChannel = peerConnection.createDataChannel("telemetry", new DataChannel.Init());
-        session.telemetryDataChannel.registerObserver(createDataChannelObserver(session, "telemetry"));
+        peerConnection.addTrack(audioTrack, Collections.singletonList(RobotStreamRoles.TRACK_AUDIO_1));
+        session.telemetryDataChannel = createDataChannel(session, RobotStreamRoles.CHANNEL_TELEMETRY);
+        session.spatialDataChannel = createDataChannel(session, RobotStreamRoles.CHANNEL_SPATIAL);
+        session.eventDataChannel = createDataChannel(session, RobotStreamRoles.CHANNEL_EVENT);
+        session.controlDataChannel = createDataChannel(session, RobotStreamRoles.CHANNEL_CONTROL);
 
         peerConnection.createOffer(new SimpleSdpObserver() {
             @Override
@@ -415,6 +417,12 @@ public final class RobotWebRtcClient {
                 log("create offer failed for " + session.role + ": " + error);
             }
         }, new MediaConstraints());
+    }
+
+    private DataChannel createDataChannel(PeerSession session, String label) {
+        DataChannel dataChannel = session.peerConnection.createDataChannel(label, new DataChannel.Init());
+        dataChannel.registerObserver(createDataChannelObserver(session, label));
+        return dataChannel;
     }
 
     private void addVideoTrackWithH264Preference(
@@ -595,26 +603,28 @@ public final class RobotWebRtcClient {
                 if (!isCurrentSession(session)) {
                     return;
                 }
-                DataChannel channel = "sensor".equals(label)
-                    ? session.sensorDataChannel
-                    : session.telemetryDataChannel;
+                DataChannel channel = dataChannelForLabel(session, label);
                 if (channel == null) {
                     return;
                 }
                 log(label + " DataChannel " + peerLabel(session, session.peerId) + ": " + channel.state());
                 if (channel.state() == DataChannel.State.OPEN) {
-                    if ("sensor".equals(label)) {
+                    if (RobotStreamRoles.CHANNEL_SPATIAL.equals(label)) {
                         startSensorStreaming();
                         return;
                     }
-                    startTelemetryStreaming();
+                    if (RobotStreamRoles.CHANNEL_TELEMETRY.equals(label)) {
+                        startTelemetryStreaming();
+                    }
                     return;
                 }
                 if (channel.state() == DataChannel.State.CLOSED) {
-                    if ("sensor".equals(label) && !hasOpenDataChannel("sensor")) {
+                    if (RobotStreamRoles.CHANNEL_SPATIAL.equals(label)
+                        && !hasOpenDataChannel(RobotStreamRoles.CHANNEL_SPATIAL)) {
                         stopSensorStreaming();
                     }
-                    if ("telemetry".equals(label) && !hasOpenDataChannel("telemetry")) {
+                    if (RobotStreamRoles.CHANNEL_TELEMETRY.equals(label)
+                        && !hasOpenDataChannel(RobotStreamRoles.CHANNEL_TELEMETRY)) {
                         stopTelemetryStreaming();
                     }
                 }
@@ -642,7 +652,7 @@ public final class RobotWebRtcClient {
             );
             byte[] bytes = payload.getBytes(StandardCharsets.UTF_8);
             for (PeerSession session : peerSessions.values()) {
-                DataChannel channel = session.sensorDataChannel;
+                DataChannel channel = session.spatialDataChannel;
                 if (channel == null || channel.state() != DataChannel.State.OPEN) {
                     continue;
                 }
@@ -695,14 +705,31 @@ public final class RobotWebRtcClient {
 
     private boolean hasOpenDataChannel(String label) {
         for (PeerSession session : peerSessions.values()) {
-            DataChannel channel = "sensor".equals(label)
-                ? session.sensorDataChannel
-                : session.telemetryDataChannel;
+            DataChannel channel = dataChannelForLabel(session, label);
             if (channel != null && channel.state() == DataChannel.State.OPEN) {
                 return true;
             }
         }
         return false;
+    }
+
+    private DataChannel dataChannelForLabel(PeerSession session, String label) {
+        if (session == null) {
+            return null;
+        }
+        if (RobotStreamRoles.CHANNEL_TELEMETRY.equals(label)) {
+            return session.telemetryDataChannel;
+        }
+        if (RobotStreamRoles.CHANNEL_SPATIAL.equals(label)) {
+            return session.spatialDataChannel;
+        }
+        if (RobotStreamRoles.CHANNEL_EVENT.equals(label)) {
+            return session.eventDataChannel;
+        }
+        if (RobotStreamRoles.CHANNEL_CONTROL.equals(label)) {
+            return session.controlDataChannel;
+        }
+        return null;
     }
 
     private void handleAnswer(JSONObject payload) {
@@ -925,22 +952,32 @@ public final class RobotWebRtcClient {
             return;
         }
         session.pendingOfferUntilIceGatheringComplete = false;
-        if (session.sensorDataChannel != null) {
-            session.sensorDataChannel.close();
-            session.sensorDataChannel.dispose();
-            session.sensorDataChannel = null;
+        if (session.spatialDataChannel != null) {
+            session.spatialDataChannel.close();
+            session.spatialDataChannel.dispose();
+            session.spatialDataChannel = null;
         }
         if (session.telemetryDataChannel != null) {
             session.telemetryDataChannel.close();
             session.telemetryDataChannel.dispose();
             session.telemetryDataChannel = null;
         }
+        if (session.eventDataChannel != null) {
+            session.eventDataChannel.close();
+            session.eventDataChannel.dispose();
+            session.eventDataChannel = null;
+        }
+        if (session.controlDataChannel != null) {
+            session.controlDataChannel.close();
+            session.controlDataChannel.dispose();
+            session.controlDataChannel = null;
+        }
         session.peerConnection.close();
         session.peerConnection.dispose();
-        if (!hasOpenDataChannel("sensor")) {
+        if (!hasOpenDataChannel(RobotStreamRoles.CHANNEL_SPATIAL)) {
             stopSensorStreaming();
         }
-        if (!hasOpenDataChannel("telemetry")) {
+        if (!hasOpenDataChannel(RobotStreamRoles.CHANNEL_TELEMETRY)) {
             stopTelemetryStreaming();
         }
     }

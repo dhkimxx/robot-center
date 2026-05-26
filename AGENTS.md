@@ -99,7 +99,7 @@ UI 원칙:
    verify: 화면에 기대 상태가 표시됨
 
 3. Python Mock Robot
-   verify: `./scripts/python-mock-robots-up.sh` 실행 완료
+   verify: `./scripts/mock-robots-python.sh` 실행 완료
    verify: robotCode, token, mission room이 맞음
    verify: connected 또는 streaming 상태
 

@@ -128,3 +128,38 @@ export function findLatestRecordingForTarget(recordings, missionCode, robotCode,
   }
   return recordings.find(predicate) ?? null;
 }
+
+export function makeRecordingStateForTarget(recordings, missionCode, robotCode) {
+  const recording = findLatestRecordingForTarget(recordings, missionCode, robotCode);
+  const status = recording?.status ?? "";
+  if (["recording", "pending", "uploading"].includes(status)) {
+    return {
+      isActive: true,
+      label: "녹화 중",
+      recording,
+      tone: "recording"
+    };
+  }
+  if (status === "uploaded") {
+    return {
+      isActive: false,
+      label: "저장 완료",
+      recording,
+      tone: "available"
+    };
+  }
+  if (["failed", "error"].includes(status)) {
+    return {
+      isActive: false,
+      label: "녹화 오류",
+      recording,
+      tone: "danger"
+    };
+  }
+  return {
+    isActive: false,
+    label: "녹화 대기",
+    recording,
+    tone: "idle"
+  };
+}

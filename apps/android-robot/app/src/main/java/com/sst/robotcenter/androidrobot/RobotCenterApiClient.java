@@ -79,39 +79,6 @@ public final class RobotCenterApiClient {
         );
     }
 
-    public void sendStreamingStatus(RobotMissionConfig mission) throws IOException, JSONException {
-        JSONObject rgbTrack = new JSONObject()
-            .put("name", "rgb")
-            .put("kind", "video")
-            .put("codec", "h264")
-            .put("width", RobotMediaProfile.RGB_WIDTH)
-            .put("height", RobotMediaProfile.RGB_HEIGHT)
-            .put("fps", RobotMediaProfile.RGB_FPS)
-            .put("bitrateKbps", RobotMediaProfile.RGB_BITRATE_KBPS);
-        JSONObject thermalTrack = new JSONObject()
-            .put("name", "thermal")
-            .put("kind", "video")
-            .put("codec", "h264")
-            .put("width", RobotMediaProfile.THERMAL_WIDTH)
-            .put("height", RobotMediaProfile.THERMAL_HEIGHT)
-            .put("fps", RobotMediaProfile.THERMAL_FPS)
-            .put("bitrateKbps", RobotMediaProfile.THERMAL_BITRATE_KBPS);
-        JSONObject audioTrack = new JSONObject()
-            .put("name", "audio")
-            .put("kind", "audio")
-            .put("codec", "opus");
-
-        JSONObject body = new JSONObject()
-            .put("robotCode", robotCode)
-            .put("missionId", mission.missionId)
-            .put("roomId", mission.roomId)
-            .put("status", "streaming")
-            .put("publishedTracks", new JSONArray().put(rgbTrack).put(thermalTrack).put(audioTrack))
-            .put("publishedDataChannels", new JSONArray().put("sensor").put("telemetry"))
-            .put("sentAt", Instant.now().toString());
-        post("/api/robot-gateway/streaming-status", body);
-    }
-
     public void close() {
         httpClient.dispatcher().executorService().shutdown();
         httpClient.connectionPool().evictAll();

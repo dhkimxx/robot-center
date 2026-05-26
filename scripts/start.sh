@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/dev-common.sh"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 HOST_IP="$(detect_host_ip)"
 PUBLIC_URL="${PUBLIC_URL:-http://$HOST_IP:$APP_PORT}"
@@ -130,5 +130,5 @@ printf '\nready\n'
 printf 'UI: %s\n' "$PUBLIC_URL"
 printf 'MinIO API: http://%s:9000/%s\n' "$HOST_IP" "$MINIO_BUCKET"
 printf 'MinIO console: http://127.0.0.1:9001\n'
-printf 'Python Mock Robot: %s\n' "$ROOT_DIR/scripts/python-mock-robots-up.sh"
-printf 'status: %s\n' "$ROOT_DIR/scripts/dev-status.sh"
+printf 'Python Mock Robot: APP_SERVER_URL=%s %s\n' "$PUBLIC_URL" "$ROOT_DIR/scripts/mock-robots-python.sh"
+printf 'status: %s\n' "$ROOT_DIR/scripts/status.sh"

@@ -98,6 +98,38 @@ func sortedRobotCodes(robotCodes map[string]struct{}) []string {
 	return output
 }
 
+func ensureRecorderRobotRuntime(status *recorderSessionStatus, robotCode string) recorderRobotRuntime {
+	if status.robotStatuses == nil {
+		status.robotStatuses = map[string]recorderRobotRuntime{}
+	}
+	runtime := status.robotStatuses[robotCode]
+	if runtime.trackLabels == nil {
+		runtime.trackLabels = map[string]struct{}{}
+	}
+	if runtime.dataChannelLabels == nil {
+		runtime.dataChannelLabels = map[string]struct{}{}
+	}
+	return runtime
+}
+
+func subscriberRobotStatuses(status recorderSessionStatus) []SubscriberRobotStatus {
+	robotCodes := sortedRobotCodes(status.robotCodes)
+	output := make([]SubscriberRobotStatus, 0, len(robotCodes))
+	for _, robotCode := range robotCodes {
+		runtime := status.robotStatuses[robotCode]
+		output = append(output, SubscriberRobotStatus{
+			RobotCode:        robotCode,
+			TrackCount:       len(runtime.trackLabels),
+			DataChannelCount: len(runtime.dataChannelLabels),
+			LastTrackAt:      runtime.lastTrackAt,
+			LastDataAt:       runtime.lastDataAt,
+			LastPersistedAt:  runtime.lastPersistedAt,
+			UpdatedAt:        runtime.updatedAt,
+		})
+	}
+	return output
+}
+
 func (w *Worker) singleSubscriberRobotCode(roomID string) string {
 	w.subscriberMu.RLock()
 	defer w.subscriberMu.RUnlock()
