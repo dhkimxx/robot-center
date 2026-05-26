@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchMissionLiveStatus, fetchObservedStreams } from "../api/liveApi.js";
+import { fetchMissionLiveStatus } from "../api/liveApi.js";
 import { fetchMissions } from "../api/missionsApi.js";
 import { fetchRecordings } from "../api/recordingsApi.js";
 import { fetchRobots } from "../api/robotsApi.js";
@@ -10,7 +10,6 @@ export function useControlCenterData() {
   const [robots, setRobots] = useState([]);
   const [missions, setMissions] = useState([]);
   const [missionLiveStatuses, setMissionLiveStatuses] = useState({});
-  const [observedStreams, setObservedStreams] = useState([]);
   const [recordings, setRecordings] = useState([]);
   const [statusError, setStatusError] = useState("");
   const requestSequenceRef = useRef(0);
@@ -24,7 +23,6 @@ export function useControlCenterData() {
         fetchSystemStatus(),
         fetchRobots(),
         fetchMissions(),
-        fetchObservedStreams(),
         fetchRecordings()
       ]);
     } catch (error) {
@@ -36,11 +34,27 @@ export function useControlCenterData() {
     if (requestSequence !== requestSequenceRef.current || options.isCancelled?.()) {
       return false;
     }
-    const [statusPayload, robotPayload, missionPayload, observedStreamsPayload, recordingPayload] = payloads;
+    const [statusPayload, robotPayload, missionPayload, recordingPayload] = payloads;
+    const nextMissions = missionPayload.missions ?? [];
+    const liveStatusResults = await Promise.allSettled(
+      nextMissions
+        .filter((mission) => mission.status === "active")
+        .map(async (mission) => [mission.missionCode, await fetchMissionLiveStatus(mission.missionCode)])
+    );
+    if (requestSequence !== requestSequenceRef.current || options.isCancelled?.()) {
+      return false;
+    }
+    const nextLiveStatuses = {};
+    liveStatusResults.forEach((result) => {
+      if (result.status === "fulfilled") {
+        const [missionCode, liveStatus] = result.value;
+        nextLiveStatuses[missionCode] = liveStatus;
+      }
+    });
     setSystemStatus(statusPayload);
     setRobots(robotPayload.robots ?? []);
-    setMissions(missionPayload.missions ?? []);
-    setObservedStreams(observedStreamsPayload.rooms ?? []);
+    setMissions(nextMissions);
+    setMissionLiveStatuses(nextLiveStatuses);
     setRecordings(recordingPayload.recordings ?? []);
     setStatusError("");
     return true;
@@ -96,8 +110,6 @@ export function useControlCenterData() {
     setMissions,
     missionLiveStatuses,
     setMissionLiveStatuses,
-    observedStreams,
-    setObservedStreams,
     recordings,
     setRecordings,
     statusError,

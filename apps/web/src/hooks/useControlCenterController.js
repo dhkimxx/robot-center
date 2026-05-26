@@ -27,7 +27,6 @@ export function useControlCenterController({
     robots,
     missions,
     missionLiveStatuses,
-    observedStreams,
     recordings,
     statusError,
     loadAll,
@@ -65,15 +64,15 @@ export function useControlCenterController({
   );
   const activeLiveTargets = useMemo(
     () => activeMissions
-      .flatMap((mission) => createMissionRobotTargets(mission, robots, observedStreams)),
-    [activeMissions, observedStreams, robots]
+      .flatMap((mission) => createMissionRobotTargets(mission, robots, missionLiveStatuses[mission.missionCode] ?? null)),
+    [activeMissions, missionLiveStatuses, robots]
   );
   const missionControlTargets = useMemo(() => {
     if (!missionControlMission) {
       return [];
     }
-    return createMissionRobotTargets(missionControlMission, robots, observedStreams, missionControlLiveStatus);
-  }, [missionControlLiveStatus, missionControlMission, observedStreams, robots]);
+    return createMissionRobotTargets(missionControlMission, robots, missionControlLiveStatus);
+  }, [missionControlLiveStatus, missionControlMission, robots]);
   const liveTargets = useMemo(
     () => (missionControlMission ? missionControlTargets : activeLiveTargets),
     [activeLiveTargets, missionControlMission, missionControlTargets]
@@ -98,11 +97,11 @@ export function useControlCenterController({
   const {
     serverSensorLatest
   } = useMissionSamples({ appendLiveEvent, selectedLiveTarget });
-  const activeObservedStream = useMemo(() => {
+  const activeLiveStream = useMemo(() => {
     if (!selectedLiveTarget) {
       return null;
     }
-    return selectedLiveTarget.observedPublisher;
+    return selectedLiveTarget.liveStatus?.stream ?? null;
   }, [selectedLiveTarget]);
   const selectedRobotCode = selectedLiveTarget?.robotCode ?? "";
   const latestServerTelemetryFromSensors = useMemo(
@@ -138,7 +137,6 @@ export function useControlCenterController({
     setMissionControlCode,
     setSelectedLiveTargetKey,
     showNotification,
-    observedStreams
   });
 
   const closeMissionControl = useCallback((options = {}) => {
@@ -181,7 +179,7 @@ export function useControlCenterController({
 
 
   const operationStatuses = useOperationStatuses({
-    activeObservedStream,
+    activeLiveStream,
     latestPositionState,
     primaryRobot,
     selectedLiveSession,
@@ -199,10 +197,10 @@ export function useControlCenterController({
       latestTelemetry,
       liveEvents: selectedLiveSession.events,
       liveStatus: missionControlLiveStatus,
+      liveStatuses: missionLiveStatuses,
       liveSessions,
       missionTargets: missionControlTargets,
       missions,
-      observedStreams,
       onBackToMissionList: closeMissionControl,
       onEndMission: missionController.endMission,
       onOpenCreateMissionModal: missionController.openMissionCreateModal,
@@ -226,7 +224,6 @@ export function useControlCenterController({
       missionForm: missionController.missionForm,
       missionModal: missionController.missionModal,
       missions,
-      observedStreams,
       onClose: missionController.closeMissionModal,
       robots,
       setMissionForm: missionController.setMissionForm

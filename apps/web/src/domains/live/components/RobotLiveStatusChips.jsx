@@ -18,7 +18,7 @@ export function getRobotLiveStatusSummary({ liveSessions = {}, target }) {
   const connectionLabel = target.liveStatus?.connection
     ? makeConnectionLabelFromLiveStatus(target.liveStatus.connection)
     : makeLiveStatusLabel(session.status);
-  const streamSource = target.liveStatus?.stream ?? target.observedPublisher;
+  const streamSource = target.liveStatus?.stream;
   return {
     channelLabel: target.isStreaming
       ? `${formatMediaChannelCount(streamSource)} / ${formatStreamingSubscriberCount(streamSource)}`

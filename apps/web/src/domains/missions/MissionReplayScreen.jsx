@@ -21,7 +21,6 @@ import { formatMissionRobotCount, getMissionRobotDetails } from "./missionHelper
 export function MissionReplayScreen({
   mission,
   missingMissionCode,
-  observedStreams,
   onBackToMissionList,
   onOpenPlaybackFile,
   recordings,
@@ -59,7 +58,7 @@ export function MissionReplayScreen({
     );
   }
 
-  const robotDetails = getMissionRobotDetails(mission, robots, observedStreams);
+  const robotDetails = getMissionRobotDetails(mission, robots);
 
   return (
     <Surface className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden p-3">

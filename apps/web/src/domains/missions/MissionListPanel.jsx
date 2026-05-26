@@ -16,8 +16,8 @@ import {
 } from "./missionHelpers.js";
 
 export function MissionListPanel({
+  liveStatuses,
   missions,
-  observedStreams,
   onSelectMission,
   robots,
   selectedMission
@@ -37,8 +37,8 @@ export function MissionListPanel({
           <>
             <MissionListGroup
               emptyLabel="진행 중이거나 시작 가능한 임무가 없습니다."
+              liveStatuses={liveStatuses}
               missions={openMissions}
-              observedStreams={observedStreams}
               onSelectMission={onSelectMission}
               robots={robots}
               selectedMission={selectedMission}
@@ -46,8 +46,8 @@ export function MissionListPanel({
             />
             <MissionListGroup
               emptyLabel="종료된 임무가 없습니다."
+              liveStatuses={liveStatuses}
               missions={closedMissions}
-              observedStreams={observedStreams}
               onSelectMission={onSelectMission}
               robots={robots}
               selectedMission={selectedMission}
@@ -62,8 +62,8 @@ export function MissionListPanel({
 
 function MissionListGroup({
   emptyLabel,
+  liveStatuses,
   missions,
-  observedStreams,
   onSelectMission,
   robots,
   selectedMission,
@@ -84,7 +84,7 @@ function MissionListGroup({
           {missions.map((mission) => {
             const isSelectedMission = selectedMission?.missionCode === mission.missionCode;
             const isClosed = isClosedMission(mission);
-            const robotDetails = getMissionRobotDetails(mission, robots, observedStreams);
+            const robotDetails = getMissionRobotDetails(mission, robots, liveStatuses?.[mission.missionCode] ?? null);
             const missionMeta = `${mission.missionCode} · ${missionTypeLabel(mission.missionType)} · ${formatMissionRobotCount(robotDetails)}`;
             const robotSummary = robotDetails.map((robot) => `${robot.robotCode} ${robot.liveLabel}`).join(" · ");
             return (

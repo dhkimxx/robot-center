@@ -8,7 +8,7 @@ import { MissionModals } from "../domains/missions/MissionModals.jsx";
 import { RecordingModals } from "../domains/recordings/RecordingModals.jsx";
 import { RobotModals } from "../domains/robots/RobotModals.jsx";
 import { useControlCenterController } from "../hooks/useControlCenterController.js";
-import { countFreshObservedPublishers } from "../domains/missions/missionHelpers.js";
+import { countStreamingRobotsFromLiveStatuses } from "../domains/missions/missionHelpers.js";
 import { makeStatusLabel, missionTypeLabel } from "../utils/formatters.js";
 import { cn } from "../utils/cn.js";
 import AppStatusBar from "./AppStatusBar.jsx";
@@ -90,7 +90,7 @@ export function ControlCenterApp() {
           />
         </div>
         <AppStatusBar
-          observedStreams={controller.missionRouteProps.observedStreams}
+          liveStatuses={controller.missionRouteProps.liveStatuses}
           robots={controller.missionRouteProps.robots}
           statusError={controller.statusError}
           systemStatus={controller.systemRouteProps.systemStatus}
@@ -112,12 +112,12 @@ function createAppChrome({
   routeMissionReplayCode
 }) {
   const missions = controller.missionRouteProps.missions;
-  const observedStreams = controller.missionRouteProps.observedStreams;
+  const liveStatuses = controller.missionRouteProps.liveStatuses;
   const robots = controller.missionRouteProps.robots;
   const activeMissionCount = missions.filter((mission) => mission.status === "active").length;
   const readyMissionCount = missions.filter((mission) => mission.status === "ready").length;
   const closedMissionCount = missions.filter((mission) => ["ended", "completed", "cancelled"].includes(mission.status)).length;
-  const streamingRobotCount = countFreshObservedPublishers(observedStreams);
+  const streamingRobotCount = countStreamingRobotsFromLiveStatuses(liveStatuses);
   const controlMission = controller.missionRouteProps.controlMission;
   const replayMission = controller.missionRouteProps.replayMission;
 

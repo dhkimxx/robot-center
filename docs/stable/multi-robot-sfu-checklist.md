@@ -18,6 +18,7 @@ history:
 - '2026-05-26 danya.kim <danya.kim@thundersoft.com>: mock robot scripts now require explicit remote control server URL'
 - '2026-05-26 danya.kim <danya.kim@thundersoft.com>: mock robot remote URL examples normalized'
 - '2026-05-26 danya.kim <danya.kim@thundersoft.com>: updated validation checks to use observed streams instead of streaming-status reports'
+- '2026-05-26 danya.kim <danya.kim@thundersoft.com>: replaced observed-streams verification with mission live-status'
 ---
 # Multi-Robot SFU Selective Subscribe Checklist
 
@@ -153,7 +154,7 @@ API 상태 확인:
 
 ```bash
 curl -fsS http://127.0.0.1:18080/api/system/status | /usr/bin/python3 -m json.tool
-curl -fsS http://127.0.0.1:18080/api/observed-streams | /usr/bin/python3 -m json.tool
+curl -fsS http://127.0.0.1:18080/api/missions/mission-001/live-status | /usr/bin/python3 -m json.tool
 curl -fsS http://127.0.0.1:18082/healthz | /usr/bin/python3 -m json.tool
 ```
 
@@ -200,7 +201,7 @@ docker compose -f deploy/docker-compose.yml exec minio \
 - `go test ./...`, `go vet ./...`, web build가 통과한다.
 - app-server와 recorder-worker health가 OK다.
 - `mission-001` room에 robot publisher 2대 이상, browser operator subscriber 2대, recorder subscriber 1대가 관찰된다.
-- `/api/observed-streams` 또는 SFU room summary에서 robotCode별 publisher 상태를 구분할 수 있다.
+- `/api/missions/{missionCode}/live-status` 또는 system SFU room summary에서 robotCode별 publisher 상태를 구분할 수 있다.
 - browser A/B에서 같은 mission에 join 하되 각자 선택한 robotCode만 볼 수 있다.
 - browser A/B의 robot 선택 변경이 다른 browser와 recorder subscriber를 끊지 않는다.
 - recorder-worker는 같은 mission의 모든 robotCode를 수신한다.

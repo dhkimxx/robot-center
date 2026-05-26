@@ -11,7 +11,7 @@ import {
 } from "./liveHelpers.js";
 
 export function useOperationStatuses({
-  activeObservedStream,
+  activeLiveStream,
   latestPositionState,
   primaryRobot,
   selectedLiveSession,
@@ -34,7 +34,7 @@ export function useOperationStatuses({
     {
       label: "실시간 링크",
       value: makeLiveStatusLabel(selectedLiveSession.status),
-      detail: activeObservedStream ? `${formatMediaChannelCount(activeObservedStream)} / ${formatStreamingSubscriberCount(activeObservedStream)}` : "송출 대기",
+      detail: activeLiveStream ? `${formatMediaChannelCount(activeLiveStream)} / ${formatStreamingSubscriberCount(activeLiveStream)}` : "송출 대기",
       tone: makeStatusTone(selectedLiveSession.status)
     },
     {

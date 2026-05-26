@@ -4,10 +4,6 @@ export function fetchRtcConfig() {
   return requestJson("/api/rtc-config");
 }
 
-export function fetchObservedStreams() {
-  return requestJson("/api/observed-streams");
-}
-
 export function fetchMissionLiveStatus(missionCode) {
   return requestJson(`/api/missions/${encodeURIComponent(missionCode)}/live-status`);
 }

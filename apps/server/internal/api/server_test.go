@@ -36,11 +36,6 @@ func TestControlPlaneFlow(t *testing.T) {
 	if !componentHasStatus(components, "recorder-worker", "ok") {
 		t.Fatalf("expected recorder-worker component status ok, got %#v", components)
 	}
-	observedPayload := requestJSON[map[string]any](t, server.URL, http.MethodGet, "/api/observed-streams", "", nil)
-	if _, ok := observedPayload["rooms"].([]any); !ok {
-		t.Fatalf("expected observed stream rooms array, got %#v", observedPayload)
-	}
-
 	createRobotPayload := requestJSON[map[string]any](t, server.URL, http.MethodPost, "/api/robots", "", map[string]any{
 		"displayName": "Test Robot",
 		"modelName":   "Android Mock",

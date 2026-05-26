@@ -78,7 +78,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/system/status", s.handleSystemStatus)
 	mux.HandleFunc("GET /api/rtc-config", s.handleRTCConfig)
 	mux.HandleFunc("GET /api/recording-targets", s.handleRecordingTargets)
-	mux.HandleFunc("GET /api/observed-streams", s.handleObservedStreams)
 	mux.HandleFunc("GET /api/sensor-descriptors", s.handleListSensorDescriptors)
 	mux.HandleFunc("POST /api/sensor-descriptors", s.handleCreateSensorSamples)
 	mux.HandleFunc("GET /api/sensor-samples", s.handleListSensorSamples)
@@ -185,13 +184,6 @@ func (s *Server) handleRecordingTargets(w http.ResponseWriter, r *http.Request) 
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"targets": dto.Missions(targets),
-	})
-}
-
-func (s *Server) handleObservedStreams(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"rooms":      s.sfuHub.ObservedRooms(),
-		"observedAt": time.Now().UTC().Format(time.RFC3339Nano),
 	})
 }
 

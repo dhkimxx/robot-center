@@ -20,25 +20,20 @@ describe("missionHelpers", () => {
         robotCode: "robot-001"
       }
     ];
-    const observedStreams = [
-      {
-        roomId: "mission-001",
-        publishers: [
-          {
-            robotCode: "robot-001",
-            state: "publishing",
-            tracks: ["robot-001:track.video_1"],
-            trackCount: 1,
-            dataChannels: ["channel.telemetry"],
-            dataChannelCount: 1,
-            lastTrackAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          }
-        ]
-      }
-    ];
+    const liveStatus = {
+      missionCode: "mission-001",
+      missionStatus: "active",
+      robots: [
+        {
+          robotCode: "robot-001",
+          stream: { state: "streaming", trackCount: 1, dataChannelCount: 1 },
+          recording: { state: "recording" },
+          connection: { state: "online" }
+        }
+      ]
+    };
 
-    const targets = createMissionRobotTargets(mission, robots, observedStreams);
+    const targets = createMissionRobotTargets(mission, robots, liveStatus);
 
     expect(targets).toHaveLength(1);
     expect(targets[0]).toMatchObject({
@@ -58,19 +53,7 @@ describe("missionHelpers", () => {
       status: "ended",
       robotCodes: ["robot-001"]
     };
-    const details = getMissionRobotDetails(mission, [{ robotCode: "robot-001", status: "streaming" }], [
-      {
-        roomId: "mission-001",
-        publishers: [
-          {
-            robotCode: "robot-001",
-            state: "publishing",
-            trackCount: 1,
-            lastTrackAt: new Date().toISOString()
-          }
-        ]
-      }
-    ]);
+    const details = getMissionRobotDetails(mission, [{ robotCode: "robot-001", status: "streaming" }]);
 
     expect(details[0]).toMatchObject({
       deviceStatus: "streaming",
@@ -89,24 +72,6 @@ describe("missionHelpers", () => {
     ]);
 
     expect(reason).toBe("진행 중 임무 mission-002");
-  });
-
-  it("uses observed publishers for mission create guards", () => {
-    const now = new Date("2026-05-26T00:00:00.000Z");
-    const reason = getBusyRobotReasonForMissionCreate("robot-001", [], now.getTime(), [
-      {
-        roomId: "mission-001",
-        publishers: [
-          {
-            robotCode: "robot-001",
-            iceState: "connected",
-            lastTrackAt: now.toISOString()
-          }
-        ]
-      }
-    ]);
-
-    expect(reason).toBe("실시간 송출 중");
   });
 
   it("uses live-status as the control target status source", () => {
@@ -129,18 +94,7 @@ describe("missionHelpers", () => {
       ]
     };
 
-    const targets = createMissionRobotTargets(mission, [], [
-      {
-        roomId: "mission-001",
-        publishers: [
-          {
-            robotCode: "robot-001",
-            iceState: "connected",
-            lastTrackAt: new Date().toISOString()
-          }
-        ]
-      }
-    ], liveStatus);
+    const targets = createMissionRobotTargets(mission, [], liveStatus);
 
     expect(targets[0]).toMatchObject({
       isStreaming: false,

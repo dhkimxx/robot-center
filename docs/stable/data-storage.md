@@ -16,6 +16,7 @@ history:
 - '2026-05-26 danya.kim <danya.kim@thundersoft.com>: separated live recording state from recording chunk replay metadata'
 - '2026-05-26 danya.kim <danya.kim@thundersoft.com>: removed streaming_statuses from active schema and live state model'
 - '2026-05-26 danya.kim <danya.kim@thundersoft.com>: removed streaming_statuses from current schema documentation'
+- '2026-05-26 danya.kim <danya.kim@thundersoft.com>: updated storage verification to use mission live-status'
 ---
 
 # Data Storage
@@ -657,7 +658,7 @@ Browser
 2. app-server AutoMigrate 완료
 3. robot-001, robot-002 등록
 4. active mission에 두 robot assignment 존재
-5. `/api/observed-streams`에서 robot별 publisher/track/DataChannel 관측
+5. `/api/missions/{missionCode}/live-status`에서 robot별 publisher/track/DataChannel 관측
 6. sensor_descriptors가 robotCode + sensorId 기준으로 분리
 7. sensor_samples가 telemetry/spatial payload를 저장
 8. /api/sensor-latest가 같은 sensorId를 robot별로 분리

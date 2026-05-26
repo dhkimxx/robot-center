@@ -11,9 +11,9 @@ export default function MissionsScreen({
   latestTelemetry,
   liveEvents,
   liveSessions,
+  liveStatuses,
   missionTargets,
   missions,
-  observedStreams,
   onBackToMissionList,
   onEndMission,
   onOpenMissionControl,
@@ -38,7 +38,6 @@ export default function MissionsScreen({
         mission={replayMission}
         onBackToMissionList={onBackToMissionList}
         onOpenPlaybackFile={onOpenPlaybackFile}
-        observedStreams={observedStreams}
         recordings={recordings}
         robots={robots}
       />
@@ -65,11 +64,11 @@ export default function MissionsScreen({
   return (
     <section className="grid h-full min-h-0 grid-cols-[400px_minmax(0,1fr)] items-stretch gap-3 max-[1180px]:grid-cols-1">
       <MissionListPanel
+        liveStatuses={liveStatuses}
         missions={missions}
         onSelectMission={onSelectMission}
         robots={robots}
         selectedMission={selectedMission}
-        observedStreams={observedStreams}
       />
 
       <Surface className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden" padding="none">
@@ -89,7 +88,7 @@ export default function MissionsScreen({
               onOpenMissionControl={onOpenMissionControl}
               onOpenMissionReplay={onOpenMissionReplay}
               onStartMission={onStartMission}
-              robotDetails={getMissionRobotDetails(selectedMission, robots, observedStreams)}
+              robotDetails={getMissionRobotDetails(selectedMission, robots, liveStatuses?.[selectedMission.missionCode] ?? null)}
             />
           )}
         </div>

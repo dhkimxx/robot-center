@@ -16,10 +16,11 @@ history:
 - "2026-05-26 danya.kim <danya.kim@thundersoft.com>: moved into docs/stable lifecycle structure"
 - "2026-05-26 danya.kim <danya.kim@thundersoft.com>: merged retired harness server/SFU docs into architecture source of truth"
 - '2026-05-26 danya.kim <danya.kim@thundersoft.com>: merged redundant server and SFU harness docs into architecture'
-- '2026-05-26 danya.kim <danya.kim@thundersoft.com>: documented observed stream status API and optional streaming metadata'
+- '2026-05-26 danya.kim <danya.kim@thundersoft.com>: documented live-status API and SFU runtime state'
 - '2026-05-26 danya.kim <danya.kim@thundersoft.com>: documented mission live-status as Live UI state source of truth'
 - '2026-05-26 danya.kim <danya.kim@thundersoft.com>: removed streaming-status API from live state architecture'
 - '2026-05-26 danya.kim <danya.kim@thundersoft.com>: documented live-status without streaming-status API dependency'
+- '2026-05-26 danya.kim <danya.kim@thundersoft.com>: removed public observed-streams API from current architecture'
 ---
 
 # Architecture
@@ -321,14 +322,12 @@ Robot은 관제 시스템에서 robot을 직접 생성하지 않는다. 로봇 �
 - mission 생성/시작/종료
 - mission robot assignment 관리
 - robot gateway active mission 조회
-- optional streaming metadata 수신
 - mission live-status 합성 API 제공
 - recording metadata 조회
 - sensor descriptor/sample 저장과 최신값 조회
 - MinIO object metadata 조회와 파일 URL 제공
 - SFU signaling endpoint 제공
 - SFU room/session 상태 관리
-- SFU observed stream 상태 API 제공
 - SFU observed stream, recorder runtime, mission assignment, robot heartbeat를 합성한 live-status 제공
 - Robot publisher 검증
 - Browser operator subscriber 관리

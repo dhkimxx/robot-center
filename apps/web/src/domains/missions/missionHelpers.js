@@ -51,10 +51,8 @@ export function getMissionCodeFromRobotKey(targetKey) {
   return String(targetKey ?? "").split(":")[0] ?? "";
 }
 
-const observedStreamFreshMs = 30_000;
 const closedMissionStatuses = new Set(["completed", "ended", "cancelled"]);
 const missionStatusOrder = { active: 0, ready: 1, completed: 2, ended: 2, cancelled: 3 };
-const inactiveObservedIceStates = new Set(["failed", "disconnected", "closed"]);
 
 export function isClosedMission(mission) {
   return closedMissionStatuses.has(mission?.status);
@@ -79,47 +77,6 @@ export function groupMissionsByLifecycle(missions) {
   };
 }
 
-function observedRooms(observedStreams = []) {
-  return Array.isArray(observedStreams) ? observedStreams : observedStreams?.rooms ?? [];
-}
-
-export function findMissionObservedPublisher(mission, robotCode, observedStreams = []) {
-  const roomId = makeMissionRoomId(mission);
-  if (!roomId || !robotCode) {
-    return null;
-  }
-  const room = observedRooms(observedStreams).find((candidate) => candidate.roomId === roomId);
-  return room?.publishers?.find((publisher) => publisher.robotCode === robotCode) ?? null;
-}
-
-export function isFreshMissionObservedPublisher(mission, robotCode, observedPublisher, nowMs = Date.now()) {
-  if (!mission || mission.status !== "active" || !observedPublisher) {
-    return false;
-  }
-  if (observedPublisher.robotCode !== robotCode || inactiveObservedIceStates.has(observedPublisher.iceState)) {
-    return false;
-  }
-  const freshAtMs = Date.parse(
-    observedPublisher.lastTrackAt
-      ?? observedPublisher.lastDataAt
-      ?? ""
-  );
-  return Number.isFinite(freshAtMs) && Math.abs(nowMs - freshAtMs) <= observedStreamFreshMs;
-}
-
-export function countFreshObservedPublishers(observedStreams = [], nowMs = Date.now()) {
-  return observedRooms(observedStreams).reduce((count, room) => {
-    const publishers = room.publishers ?? [];
-    return count + publishers.filter((publisher) => {
-      if (inactiveObservedIceStates.has(publisher.iceState)) {
-        return false;
-      }
-      const freshAtMs = Date.parse(publisher.lastTrackAt ?? publisher.lastDataAt ?? "");
-      return Number.isFinite(freshAtMs) && Math.abs(nowMs - freshAtMs) <= observedStreamFreshMs;
-    }).length;
-  }, 0);
-}
-
 export function makeMissionRobotLiveLabel(mission, isStreaming) {
   if (isStreaming) {
     return "송출 중";
@@ -141,27 +98,30 @@ function isStreamingFromLiveStatus(liveStatusRobot) {
   return liveStatusRobot?.stream?.state === "streaming";
 }
 
-export function createMissionRobotTargets(mission, robots, observedStreams = [], liveStatus = null) {
+export function countStreamingRobotsFromLiveStatuses(liveStatuses = {}) {
+  return Object.values(liveStatuses).reduce((count, liveStatus) => {
+    if (liveStatus?.missionStatus !== "active") {
+      return count;
+    }
+    return count + (liveStatus.robots ?? []).filter((robot) => robot.stream?.state === "streaming").length;
+  }, 0);
+}
+
+export function createMissionRobotTargets(mission, robots, liveStatus = null) {
   if (!mission) {
     return [];
   }
-  const observedPublishersForMission = observedRooms(observedStreams)
-    .find((room) => room.roomId === makeMissionRoomId(mission))
-    ?.publishers ?? [];
   const robotCodes = new Set();
   getMissionRobotCodes(mission).forEach((robotCode) => robotCodes.add(robotCode));
-  observedPublishersForMission.forEach((publisher) => {
-    if (publisher.robotCode) {
-      robotCodes.add(publisher.robotCode);
+  (liveStatus?.robots ?? []).forEach((robot) => {
+    if (robot.robotCode) {
+      robotCodes.add(robot.robotCode);
     }
   });
 
   return Array.from(robotCodes).map((robotCode) => {
-    const observedPublisher = findMissionObservedPublisher(mission, robotCode, observedStreams);
     const liveStatusRobot = findMissionLiveStatusRobot(liveStatus, robotCode);
-    const isStreaming = liveStatusRobot
-      ? isStreamingFromLiveStatus(liveStatusRobot)
-      : isFreshMissionObservedPublisher(mission, robotCode, observedPublisher);
+    const isStreaming = isStreamingFromLiveStatus(liveStatusRobot);
     return {
       isStreaming,
       key: makeMissionRobotKey(mission.missionCode, robotCode),
@@ -171,46 +131,32 @@ export function createMissionRobotTargets(mission, robots, observedStreams = [],
       robot: robots.find((robot) => robot.robotCode === robotCode) ?? null,
       robotCode,
       roomId: makeMissionRoomId(mission),
-      observedPublisher,
       liveStatus: liveStatusRobot
     };
   });
 }
 
-export function getMissionRobotDetails(mission, robots, observedStreams = []) {
+export function getMissionRobotDetails(mission, robots, liveStatus = null) {
   return getMissionRobotCodes(mission).map((robotCode) => {
     const robot = robots.find((candidate) => candidate.robotCode === robotCode) ?? null;
-    const observedPublisher = findMissionObservedPublisher(mission, robotCode, observedStreams);
-    const isStreaming = isFreshMissionObservedPublisher(mission, robotCode, observedPublisher);
+    const liveStatusRobot = findMissionLiveStatusRobot(liveStatus, robotCode);
+    const isStreaming = isStreamingFromLiveStatus(liveStatusRobot);
     return {
       deviceStatus: robot?.status ?? "offline",
       displayName: robot?.displayName ?? robotCode,
       isStreaming,
       liveLabel: makeMissionRobotLiveLabel(mission, isStreaming),
-      observedPublisher,
+      liveStatus: liveStatusRobot,
       robotCode
     };
   });
 }
 
-export function getBusyRobotReasonForMissionCreate(robotCode, missions = [], nowMs = Date.now(), observedStreams = []) {
+export function getBusyRobotReasonForMissionCreate(robotCode, missions = []) {
   const activeMission = missions.find((mission) => mission.status === "active" && getMissionRobotCodes(mission).includes(robotCode));
   if (activeMission) {
     return `진행 중 임무 ${activeMission.missionCode}`;
   }
-
-  const freshObservedPublisher = countFreshObservedPublishers(
-    observedRooms(observedStreams)
-      .map((room) => ({
-        ...room,
-        publishers: (room.publishers ?? []).filter((publisher) => publisher.robotCode === robotCode)
-      })),
-    nowMs
-  ) > 0;
-  if (freshObservedPublisher) {
-    return "실시간 송출 중";
-  }
-
   return "";
 }
 
