@@ -23,7 +23,6 @@ export function MissionControlView({
   missionTargets,
   onReconnectSelectedMissionTarget,
   operationStatuses,
-  recordings,
   selectedMissionTargetKey,
   setSelectedMissionTargetKey
 }) {
@@ -57,7 +56,6 @@ export function MissionControlView({
                 <MissionRobotDropdown
                   liveSessions={liveSessions}
                   missionTargets={missionTargets}
-                  recordings={recordings}
                   selectedMissionTargetKey={selectedMissionTargetKey}
                   setSelectedMissionTargetKey={setSelectedMissionTargetKey}
                 />

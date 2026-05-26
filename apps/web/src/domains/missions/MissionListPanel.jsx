@@ -20,8 +20,7 @@ export function MissionListPanel({
   observedStreams,
   onSelectMission,
   robots,
-  selectedMission,
-  streamingStatuses
+  selectedMission
 }) {
   const { closedMissions, openMissions } = useMemo(() => groupMissionsByLifecycle(missions), [missions]);
 
@@ -43,7 +42,6 @@ export function MissionListPanel({
               onSelectMission={onSelectMission}
               robots={robots}
               selectedMission={selectedMission}
-              streamingStatuses={streamingStatuses}
               title="진행 임무"
             />
             <MissionListGroup
@@ -53,7 +51,6 @@ export function MissionListPanel({
               onSelectMission={onSelectMission}
               robots={robots}
               selectedMission={selectedMission}
-              streamingStatuses={streamingStatuses}
               title="종료 임무"
             />
           </>
@@ -70,7 +67,6 @@ function MissionListGroup({
   onSelectMission,
   robots,
   selectedMission,
-  streamingStatuses,
   title
 }) {
   return (
@@ -88,7 +84,7 @@ function MissionListGroup({
           {missions.map((mission) => {
             const isSelectedMission = selectedMission?.missionCode === mission.missionCode;
             const isClosed = isClosedMission(mission);
-            const robotDetails = getMissionRobotDetails(mission, robots, streamingStatuses, observedStreams);
+            const robotDetails = getMissionRobotDetails(mission, robots, observedStreams);
             const missionMeta = `${mission.missionCode} · ${missionTypeLabel(mission.missionType)} · ${formatMissionRobotCount(robotDetails)}`;
             const robotSummary = robotDetails.map((robot) => `${robot.robotCode} ${robot.liveLabel}`).join(" · ");
             return (

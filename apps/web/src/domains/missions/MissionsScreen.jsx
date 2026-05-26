@@ -29,8 +29,7 @@ export default function MissionsScreen({
   robots,
   selectedMission,
   selectedMissionTargetKey,
-  setSelectedMissionTargetKey,
-  streamingStatuses
+  setSelectedMissionTargetKey
 }) {
   if (replayMissionCode) {
     return (
@@ -42,7 +41,6 @@ export default function MissionsScreen({
         observedStreams={observedStreams}
         recordings={recordings}
         robots={robots}
-        streamingStatuses={streamingStatuses}
       />
     );
   }
@@ -58,7 +56,6 @@ export default function MissionsScreen({
         missionTargets={missionTargets}
         onReconnectSelectedMissionTarget={onReconnectSelectedMissionTarget}
         operationStatuses={operationStatuses}
-        recordings={recordings}
         selectedMissionTargetKey={selectedMissionTargetKey}
         setSelectedMissionTargetKey={setSelectedMissionTargetKey}
       />
@@ -73,7 +70,6 @@ export default function MissionsScreen({
         robots={robots}
         selectedMission={selectedMission}
         observedStreams={observedStreams}
-        streamingStatuses={streamingStatuses}
       />
 
       <Surface className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden" padding="none">
@@ -93,7 +89,7 @@ export default function MissionsScreen({
               onOpenMissionControl={onOpenMissionControl}
               onOpenMissionReplay={onOpenMissionReplay}
               onStartMission={onStartMission}
-              robotDetails={getMissionRobotDetails(selectedMission, robots, streamingStatuses, observedStreams)}
+              robotDetails={getMissionRobotDetails(selectedMission, robots, observedStreams)}
             />
           )}
         </div>

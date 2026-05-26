@@ -13,8 +13,9 @@ history:
 - "2026-05-26 danya.kim <danya.kim@thundersoft.com>: recording session/chunk 기준을 mission start가 아닌 recorder media 수신 시점 기준으로 명시"
 - "2026-05-26 danya.kim <danya.kim@thundersoft.com>: streaming status room 검증과 updated_at freshness 기준 반영"
 - "2026-05-26 danya.kim <danya.kim@thundersoft.com>: moved into docs/stable lifecycle structure"
-- '2026-05-26 danya.kim <danya.kim@thundersoft.com>: clarified streaming_statuses as optional metadata and SFU observed streams as live freshness source'
 - '2026-05-26 danya.kim <danya.kim@thundersoft.com>: separated live recording state from recording chunk replay metadata'
+- '2026-05-26 danya.kim <danya.kim@thundersoft.com>: removed streaming_statuses from active schema and live state model'
+- '2026-05-26 danya.kim <danya.kim@thundersoft.com>: removed streaming_statuses from current schema documentation'
 ---
 
 # Data Storage
@@ -60,7 +61,6 @@ mission_robots
 robot_sessions
 browser_sessions
 recorder_sessions
-streaming_statuses
 sensor_descriptors
 sensor_samples
 recording_sessions
@@ -88,7 +88,7 @@ control_acks
 | --- | --- | --- |
 | Identity / Access | `users` | PoC operator seed |
 | Robot / Mission | `robots`, `robot_tokens`, `missions`, `mission_robots` | 로봇 등록, token, 다중 로봇 mission assignment |
-| Runtime Session | `robot_sessions`, `browser_sessions`, `recorder_sessions`, `streaming_statuses` | heartbeat/session/선택 streaming metadata 추적. live 송출 판정은 SFU observed stream 상태를 기준으로 함 |
+| Runtime Session | `robot_sessions`, `browser_sessions`, `recorder_sessions` | heartbeat/session 이력. live 송출 판정은 SFU observed stream 상태를 기준으로 함 |
 | Realtime Sensor | `sensor_descriptors`, `sensor_samples` | telemetry/spatial DataChannel 저장과 최신값 조회 |
 | Recording / Storage | `recording_sessions`, `recording_chunks`, `storage_objects` | recorder-worker chunk, upload 상태, MinIO object metadata |
 | Event / Control | `events`, `control_commands`, `control_acks` | P0/P1 event/control 감사 기록 기반. control 정책은 아직 TODO |
@@ -102,9 +102,6 @@ erDiagram
   robots ||--o{ robot_sessions : connects
   missions ||--o{ mission_robots : assigns
   robots ||--o{ mission_robots : participates
-  robots ||--o| streaming_statuses : reports
-  missions ||--o{ streaming_statuses : scopes
-
   missions ||--o{ browser_sessions : watched_by
   missions ||--o{ recorder_sessions : recorded_by
 
@@ -137,12 +134,11 @@ erDiagram
 | mission status | `ready`, `active`, `ended`, `cancelled` |
 | robot status | `offline`, `online`, `fault` |
 | mission robot status | `assigned`, `active`, `completed`, `removed` |
-| streaming status | `streaming`, `publishing`, `stopped`, `failed`, `stale` |
 | session state | `new`, `connected`, `reconnecting`, `disconnected`, `failed`, `closed` |
 | recording status | `pending`, `recording`, `finalizing`, `uploaded`, `failed` |
 | command status | `requested`, `sent`, `accepted`, `rejected`, `executing`, `succeeded`, `failed`, `timeout` |
 
-`robots.status`는 장치 상태만 표현한다. 임무 배정 여부는 `mission_robots`, WebRTC live 송출 여부와 freshness는 app-server 내부 SFU observed stream 상태를 기준으로 판단한다. `streaming_statuses`는 선택 metadata 저장소로 유지한다.
+`robots.status`는 장치 상태만 표현한다. 임무 배정 여부는 `mission_robots`, WebRTC live 송출 여부와 freshness는 app-server 내부 SFU observed stream 상태를 기준으로 판단한다.
 
 ## 7. 테이블 상세
 
@@ -170,7 +166,6 @@ erDiagram
 | `model_name` | text | no | Python Mock, Android, Jetson 등 |
 | `status` | text | yes | default `offline` |
 | `last_seen_at` | timestamptz | no | heartbeat 기준 |
-| `last_streaming_at` | timestamptz | no | optional streaming metadata 기준 |
 | `archived_at` | timestamptz | no | archive 처리 시각 |
 | `metadata` | jsonb | yes | default `{}` |
 | `created_at` | timestamptz | yes | default now |
@@ -225,37 +220,11 @@ Index:
 
 - partial unique: `mission_id, robot_id WHERE status != 'removed'`
 
-### 7.6 streaming_statuses
-
-Robot Gateway가 선택적으로 보내는 streaming metadata를 robot별 최신 상태로 저장한다. 이 테이블은 codec/해상도/FPS 같은 보고 metadata 보존용이며, 관제 UI의 live 송출 판정 source of truth는 아니다.
-
-| Column | Type | Required | Note |
-| --- | --- | --- | --- |
-| `id` | uuid | yes | PK |
-| `robot_id` | uuid | yes | unique |
-| `mission_id` | uuid | no | active mission id |
-| `room_id` | text | yes | 보통 `missionCode` |
-| `status` | text | yes | streaming/publishing/stopped 등 |
-| `published_tracks` | jsonb | yes | `[]`, track metadata snapshot |
-| `published_data_channels` | jsonb | yes | `[]`, DataChannel label snapshot |
-| `sent_at` | timestamptz | no | robot 송신 시각, metadata로 보존 |
-| `updated_at` | timestamptz | yes | 서버가 status를 수신/갱신한 시각 |
-
-live freshness window는 30초 기준이며 app-server 내부 SFU observed stream의 `last_track_at` 또는 `last_data_at`에 해당하는 런타임 관측 시각을 기준으로 한다. `streaming_statuses.updated_at`은 선택 metadata 갱신 시각일 뿐 UI live 판정 기준이 아니다. robot clock skew 때문에 `sent_at`만으로 fresh 여부를 판단하지 않는다.
-
-수락/갱신 규칙:
-
-- `streaming`, `publishing` 보고는 active mission + active mission robot assignment일 때만 저장한다.
-- `room_id`는 `missions.mission_code`와 같아야 한다.
-- `streaming_statuses.robot_id`는 unique이므로 robot별 최신 1행만 유지한다.
-- 종료성 status(`stopped`, `failed`, `stale`)는 기존 row의 `mission_id + room_id`가 보고값과 일치할 때만 반영한다.
-- 임무 종료 시 해당 mission의 streaming row는 `stopped`로 갱신한다.
-
-### 7.7 runtime session tables
+### 7.6 runtime session tables
 
 #### robot_sessions
 
-Robot heartbeat/session 이력용 테이블이다. 현재 핵심 online 상태는 `robots`와 `streaming_statuses`가 담당한다.
+Robot heartbeat/session 이력용 테이블이다. 현재 핵심 online 상태는 `robots.status`, `robots.last_seen_at`, live 화면의 송출 상태는 SFU observed stream이 담당한다.
 
 | Column | Type | Required | Note |
 | --- | --- | --- | --- |

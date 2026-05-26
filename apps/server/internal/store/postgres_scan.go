@@ -24,7 +24,6 @@ func scanRobot(row scanner) (domain.Robot, error) {
 		&robot.ModelName,
 		&robot.Status,
 		nullableTimeScanner(&robot.LastSeenAt),
-		nullableTimeScanner(&robot.LastStreamingAt),
 		&robot.CreatedAt,
 		&robot.UpdatedAt,
 	)

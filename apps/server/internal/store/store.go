@@ -10,7 +10,6 @@ import (
 type Store interface {
 	RobotRepository
 	MissionRepository
-	StreamingRepository
 	SensorRepository
 	RecordingRepository
 }
@@ -39,11 +38,6 @@ type MissionRepository interface {
 	FindActiveMissionForRobot(ctx context.Context, robotCode string, bearerToken string) (domain.Mission, bool, error)
 	ValidateActiveMissionRobot(ctx context.Context, missionCode string, robotCode string) error
 	RecordingTargets(ctx context.Context) ([]domain.Mission, error)
-}
-
-type StreamingRepository interface {
-	ApplyStreamingStatus(ctx context.Context, status domain.StreamingStatus, bearerToken string) (domain.Robot, error)
-	ListStreamingStatuses(ctx context.Context) ([]domain.StreamingStatus, error)
 }
 
 type SensorRepository interface {

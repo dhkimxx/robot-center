@@ -38,7 +38,7 @@ describe("missionHelpers", () => {
       }
     ];
 
-    const targets = createMissionRobotTargets(mission, robots, [], observedStreams);
+    const targets = createMissionRobotTargets(mission, robots, observedStreams);
 
     expect(targets).toHaveLength(1);
     expect(targets[0]).toMatchObject({
@@ -58,7 +58,7 @@ describe("missionHelpers", () => {
       status: "ended",
       robotCodes: ["robot-001"]
     };
-    const details = getMissionRobotDetails(mission, [{ robotCode: "robot-001", status: "streaming" }], [], [
+    const details = getMissionRobotDetails(mission, [{ robotCode: "robot-001", status: "streaming" }], [
       {
         roomId: "mission-001",
         publishers: [
@@ -86,77 +86,14 @@ describe("missionHelpers", () => {
         status: "active",
         robotCodes: ["robot-001"]
       }
-    ], []);
+    ]);
 
     expect(reason).toBe("진행 중 임무 mission-002");
   });
 
-  it("ignores streaming status when the room id does not match the mission room", () => {
-    const mission = {
-      id: "mission-id-001",
-      missionCode: "mission-001",
-      status: "active",
-      robotCodes: ["robot-001"]
-    };
-    const details = getMissionRobotDetails(mission, [{ robotCode: "robot-001", status: "online" }], [
-      {
-        missionId: "mission-id-001",
-        robotCode: "robot-001",
-        roomId: "mission-001__robot-001",
-        status: "streaming",
-        sentAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }
-    ]);
-
-    expect(details[0]).toMatchObject({
-      isStreaming: false,
-      liveLabel: "송출 대기"
-    });
-  });
-
-  it("does not use streaming-status reports as live truth", () => {
-    const mission = {
-      id: "mission-id-001",
-      missionCode: "mission-001",
-      status: "active",
-      robotCodes: ["robot-001"]
-    };
-    const details = getMissionRobotDetails(mission, [{ robotCode: "robot-001", status: "online" }], [
-      {
-        missionId: "mission-id-001",
-        robotCode: "robot-001",
-        roomId: "mission-001",
-        status: "streaming",
-        sentAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }
-    ], []);
-
-    expect(details[0]).toMatchObject({
-      isStreaming: false,
-      liveLabel: "송출 대기"
-    });
-  });
-
-  it("does not use streaming-status reports as mission create guards", () => {
-    const nowMs = Date.parse("2026-05-26T00:00:00.000Z");
-    const reason = getBusyRobotReasonForMissionCreate("robot-001", [], [
-      {
-        robotCode: "robot-001",
-        roomId: "mission-001",
-        status: "streaming",
-        sentAt: "2026-05-26T00:10:00.000Z",
-        updatedAt: "2026-05-25T23:58:00.000Z"
-      }
-    ], nowMs);
-
-    expect(reason).toBe("");
-  });
-
   it("uses observed publishers for mission create guards", () => {
     const now = new Date("2026-05-26T00:00:00.000Z");
-    const reason = getBusyRobotReasonForMissionCreate("robot-001", [], [], now.getTime(), [
+    const reason = getBusyRobotReasonForMissionCreate("robot-001", [], now.getTime(), [
       {
         roomId: "mission-001",
         publishers: [
@@ -192,7 +129,7 @@ describe("missionHelpers", () => {
       ]
     };
 
-    const targets = createMissionRobotTargets(mission, [], [], [
+    const targets = createMissionRobotTargets(mission, [], [
       {
         roomId: "mission-001",
         publishers: [

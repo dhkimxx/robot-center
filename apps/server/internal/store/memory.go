@@ -25,7 +25,6 @@ type MemoryStore struct {
 	tokenHashes  map[string]string
 
 	missionsByCode           map[string]domain.Mission
-	streamingByRobotCode     map[string]domain.StreamingStatus
 	sensorDescriptors        map[string]domain.SensorDescriptor
 	sensorSamplesByMissionID map[string][]domain.SensorSample
 	recordingSessionsByKey   map[string]RecordingSession
@@ -40,7 +39,6 @@ func NewMemoryStore(serverURL string) *MemoryStore {
 		tokensByCode:             map[string]string{},
 		tokenHashes:              map[string]string{},
 		missionsByCode:           map[string]domain.Mission{},
-		streamingByRobotCode:     map[string]domain.StreamingStatus{},
 		sensorDescriptors:        map[string]domain.SensorDescriptor{},
 		sensorSamplesByMissionID: map[string][]domain.SensorSample{},
 		recordingSessionsByKey:   map[string]RecordingSession{},
@@ -261,10 +259,6 @@ func (s *MemoryStore) findActiveMissionConflictsLocked(targetMissionCode string,
 		return nil
 	}
 
-	targetMissionID := ""
-	if targetMissionCode != "" {
-		targetMissionID = s.missionsByCode[targetMissionCode].ID
-	}
 	conflicts := make([]MissionStartConflict, 0)
 	seen := map[string]struct{}{}
 	appendConflict := func(conflict MissionStartConflict) {
@@ -288,37 +282,6 @@ func (s *MemoryStore) findActiveMissionConflictsLocked(targetMissionCode string,
 				ActiveMissionCode: mission.MissionCode,
 			})
 		}
-	}
-	now := time.Now().UTC()
-	for robotCode := range targetRobots {
-		status, ok := s.streamingByRobotCode[robotCode]
-		if !ok || (status.Status != "streaming" && status.Status != "publishing") {
-			continue
-		}
-		updatedAt := status.UpdatedAt
-		if updatedAt.IsZero() {
-			updatedAt = status.SentAt
-		}
-		if !updatedAt.IsZero() && (now.Sub(updatedAt) > streamingStatusFreshnessWindow || updatedAt.Sub(now) > streamingStatusFreshnessWindow) {
-			continue
-		}
-		if targetMissionID != "" && status.MissionID == targetMissionID {
-			continue
-		}
-		activeMissionCode := strings.TrimSpace(status.RoomID)
-		for _, mission := range s.missionsByCode {
-			if mission.ID == status.MissionID {
-				activeMissionCode = mission.MissionCode
-				break
-			}
-		}
-		if activeMissionCode == "" {
-			activeMissionCode = "streaming"
-		}
-		appendConflict(MissionStartConflict{
-			RobotCode:         robotCode,
-			ActiveMissionCode: activeMissionCode,
-		})
 	}
 	sort.Slice(conflicts, func(i, j int) bool {
 		if conflicts[i].RobotCode == conflicts[j].RobotCode {
@@ -346,12 +309,6 @@ func (s *MemoryStore) EndMission(_ context.Context, missionCode string) (domain.
 	mission.UpdatedAt = now
 	s.missionsByCode[missionCode] = mission
 	for _, robotCode := range missionRobotCodes(mission) {
-		if status, ok := s.streamingByRobotCode[robotCode]; ok && status.MissionID == mission.ID {
-			status.Status = "stopped"
-			status.SentAt = now
-			status.UpdatedAt = now
-			s.streamingByRobotCode[robotCode] = status
-		}
 		robot := s.robotsByCode[robotCode]
 		if robot.Status == "assigned" {
 			robot.Status = "online"
@@ -404,46 +361,6 @@ func (s *MemoryStore) FindActiveMissionForRobot(_ context.Context, robotCode str
 	return domain.Mission{}, false, nil
 }
 
-func (s *MemoryStore) ApplyStreamingStatus(_ context.Context, status domain.StreamingStatus, bearerToken string) (domain.Robot, error) {
-	now := time.Now().UTC()
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if status.SentAt.IsZero() {
-		status.SentAt = now
-	}
-	status.RobotCode = strings.TrimSpace(status.RobotCode)
-	status.MissionID = strings.TrimSpace(status.MissionID)
-	status.RoomID = strings.TrimSpace(status.RoomID)
-	status.Status = strings.TrimSpace(status.Status)
-	if !s.authorizedLocked(status.RobotCode, bearerToken) {
-		return domain.Robot{}, ErrUnauthorized
-	}
-	robot, ok := s.robotsByCode[status.RobotCode]
-	if !ok {
-		return domain.Robot{}, ErrNotFound
-	}
-	if isPublishingStatus(status.Status) {
-		missionCode, ok := s.findActiveStreamingMissionCodeForRobotLocked(status.MissionID, status.RobotCode)
-		if !ok || status.RoomID != missionCode {
-			return domain.Robot{}, ErrInvalidState
-		}
-	}
-	if isTerminalStreamingStatus(status.Status) {
-		currentStatus, ok := s.streamingByRobotCode[status.RobotCode]
-		if !ok || currentStatus.MissionID != status.MissionID || currentStatus.RoomID != status.RoomID {
-			return robot, nil
-		}
-	}
-	status.UpdatedAt = now
-	robot.Status = normalizeRobotDeviceStatus(status.Status)
-	robot.LastStreamingAt = &now
-	robot.UpdatedAt = now
-	s.robotsByCode[status.RobotCode] = robot
-	s.streamingByRobotCode[status.RobotCode] = status
-	return robot, nil
-}
-
 func (s *MemoryStore) ValidateActiveMissionRobot(_ context.Context, missionCode string, robotCode string) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -453,29 +370,6 @@ func (s *MemoryStore) ValidateActiveMissionRobot(_ context.Context, missionCode 
 		return ErrInvalidState
 	}
 	return nil
-}
-
-func (s *MemoryStore) findActiveStreamingMissionCodeForRobotLocked(missionID string, robotCode string) (string, bool) {
-	for _, mission := range s.missionsByCode {
-		if mission.ID == missionID && mission.Status == "active" && missionHasRobotCode(mission, robotCode) {
-			return mission.MissionCode, true
-		}
-	}
-	return "", false
-}
-
-func (s *MemoryStore) ListStreamingStatuses(_ context.Context) ([]domain.StreamingStatus, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	statuses := make([]domain.StreamingStatus, 0, len(s.streamingByRobotCode))
-	for _, status := range s.streamingByRobotCode {
-		statuses = append(statuses, status)
-	}
-	sort.Slice(statuses, func(i, j int) bool {
-		return statuses[i].RobotCode < statuses[j].RobotCode
-	})
-	return statuses, nil
 }
 
 func (s *MemoryStore) SaveSensorEnvelope(_ context.Context, envelope domain.SensorEnvelope) ([]domain.SensorSample, error) {

@@ -7,15 +7,14 @@ import (
 )
 
 type Robot struct {
-	ID              string     `json:"id"`
-	RobotCode       string     `json:"robotCode"`
-	DisplayName     string     `json:"displayName"`
-	ModelName       string     `json:"modelName,omitempty"`
-	Status          string     `json:"status"`
-	LastSeenAt      *time.Time `json:"lastSeenAt,omitempty"`
-	LastStreamingAt *time.Time `json:"lastStreamingAt,omitempty"`
-	CreatedAt       time.Time  `json:"createdAt"`
-	UpdatedAt       time.Time  `json:"updatedAt"`
+	ID          string     `json:"id"`
+	RobotCode   string     `json:"robotCode"`
+	DisplayName string     `json:"displayName"`
+	ModelName   string     `json:"modelName,omitempty"`
+	Status      string     `json:"status"`
+	LastSeenAt  *time.Time `json:"lastSeenAt,omitempty"`
+	CreatedAt   time.Time  `json:"createdAt"`
+	UpdatedAt   time.Time  `json:"updatedAt"`
 }
 
 type RobotConnectionInfo struct {
@@ -37,28 +36,6 @@ type Mission struct {
 	EndedAt     *time.Time `json:"endedAt,omitempty"`
 	CreatedAt   time.Time  `json:"createdAt"`
 	UpdatedAt   time.Time  `json:"updatedAt"`
-}
-
-type StreamingTrack struct {
-	Name        string `json:"name"`
-	DisplayName string `json:"displayName,omitempty"`
-	Kind        string `json:"kind"`
-	Codec       string `json:"codec"`
-	Width       int    `json:"width,omitempty"`
-	Height      int    `json:"height,omitempty"`
-	FPS         int    `json:"fps,omitempty"`
-	BitrateKbps int    `json:"bitrateKbps,omitempty"`
-}
-
-type StreamingStatus struct {
-	RobotCode             string           `json:"robotCode"`
-	MissionID             string           `json:"missionId"`
-	RoomID                string           `json:"roomId"`
-	Status                string           `json:"status"`
-	PublishedTracks       []StreamingTrack `json:"publishedTracks"`
-	PublishedDataChannels []string         `json:"publishedDataChannels"`
-	SentAt                time.Time        `json:"sentAt"`
-	UpdatedAt             time.Time        `json:"updatedAt"`
 }
 
 type SensorDescriptor struct {

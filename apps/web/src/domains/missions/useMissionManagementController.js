@@ -22,8 +22,7 @@ export function useMissionManagementController({
   routeSelectedMissionCode = "",
   setMissionControlCode,
   setSelectedLiveTargetKey,
-  showNotification,
-  streamingStatuses
+  showNotification
 }) {
   const [missionForm, setMissionForm] = useState(createInitialMissionForm);
   const [missionModal, setMissionModal] = useState(null);
@@ -40,14 +39,14 @@ export function useMissionManagementController({
   useEffect(() => {
     const selectedRobotCodes = missionForm.robotCodes ?? [];
     if (selectedRobotCodes.length === 0 && robots.length > 0) {
-      const firstAssignableRobot = robots.find((robot) => !getBusyRobotReasonForMissionCreate(robot.robotCode, missions, streamingStatuses, Date.now(), observedStreams));
+      const firstAssignableRobot = robots.find((robot) => !getBusyRobotReasonForMissionCreate(robot.robotCode, missions, Date.now(), observedStreams));
       setMissionForm((current) => ({
         ...current,
         robotCode: firstAssignableRobot?.robotCode ?? "",
         robotCodes: firstAssignableRobot ? [firstAssignableRobot.robotCode] : []
       }));
     }
-  }, [missionForm.robotCodes, missions, observedStreams, robots, streamingStatuses]);
+  }, [missionForm.robotCodes, missions, observedStreams, robots]);
 
   useEffect(() => {
     if (missions.length === 0) {
@@ -71,14 +70,14 @@ export function useMissionManagementController({
   }, []);
 
   const openMissionControl = useCallback((mission, options = {}) => {
-    const targets = createMissionRobotTargets(mission, robots, streamingStatuses, observedStreams);
+    const targets = createMissionRobotTargets(mission, robots, observedStreams);
     if (options.navigate !== false && navigateToPath) {
       navigateToPath(`/missions/${encodeURIComponent(mission.missionCode)}/control`);
     }
     setSelectedMissionManagementCode(mission.missionCode);
     setMissionControlCode(mission.missionCode);
     setSelectedLiveTargetKey(resolveStoredLiveTargetKey(targets));
-  }, [navigateToPath, observedStreams, resolveStoredLiveTargetKey, robots, setMissionControlCode, setSelectedLiveTargetKey, streamingStatuses]);
+  }, [navigateToPath, observedStreams, resolveStoredLiveTargetKey, robots, setMissionControlCode, setSelectedLiveTargetKey]);
 
   const closeMissionControl = useCallback((missionControlCode, options = {}) => {
     if (missionControlCode) {
@@ -108,7 +107,7 @@ export function useMissionManagementController({
         : current.robotCode
           ? [current.robotCode]
           : [];
-      const assignableRobotCodes = robotCodes.filter((robotCode) => !getBusyRobotReasonForMissionCreate(robotCode, missions, streamingStatuses, Date.now(), observedStreams));
+      const assignableRobotCodes = robotCodes.filter((robotCode) => !getBusyRobotReasonForMissionCreate(robotCode, missions, Date.now(), observedStreams));
       return {
         ...createInitialMissionForm(),
         robotCode: assignableRobotCodes[0] ?? "",
@@ -121,7 +120,7 @@ export function useMissionManagementController({
   async function createMission(event) {
     event.preventDefault();
     try {
-      const robotCodes = (missionForm.robotCodes ?? []).filter((robotCode) => !getBusyRobotReasonForMissionCreate(robotCode, missions, streamingStatuses, Date.now(), observedStreams));
+      const robotCodes = (missionForm.robotCodes ?? []).filter((robotCode) => !getBusyRobotReasonForMissionCreate(robotCode, missions, Date.now(), observedStreams));
       if (robotCodes.length === 0) {
         showNotification("배정 가능한 로봇이 없습니다.", "warning");
         return;

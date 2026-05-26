@@ -137,3 +137,35 @@ func TestLiveStatusSeparatesRobotStreamState(t *testing.T) {
 		t.Fatalf("robot-002 stream = %q, want waiting", got)
 	}
 }
+
+func TestLiveStatusConnectionUsesHeartbeatFreshness(t *testing.T) {
+	now := time.Date(2026, 5, 26, 8, 50, 0, 0, time.UTC)
+	staleSeenAt := now.Add(-2 * time.Minute)
+	freshSeenAt := now.Add(-5 * time.Second)
+	service := LiveStatusService{}
+
+	status := service.BuildMissionLiveStatus(LiveStatusInput{
+		Mission: domain.Mission{
+			MissionCode: "mission-007",
+			Status:      "active",
+			RobotCodes:  []string{"robot-001", "robot-002", "robot-003"},
+		},
+		Robots: []domain.Robot{
+			{RobotCode: "robot-001", Status: "online", LastSeenAt: &freshSeenAt},
+			{RobotCode: "robot-002", Status: "online", LastSeenAt: &staleSeenAt},
+			{RobotCode: "robot-003", Status: "fault", LastSeenAt: &freshSeenAt},
+		},
+		Now:             now,
+		FreshnessWindow: 30 * time.Second,
+	})
+
+	if got := status.Robots[0].Connection.State; got != "online" {
+		t.Fatalf("fresh robot connection = %q, want online", got)
+	}
+	if got := status.Robots[1].Connection.State; got != "disconnected" {
+		t.Fatalf("stale robot connection = %q, want disconnected", got)
+	}
+	if got := status.Robots[2].Connection.State; got != "fault" {
+		t.Fatalf("fault robot connection = %q, want fault", got)
+	}
+}

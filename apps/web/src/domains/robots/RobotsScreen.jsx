@@ -87,8 +87,7 @@ export default function RobotsScreen({
                 <DefinitionList
                   items={[
                     { label: "상태", value: makeStatusLabel(selectedRobot.status) },
-                    { label: "최근 연결", value: formatDateTime(selectedRobot.lastSeenAt) },
-                    { label: "최근 송출", value: formatDateTime(selectedRobot.lastStreamingAt) }
+                    { label: "최근 연결", value: formatDateTime(selectedRobot.lastSeenAt) }
                   ]}
                 />
                 {selectedRobotHasOpenMission ? (

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchMissionLiveStatus, fetchObservedStreams, fetchStreamingStatuses } from "../api/liveApi.js";
+import { fetchMissionLiveStatus, fetchObservedStreams } from "../api/liveApi.js";
 import { fetchMissions } from "../api/missionsApi.js";
 import { fetchRecordings } from "../api/recordingsApi.js";
 import { fetchRobots } from "../api/robotsApi.js";
@@ -11,7 +11,6 @@ export function useControlCenterData() {
   const [missions, setMissions] = useState([]);
   const [missionLiveStatuses, setMissionLiveStatuses] = useState({});
   const [observedStreams, setObservedStreams] = useState([]);
-  const [streamingStatuses, setStreamingStatuses] = useState([]);
   const [recordings, setRecordings] = useState([]);
   const [statusError, setStatusError] = useState("");
   const requestSequenceRef = useRef(0);
@@ -26,7 +25,6 @@ export function useControlCenterData() {
         fetchRobots(),
         fetchMissions(),
         fetchObservedStreams(),
-        fetchStreamingStatuses(),
         fetchRecordings()
       ]);
     } catch (error) {
@@ -38,12 +36,11 @@ export function useControlCenterData() {
     if (requestSequence !== requestSequenceRef.current || options.isCancelled?.()) {
       return false;
     }
-    const [statusPayload, robotPayload, missionPayload, observedStreamsPayload, streamingPayload, recordingPayload] = payloads;
+    const [statusPayload, robotPayload, missionPayload, observedStreamsPayload, recordingPayload] = payloads;
     setSystemStatus(statusPayload);
     setRobots(robotPayload.robots ?? []);
     setMissions(missionPayload.missions ?? []);
     setObservedStreams(observedStreamsPayload.rooms ?? []);
-    setStreamingStatuses(streamingPayload.streamingStatuses ?? []);
     setRecordings(recordingPayload.recordings ?? []);
     setStatusError("");
     return true;
@@ -101,8 +98,6 @@ export function useControlCenterData() {
     setMissionLiveStatuses,
     observedStreams,
     setObservedStreams,
-    streamingStatuses,
-    setStreamingStatuses,
     recordings,
     setRecordings,
     statusError,

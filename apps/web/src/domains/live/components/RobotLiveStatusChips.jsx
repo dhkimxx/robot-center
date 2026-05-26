@@ -1,9 +1,8 @@
-import { makeRecordingStateForTarget } from "../../recordings/recordingHelpers.js";
 import { cn } from "../../../utils/cn.js";
 import { makeLiveStatusLabel } from "../../../utils/formatters.js";
 import { createEmptyLiveSession, formatMediaChannelCount, formatStreamingSubscriberCount } from "../liveHelpers.js";
 
-export function getRobotLiveStatusSummary({ liveSessions = {}, recordings = [], target }) {
+export function getRobotLiveStatusSummary({ liveSessions = {}, target }) {
   if (!target) {
     return {
       channelLabel: "",
@@ -15,13 +14,7 @@ export function getRobotLiveStatusSummary({ liveSessions = {}, recordings = [], 
     };
   }
   const session = liveSessions[target.key] ?? createEmptyLiveSession();
-  const recordingState = target.liveStatus?.recording
-    ? makeRecordingStateFromLiveStatus(target.liveStatus.recording)
-    : makeRecordingStateForTarget(
-      recordings,
-      target.mission?.missionCode,
-      target.robotCode
-    );
+  const recordingState = makeRecordingStateFromLiveStatus(target.liveStatus?.recording);
   const connectionLabel = target.liveStatus?.connection
     ? makeConnectionLabelFromLiveStatus(target.liveStatus.connection)
     : makeLiveStatusLabel(session.status);
@@ -79,6 +72,8 @@ function makeConnectionLabelFromLiveStatus(connection) {
       return "연결됨";
     case "fault":
       return "장애";
+    case "disconnected":
+      return "연결 끊김";
     case "offline":
       return "오프라인";
     default:

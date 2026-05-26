@@ -167,46 +167,6 @@ func TestControlPlaneFlow(t *testing.T) {
 		t.Fatalf("expected active support robot mission in shared room, got %#v", supportMissionPayload)
 	}
 
-	mismatchedRoomStatus, mismatchedRoomPayload := requestRawJSON(t, server.URL, http.MethodPost, "/api/robot-gateway/streaming-status", robotToken, map[string]any{
-		"robotCode": robotCode,
-		"missionId": startedMission["id"],
-		"roomId":    missionCode + "__" + robotCode,
-		"status":    "streaming",
-		"sentAt":    time.Now().UTC().Format(time.RFC3339Nano),
-	})
-	if mismatchedRoomStatus != http.StatusConflict {
-		t.Fatalf("expected streaming room mismatch conflict, got %d payload %#v", mismatchedRoomStatus, mismatchedRoomPayload)
-	}
-
-	requestJSON[map[string]any](t, server.URL, http.MethodPost, "/api/robot-gateway/streaming-status", robotToken, map[string]any{
-		"robotCode": robotCode,
-		"missionId": startedMission["id"],
-		"roomId":    missionCode,
-		"status":    "streaming",
-		"publishedTracks": []map[string]any{
-			{"name": sfu.StreamRoleTrackVideo1, "kind": "video", "codec": "h264"},
-			{"name": sfu.StreamRoleTrackVideo2, "kind": "video", "codec": "h264"},
-			{"name": sfu.StreamRoleTrackAudio1, "kind": "audio", "codec": "opus"},
-		},
-		"publishedDataChannels": []string{
-			sfu.StreamRoleChannelTelemetry,
-			sfu.StreamRoleChannelEvent,
-			sfu.StreamRoleChannelSpatial,
-			sfu.StreamRoleChannelControl,
-		},
-		"sentAt": time.Now().UTC().Format(time.RFC3339Nano),
-	})
-
-	streamingPayload := requestJSON[map[string]any](t, server.URL, http.MethodGet, "/api/streaming-statuses", "", nil)
-	streamingStatuses := streamingPayload["streamingStatuses"].([]any)
-	if len(streamingStatuses) != 1 {
-		t.Fatalf("expected one streaming status, got %#v", streamingStatuses)
-	}
-	streamingStatus := streamingStatuses[0].(map[string]any)
-	if streamingStatus["roomId"] != missionCode || streamingStatus["updatedAt"] == "" {
-		t.Fatalf("expected mission room and updatedAt in streaming status, got %#v", streamingStatus)
-	}
-
 	missionID := startedMission["id"].(string)
 	requestJSON[map[string]any](t, server.URL, http.MethodPost, "/api/sensor-samples", "", map[string]any{
 		"messageId":   "telemetry-canonical-1",
@@ -323,15 +283,6 @@ func TestControlPlaneFlow(t *testing.T) {
 	endedGatewayPayload := requestJSON[map[string]any](t, server.URL, http.MethodGet, "/api/robot-gateway/mission?robotCode="+supportRobotCode, supportRobotToken, nil)
 	if endedGatewayPayload["missionStatus"] != "none" {
 		t.Fatalf("expected no active support robot mission after end, got %#v", endedGatewayPayload)
-	}
-	stoppedStreamingPayload := requestJSON[map[string]any](t, server.URL, http.MethodGet, "/api/streaming-statuses", "", nil)
-	stoppedStreamingStatuses := stoppedStreamingPayload["streamingStatuses"].([]any)
-	if len(stoppedStreamingStatuses) != 1 {
-		t.Fatalf("expected one stopped streaming status, got %#v", stoppedStreamingPayload)
-	}
-	stoppedStreamingStatus := stoppedStreamingStatuses[0].(map[string]any)
-	if stoppedStreamingStatus["status"] != "stopped" {
-		t.Fatalf("expected stopped streaming status after mission end, got %#v", stoppedStreamingStatus)
 	}
 }
 

@@ -123,18 +123,13 @@ func buildLiveConnectionStatus(robot domain.Robot, now time.Time, freshnessWindo
 	if robot.Status == "fault" {
 		return domain.LiveConnectionStatus{State: "fault", Source: "robot_status", LastSeenAt: cloneDomainTimePointer(robot.LastSeenAt)}
 	}
-	if robot.Status == "offline" {
-		return domain.LiveConnectionStatus{State: "offline", Source: "robot_status", LastSeenAt: cloneDomainTimePointer(robot.LastSeenAt)}
-	}
 	if robot.LastSeenAt != nil && isFreshTime(*robot.LastSeenAt, now, freshnessWindow) {
 		return domain.LiveConnectionStatus{State: "online", Source: "heartbeat", LastSeenAt: cloneDomainTimePointer(robot.LastSeenAt)}
 	}
-	switch robot.Status {
-	case "online", "streaming":
-		return domain.LiveConnectionStatus{State: "online", Source: "robot_status", LastSeenAt: cloneDomainTimePointer(robot.LastSeenAt)}
-	default:
-		return domain.LiveConnectionStatus{State: "offline", Source: "unknown", LastSeenAt: cloneDomainTimePointer(robot.LastSeenAt)}
+	if robot.Status == "offline" {
+		return domain.LiveConnectionStatus{State: "disconnected", Source: "robot_status", LastSeenAt: cloneDomainTimePointer(robot.LastSeenAt)}
 	}
+	return domain.LiveConnectionStatus{State: "disconnected", Source: "heartbeat_stale", LastSeenAt: cloneDomainTimePointer(robot.LastSeenAt)}
 }
 
 func buildLiveStreamStatus(mission domain.Mission, publisher *sfu.ObservedPublisherSummary, now time.Time, freshnessWindow time.Duration) domain.LiveStreamStatus {

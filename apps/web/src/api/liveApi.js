@@ -4,10 +4,6 @@ export function fetchRtcConfig() {
   return requestJson("/api/rtc-config");
 }
 
-export function fetchStreamingStatuses() {
-  return requestJson("/api/streaming-statuses");
-}
-
 export function fetchObservedStreams() {
   return requestJson("/api/observed-streams");
 }

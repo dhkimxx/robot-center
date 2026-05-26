@@ -6,7 +6,6 @@ import { getRobotLiveStatusSummary, RobotLiveStatusChips } from "./RobotLiveStat
 export function MissionRobotDropdown({
   liveSessions,
   missionTargets,
-  recordings,
   selectedMissionTargetKey,
   setSelectedMissionTargetKey
 }) {
@@ -14,8 +13,8 @@ export function MissionRobotDropdown({
   const rootRef = useRef(null);
   const selectedTarget = missionTargets.find((target) => target.key === selectedMissionTargetKey) ?? missionTargets[0] ?? null;
   const selectedSummary = useMemo(
-    () => getRobotLiveStatusSummary({ liveSessions, recordings, target: selectedTarget }),
-    [liveSessions, recordings, selectedTarget]
+    () => getRobotLiveStatusSummary({ liveSessions, target: selectedTarget }),
+    [liveSessions, selectedTarget]
   );
   const disabled = missionTargets.length === 0;
 
@@ -80,7 +79,7 @@ export function MissionRobotDropdown({
           <div className="max-h-80 overflow-y-auto p-1.5">
             {missionTargets.map((target) => {
               const active = target.key === selectedTarget?.key;
-              const summary = getRobotLiveStatusSummary({ liveSessions, recordings, target });
+              const summary = getRobotLiveStatusSummary({ liveSessions, target });
               return (
                 <button
                   className={cn(

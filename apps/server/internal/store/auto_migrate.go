@@ -24,7 +24,6 @@ func (s *PostgresStore) runAutoMigrations(ctx context.Context) error {
 		&robotSessionRecord{},
 		&browserSessionRecord{},
 		&recorderSessionRecord{},
-		&streamingStatusRecord{},
 		&sensorDescriptorRecord{},
 		&sensorSampleRecord{},
 		&recordingSessionRecord{},

@@ -12,7 +12,6 @@ import (
 type Services struct {
 	Robots    *RobotService
 	Missions  *MissionService
-	Streaming *StreamingService
 	Sensors   *SensorService
 	Recording *RecordingService
 	Live      *LiveStatusService
@@ -25,7 +24,6 @@ func NewServices(repository store.Store) *Services {
 	return &Services{
 		Robots:            &RobotService{repository: repository},
 		Missions:          &MissionService{repository: repository},
-		Streaming:         &StreamingService{repository: repository},
 		Sensors:           &SensorService{repository: repository},
 		Recording:         &RecordingService{repository: repository, transactionRunner: transactionRunner},
 		Live:              &LiveStatusService{},
@@ -104,18 +102,6 @@ func (s *MissionService) ValidateActiveMissionRobot(ctx context.Context, mission
 
 func (s *MissionService) RecordingTargets(ctx context.Context) ([]domain.Mission, error) {
 	return s.repository.RecordingTargets(ctx)
-}
-
-type StreamingService struct {
-	repository store.StreamingRepository
-}
-
-func (s *StreamingService) ApplyStreamingStatus(ctx context.Context, status domain.StreamingStatus, bearerToken string) (domain.Robot, error) {
-	return s.repository.ApplyStreamingStatus(ctx, status, bearerToken)
-}
-
-func (s *StreamingService) ListStreamingStatuses(ctx context.Context) ([]domain.StreamingStatus, error) {
-	return s.repository.ListStreamingStatuses(ctx)
 }
 
 type SensorService struct {

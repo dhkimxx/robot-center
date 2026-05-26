@@ -52,7 +52,6 @@ export function getMissionCodeFromRobotKey(targetKey) {
 }
 
 const observedStreamFreshMs = 30_000;
-const streamingStatusFreshMs = 30_000;
 const closedMissionStatuses = new Set(["completed", "ended", "cancelled"]);
 const missionStatusOrder = { active: 0, ready: 1, completed: 2, ended: 2, cancelled: 3 };
 const inactiveObservedIceStates = new Set(["failed", "disconnected", "closed"]);
@@ -78,31 +77,6 @@ export function groupMissionsByLifecycle(missions) {
     openMissions: orderedMissions.filter((mission) => !isClosedMission(mission)),
     closedMissions: orderedMissions.filter(isClosedMission)
   };
-}
-
-function isFreshStreamingStatusReport(streamingStatus, nowMs = Date.now()) {
-  if (!streamingStatus || (streamingStatus.status !== "streaming" && streamingStatus.status !== "publishing")) {
-    return false;
-  }
-  const freshAtMs = Date.parse(streamingStatus.updatedAt ?? streamingStatus.sentAt ?? "");
-  return Number.isFinite(freshAtMs) && Math.abs(nowMs - freshAtMs) <= streamingStatusFreshMs;
-}
-
-export function isFreshMissionStreamingStatus(mission, robotCode, streamingStatus, nowMs = Date.now()) {
-  if (!mission || mission.status !== "active" || !streamingStatus) {
-    return false;
-  }
-  if (streamingStatus.missionId !== mission.id || streamingStatus.robotCode !== robotCode) {
-    return false;
-  }
-  if (streamingStatus.roomId !== makeMissionRoomId(mission)) {
-    return false;
-  }
-  return isFreshStreamingStatusReport(streamingStatus, nowMs);
-}
-
-export function findMissionStreamingStatus(mission, robotCode, streamingStatuses) {
-  return streamingStatuses.find((status) => status.missionId === mission?.id && status.robotCode === robotCode) ?? null;
 }
 
 function observedRooms(observedStreams = []) {
@@ -167,21 +141,15 @@ function isStreamingFromLiveStatus(liveStatusRobot) {
   return liveStatusRobot?.stream?.state === "streaming";
 }
 
-export function createMissionRobotTargets(mission, robots, streamingStatuses = [], observedStreams = [], liveStatus = null) {
+export function createMissionRobotTargets(mission, robots, observedStreams = [], liveStatus = null) {
   if (!mission) {
     return [];
   }
-  const statusesForMission = streamingStatuses.filter((status) => status.missionId === mission.id);
   const observedPublishersForMission = observedRooms(observedStreams)
     .find((room) => room.roomId === makeMissionRoomId(mission))
     ?.publishers ?? [];
   const robotCodes = new Set();
   getMissionRobotCodes(mission).forEach((robotCode) => robotCodes.add(robotCode));
-  statusesForMission.forEach((status) => {
-    if (status.robotCode) {
-      robotCodes.add(status.robotCode);
-    }
-  });
   observedPublishersForMission.forEach((publisher) => {
     if (publisher.robotCode) {
       robotCodes.add(publisher.robotCode);
@@ -189,7 +157,6 @@ export function createMissionRobotTargets(mission, robots, streamingStatuses = [
   });
 
   return Array.from(robotCodes).map((robotCode) => {
-    const streamingStatus = findMissionStreamingStatus(mission, robotCode, statusesForMission);
     const observedPublisher = findMissionObservedPublisher(mission, robotCode, observedStreams);
     const liveStatusRobot = findMissionLiveStatusRobot(liveStatus, robotCode);
     const isStreaming = liveStatusRobot
@@ -205,16 +172,14 @@ export function createMissionRobotTargets(mission, robots, streamingStatuses = [
       robotCode,
       roomId: makeMissionRoomId(mission),
       observedPublisher,
-      liveStatus: liveStatusRobot,
-      streamingStatus
+      liveStatus: liveStatusRobot
     };
   });
 }
 
-export function getMissionRobotDetails(mission, robots, streamingStatuses = [], observedStreams = []) {
+export function getMissionRobotDetails(mission, robots, observedStreams = []) {
   return getMissionRobotCodes(mission).map((robotCode) => {
     const robot = robots.find((candidate) => candidate.robotCode === robotCode) ?? null;
-    const streamingStatus = findMissionStreamingStatus(mission, robotCode, streamingStatuses);
     const observedPublisher = findMissionObservedPublisher(mission, robotCode, observedStreams);
     const isStreaming = isFreshMissionObservedPublisher(mission, robotCode, observedPublisher);
     return {
@@ -223,14 +188,12 @@ export function getMissionRobotDetails(mission, robots, streamingStatuses = [], 
       isStreaming,
       liveLabel: makeMissionRobotLiveLabel(mission, isStreaming),
       observedPublisher,
-      robotCode,
-      streamingStatus
+      robotCode
     };
   });
 }
 
-export function getBusyRobotReasonForMissionCreate(robotCode, missions = [], streamingStatuses = [], nowMs = Date.now(), observedStreams = []) {
-  void streamingStatuses;
+export function getBusyRobotReasonForMissionCreate(robotCode, missions = [], nowMs = Date.now(), observedStreams = []) {
   const activeMission = missions.find((mission) => mission.status === "active" && getMissionRobotCodes(mission).includes(robotCode));
   if (activeMission) {
     return `진행 중 임무 ${activeMission.missionCode}`;

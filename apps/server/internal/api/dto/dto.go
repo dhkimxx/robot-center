@@ -8,15 +8,14 @@ import (
 )
 
 type RobotResponse struct {
-	ID              string     `json:"id"`
-	RobotCode       string     `json:"robotCode"`
-	DisplayName     string     `json:"displayName"`
-	ModelName       string     `json:"modelName,omitempty"`
-	Status          string     `json:"status"`
-	LastSeenAt      *time.Time `json:"lastSeenAt,omitempty"`
-	LastStreamingAt *time.Time `json:"lastStreamingAt,omitempty"`
-	CreatedAt       time.Time  `json:"createdAt"`
-	UpdatedAt       time.Time  `json:"updatedAt"`
+	ID          string     `json:"id"`
+	RobotCode   string     `json:"robotCode"`
+	DisplayName string     `json:"displayName"`
+	ModelName   string     `json:"modelName,omitempty"`
+	Status      string     `json:"status"`
+	LastSeenAt  *time.Time `json:"lastSeenAt,omitempty"`
+	CreatedAt   time.Time  `json:"createdAt"`
+	UpdatedAt   time.Time  `json:"updatedAt"`
 }
 
 type RobotConnectionInfoResponse struct {
@@ -38,28 +37,6 @@ type MissionResponse struct {
 	EndedAt     *time.Time `json:"endedAt,omitempty"`
 	CreatedAt   time.Time  `json:"createdAt"`
 	UpdatedAt   time.Time  `json:"updatedAt"`
-}
-
-type StreamingTrackResponse struct {
-	Name        string `json:"name"`
-	DisplayName string `json:"displayName,omitempty"`
-	Kind        string `json:"kind"`
-	Codec       string `json:"codec"`
-	Width       int    `json:"width,omitempty"`
-	Height      int    `json:"height,omitempty"`
-	FPS         int    `json:"fps,omitempty"`
-	BitrateKbps int    `json:"bitrateKbps,omitempty"`
-}
-
-type StreamingStatusResponse struct {
-	RobotCode             string                   `json:"robotCode"`
-	MissionID             string                   `json:"missionId"`
-	RoomID                string                   `json:"roomId"`
-	Status                string                   `json:"status"`
-	PublishedTracks       []StreamingTrackResponse `json:"publishedTracks"`
-	PublishedDataChannels []string                 `json:"publishedDataChannels"`
-	SentAt                time.Time                `json:"sentAt"`
-	UpdatedAt             time.Time                `json:"updatedAt"`
 }
 
 type SensorDescriptorResponse struct {
@@ -224,31 +201,6 @@ func Missions(missions []domain.Mission) []MissionResponse {
 	response := make([]MissionResponse, 0, len(missions))
 	for _, mission := range missions {
 		response = append(response, Mission(mission))
-	}
-	return response
-}
-
-func StreamingStatus(status domain.StreamingStatus) StreamingStatusResponse {
-	tracks := make([]StreamingTrackResponse, 0, len(status.PublishedTracks))
-	for _, track := range status.PublishedTracks {
-		tracks = append(tracks, StreamingTrackResponse(track))
-	}
-	return StreamingStatusResponse{
-		RobotCode:             status.RobotCode,
-		MissionID:             status.MissionID,
-		RoomID:                status.RoomID,
-		Status:                status.Status,
-		PublishedTracks:       tracks,
-		PublishedDataChannels: append([]string(nil), status.PublishedDataChannels...),
-		SentAt:                status.SentAt,
-		UpdatedAt:             status.UpdatedAt,
-	}
-}
-
-func StreamingStatuses(statuses []domain.StreamingStatus) []StreamingStatusResponse {
-	response := make([]StreamingStatusResponse, 0, len(statuses))
-	for _, status := range statuses {
-		response = append(response, StreamingStatus(status))
 	}
 	return response
 }

@@ -182,14 +182,6 @@ func (s *recordingStoreSpy) RecordingTargets(_ context.Context) ([]domain.Missio
 	return nil, nil
 }
 
-func (s *recordingStoreSpy) ApplyStreamingStatus(_ context.Context, _ domain.StreamingStatus, _ string) (domain.Robot, error) {
-	return domain.Robot{}, nil
-}
-
-func (s *recordingStoreSpy) ListStreamingStatuses(_ context.Context) ([]domain.StreamingStatus, error) {
-	return nil, nil
-}
-
 func (s *recordingStoreSpy) SaveSensorEnvelope(_ context.Context, envelope domain.SensorEnvelope) ([]domain.SensorSample, error) {
 	return envelope.Samples, nil
 }

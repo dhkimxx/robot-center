@@ -10,8 +10,7 @@ export function MissionModals({
   observedStreams,
   onClose,
   robots,
-  setMissionForm,
-  streamingStatuses
+  setMissionForm
 }) {
   return missionModal === "create" ? (
     <Modal
@@ -32,7 +31,6 @@ export function MissionModals({
           observedStreams={observedStreams}
           robots={robots}
           setForm={setMissionForm}
-          streamingStatuses={streamingStatuses}
         />
       </form>
     </Modal>

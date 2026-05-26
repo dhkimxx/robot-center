@@ -24,17 +24,16 @@ func (userRecord) TableName() string {
 }
 
 type robotRecord struct {
-	ID              string          `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	RobotCode       string          `gorm:"column:robot_code;not null;uniqueIndex"`
-	DisplayName     string          `gorm:"column:display_name;not null"`
-	ModelName       *string         `gorm:"column:model_name"`
-	Status          string          `gorm:"column:status;not null;default:offline"`
-	LastSeenAt      *time.Time      `gorm:"column:last_seen_at"`
-	LastStreamingAt *time.Time      `gorm:"column:last_streaming_at"`
-	ArchivedAt      *time.Time      `gorm:"column:archived_at"`
-	Metadata        json.RawMessage `gorm:"column:metadata;type:jsonb;not null;default:'{}'::jsonb"`
-	CreatedAt       time.Time       `gorm:"column:created_at;not null;default:now()"`
-	UpdatedAt       time.Time       `gorm:"column:updated_at;not null;default:now()"`
+	ID          string          `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	RobotCode   string          `gorm:"column:robot_code;not null;uniqueIndex"`
+	DisplayName string          `gorm:"column:display_name;not null"`
+	ModelName   *string         `gorm:"column:model_name"`
+	Status      string          `gorm:"column:status;not null;default:offline"`
+	LastSeenAt  *time.Time      `gorm:"column:last_seen_at"`
+	ArchivedAt  *time.Time      `gorm:"column:archived_at"`
+	Metadata    json.RawMessage `gorm:"column:metadata;type:jsonb;not null;default:'{}'::jsonb"`
+	CreatedAt   time.Time       `gorm:"column:created_at;not null;default:now()"`
+	UpdatedAt   time.Time       `gorm:"column:updated_at;not null;default:now()"`
 }
 
 func (robotRecord) TableName() string {
@@ -43,15 +42,14 @@ func (robotRecord) TableName() string {
 
 func (record robotRecord) toDomainRobot() domain.Robot {
 	return domain.Robot{
-		ID:              record.ID,
-		RobotCode:       record.RobotCode,
-		DisplayName:     record.DisplayName,
-		ModelName:       stringFromPointer(record.ModelName),
-		Status:          record.Status,
-		LastSeenAt:      record.LastSeenAt,
-		LastStreamingAt: record.LastStreamingAt,
-		CreatedAt:       record.CreatedAt,
-		UpdatedAt:       record.UpdatedAt,
+		ID:          record.ID,
+		RobotCode:   record.RobotCode,
+		DisplayName: record.DisplayName,
+		ModelName:   stringFromPointer(record.ModelName),
+		Status:      record.Status,
+		LastSeenAt:  record.LastSeenAt,
+		CreatedAt:   record.CreatedAt,
+		UpdatedAt:   record.UpdatedAt,
 	}
 }
 
@@ -120,22 +118,6 @@ type missionRobotRecord struct {
 
 func (missionRobotRecord) TableName() string {
 	return "mission_robots"
-}
-
-type streamingStatusRecord struct {
-	ID                    string          `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	RobotID               string          `gorm:"column:robot_id;type:uuid;not null;uniqueIndex"`
-	MissionID             *string         `gorm:"column:mission_id;type:uuid"`
-	RoomID                string          `gorm:"column:room_id;not null"`
-	Status                string          `gorm:"column:status;not null"`
-	PublishedTracks       json.RawMessage `gorm:"column:published_tracks;type:jsonb;not null;default:'[]'::jsonb"`
-	PublishedDataChannels json.RawMessage `gorm:"column:published_data_channels;type:jsonb;not null;default:'[]'::jsonb"`
-	SentAt                *time.Time      `gorm:"column:sent_at"`
-	UpdatedAt             time.Time       `gorm:"column:updated_at;not null;default:now()"`
-}
-
-func (streamingStatusRecord) TableName() string {
-	return "streaming_statuses"
 }
 
 type sensorDescriptorRecord struct {

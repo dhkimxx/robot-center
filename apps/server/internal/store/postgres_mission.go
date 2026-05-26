@@ -174,11 +174,6 @@ func (s *PostgresStore) transitionMission(ctx context.Context, missionCode strin
 			if err != nil {
 				return err
 			}
-			streamingConflicts, err := s.findFreshStreamingConflictsForMissionRobots(tx, row.ID)
-			if err != nil {
-				return err
-			}
-			conflicts = mergeMissionStartConflicts(conflicts, streamingConflicts)
 			if len(conflicts) > 0 {
 				return &MissionStartConflictError{Conflicts: conflicts}
 			}
@@ -226,15 +221,6 @@ func (s *PostgresStore) transitionMission(ctx context.Context, missionCode strin
 				Where("id IN (?) AND status = ?", assignedRobotIDs, "assigned").
 				Updates(map[string]any{
 					"status":     "online",
-					"updated_at": gorm.Expr("now()"),
-				}).Error; err != nil {
-				return err
-			}
-			if err := tx.Model(&streamingStatusRecord{}).
-				Where("mission_id = ?", row.ID).
-				Updates(map[string]any{
-					"status":     "stopped",
-					"sent_at":    gorm.Expr("now()"),
 					"updated_at": gorm.Expr("now()"),
 				}).Error; err != nil {
 				return err
@@ -328,46 +314,7 @@ func (s *PostgresStore) findBusyMissionCreateConflicts(tx *gorm.DB, robotIDs []s
 		return nil, err
 	}
 
-	var streamingConflicts []MissionStartConflict
-	if err := tx.Raw(`
-		SELECT
-			r.robot_code AS robot_code,
-			COALESCE(m.mission_code, NULLIF(ss.room_id, ''), 'streaming') AS active_mission_code
-		FROM robots r
-		JOIN streaming_statuses ss ON ss.robot_id = r.id
-		LEFT JOIN missions m ON m.id = ss.mission_id
-			WHERE r.id IN ?
-				AND ss.status IN ('streaming', 'publishing')
-				AND ss.updated_at > ?
-			ORDER BY r.robot_code
-		`, robotIDs, time.Now().UTC().Add(-streamingStatusFreshnessWindow)).Scan(&streamingConflicts).Error; err != nil {
-		return nil, err
-	}
-
-	return mergeMissionStartConflicts(activeConflicts, streamingConflicts), nil
-}
-
-func (s *PostgresStore) findFreshStreamingConflictsForMissionRobots(tx *gorm.DB, missionID string) ([]MissionStartConflict, error) {
-	var conflicts []MissionStartConflict
-	err := tx.Raw(`
-		SELECT
-			r.robot_code AS robot_code,
-			COALESCE(m.mission_code, NULLIF(ss.room_id, ''), 'streaming') AS active_mission_code
-		FROM mission_robots target_mr
-		JOIN robots r ON r.id = target_mr.robot_id
-		JOIN streaming_statuses ss ON ss.robot_id = r.id
-		LEFT JOIN missions m ON m.id = ss.mission_id
-			WHERE target_mr.mission_id = ?
-				AND target_mr.status != 'removed'
-				AND ss.status IN ('streaming', 'publishing')
-				AND ss.updated_at > ?
-				AND (ss.mission_id IS NULL OR ss.mission_id != ?)
-			ORDER BY r.robot_code
-	`, missionID, time.Now().UTC().Add(-streamingStatusFreshnessWindow), missionID).Scan(&conflicts).Error
-	if err != nil {
-		return nil, err
-	}
-	return conflicts, nil
+	return activeConflicts, nil
 }
 
 func mergeMissionStartConflicts(conflictGroups ...[]MissionStartConflict) []MissionStartConflict {

@@ -15,8 +15,6 @@ var (
 	ErrInvalidState = errors.New("invalid state")
 )
 
-const streamingStatusFreshnessWindow = 30 * time.Second
-
 type MissionStartConflict struct {
 	RobotCode         string
 	ActiveMissionCode string

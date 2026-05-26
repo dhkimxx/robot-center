@@ -18,6 +18,8 @@ history:
 - '2026-05-26 danya.kim <danya.kim@thundersoft.com>: merged redundant server and SFU harness docs into architecture'
 - '2026-05-26 danya.kim <danya.kim@thundersoft.com>: documented observed stream status API and optional streaming metadata'
 - '2026-05-26 danya.kim <danya.kim@thundersoft.com>: documented mission live-status as Live UI state source of truth'
+- '2026-05-26 danya.kim <danya.kim@thundersoft.com>: removed streaming-status API from live state architecture'
+- '2026-05-26 danya.kim <danya.kim@thundersoft.com>: documented live-status without streaming-status API dependency'
 ---
 
 # Architecture
@@ -457,7 +459,7 @@ GET /api/missions/{missionCode}/live-status
 
 중요한 분리 원칙:
 
-- Live 화면의 `송출 중/송출 대기`는 `streaming_statuses`가 아니라 SFU observed stream으로 판단한다.
+- Live 화면의 `송출 중/송출 대기`는 SFU observed stream으로 판단한다.
 - Live 화면의 `녹화 중/녹화 대기`는 `recording_chunks.status`만으로 판단하지 않는다.
 - `recording_chunks`는 replay/history와 upload 결과를 위한 저장 metadata다.
 - recorder-worker `/healthz` 조회에 실패하거나 robot별 runtime이 없으면 `recording`으로 표시하지 않는다.

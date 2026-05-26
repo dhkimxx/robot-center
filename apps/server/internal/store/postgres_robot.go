@@ -231,7 +231,7 @@ func (s *PostgresStore) ApplyHeartbeat(ctx context.Context, input HeartbeatInput
 		UPDATE robots
 		SET status = $2, last_seen_at = now(), updated_at = now()
 		WHERE id = $1::uuid
-		RETURNING id::text, robot_code, display_name, COALESCE(model_name, ''), status, last_seen_at, last_streaming_at, created_at, updated_at
+		RETURNING id::text, robot_code, display_name, COALESCE(model_name, ''), status, last_seen_at, created_at, updated_at
 	`, robot.ID, status).Scan(
 		&robot.ID,
 		&robot.RobotCode,
@@ -239,7 +239,6 @@ func (s *PostgresStore) ApplyHeartbeat(ctx context.Context, input HeartbeatInput
 		&robot.ModelName,
 		&robot.Status,
 		nullableTimeScanner(&robot.LastSeenAt),
-		nullableTimeScanner(&robot.LastStreamingAt),
 		&robot.CreatedAt,
 		&robot.UpdatedAt,
 	)
@@ -296,7 +295,6 @@ func (s *PostgresStore) authorizeRobotWithGorm(tx *gorm.DB, robotCode string, be
 			r.model_name AS model_name,
 			r.status AS status,
 			r.last_seen_at AS last_seen_at,
-			r.last_streaming_at AS last_streaming_at,
 			r.created_at AS created_at,
 			r.updated_at AS updated_at
 		`).
@@ -324,7 +322,7 @@ func (s *PostgresStore) authorizeRobot(ctx context.Context, tx *sql.Tx, robotCod
 	}
 	row := tx.QueryRowContext(ctx, `
 		SELECT r.id::text, r.robot_code, r.display_name, COALESCE(r.model_name, ''), r.status,
-		       r.last_seen_at, r.last_streaming_at, r.created_at, r.updated_at
+		       r.last_seen_at, r.created_at, r.updated_at
 			FROM robots r
 			JOIN robot_tokens rt ON rt.robot_id = r.id
 			WHERE r.robot_code = $1 AND r.archived_at IS NULL AND rt.token_hash = $2 AND rt.is_active = true

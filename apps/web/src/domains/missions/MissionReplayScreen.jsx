@@ -25,8 +25,7 @@ export function MissionReplayScreen({
   onBackToMissionList,
   onOpenPlaybackFile,
   recordings,
-  robots,
-  streamingStatuses
+  robots
 }) {
   const missionRecordings = useMemo(
     () => recordings.filter((recording) => recording.missionCode === mission?.missionCode),
@@ -60,7 +59,7 @@ export function MissionReplayScreen({
     );
   }
 
-  const robotDetails = getMissionRobotDetails(mission, robots, streamingStatuses, observedStreams);
+  const robotDetails = getMissionRobotDetails(mission, robots, observedStreams);
 
   return (
     <Surface className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden p-3">

@@ -12,7 +12,8 @@ history:
 - "2026-05-26 danya.kim <danya.kim@thundersoft.com>: missionId UUID, roomId missionCode, streaming freshness updatedAt 기준 명시"
 - "2026-05-26 danya.kim <danya.kim@thundersoft.com>: moved into docs/stable lifecycle structure"
 - '2026-05-26 danya.kim <danya.kim@thundersoft.com>: simplified robot WebRTC connection by making SFU observed streams the live source of truth'
-- '2026-05-26 danya.kim <danya.kim@thundersoft.com>: clarified live-status API and optional streaming metadata responsibility'
+- '2026-05-26 danya.kim <danya.kim@thundersoft.com>: removed streaming-status gateway API from robot requirements'
+- '2026-05-26 danya.kim <danya.kim@thundersoft.com>: removed streaming-status gateway API from robot interface'
 ---
 
 # Robot Gateway Interface
@@ -159,79 +160,11 @@ active mission이 없을 때:
 }
 ```
 
-### 6.3 Optional Streaming Metadata
+### 6.3 Live 상태 판단
 
-로봇이 실제 송출 스펙 metadata를 별도로 남기고 싶을 때 사용하는 선택 API다.
+Robot Gateway는 별도 streaming-status REST API를 호출하지 않는다. Live 화면은 `GET /api/missions/{missionCode}/live-status`를 사용하며, app-server가 SFU observed stream, recorder-worker runtime, mission assignment, robot heartbeat를 합성해 상태를 제공한다.
 
-관제 UI의 “송출 중/송출 대기” 판단은 이 API가 아니라 SFU가 관측한 WebRTC publisher, media track, DataChannel 상태를 기준으로 한다. 따라서 Robot Gateway의 필수 연결 절차에는 포함하지 않는다.
-
-Live 화면은 `GET /api/missions/{missionCode}/live-status`를 사용한다. 이 API는 app-server가 SFU observed stream, recorder-worker runtime, mission assignment, robot heartbeat를 합성한 상태다. Robot Gateway는 `streaming-status`를 주기적으로 보고하지 않아도 WebRTC publish만 정상 수행하면 송출 상태가 관측된다.
-
-```http
-POST /api/robot-gateway/streaming-status
-Authorization: Bearer {robotToken}
-Content-Type: application/json
-```
-
-요청 예시:
-
-```json
-{
-  "robotCode": "robot-001",
-  "missionId": "9d3c1e5d-0c41-4e4f-a21f-8b69f7c0a001",
-  "roomId": "mission-001",
-  "status": "streaming",
-  "publishedTracks": [
-    {
-      "name": "track.video_1",
-      "displayName": "RGB",
-      "kind": "video",
-      "codec": "h264",
-      "width": 1280,
-      "height": 720,
-      "fps": 30,
-      "bitrateKbps": 2500
-    },
-    {
-      "name": "track.video_2",
-      "displayName": "Thermal",
-      "kind": "video",
-      "codec": "h264",
-      "width": 640,
-      "height": 480,
-      "fps": 15,
-      "bitrateKbps": 800
-    },
-    {
-      "name": "track.audio_1",
-      "displayName": "Audio",
-      "kind": "audio",
-      "codec": "opus"
-    }
-  ],
-  "publishedDataChannels": ["channel.telemetry", "channel.spatial", "channel.event", "channel.control"],
-  "sentAt": "2026-05-18T08:01:00.000Z"
-}
-```
-
-`publishedTracks`와 `publishedDataChannels`는 실제 mock/robot이 송출한 값을 보고하는 metadata다. 슬롯명은 `track.video_1`, `channel.telemetry` 같은 canonical role을 사용하고, 화면 표시 의미는 `displayName` 등 metadata로 분리한다.
-
-Optional streaming metadata 수락 규칙:
-
-- `status=streaming` 또는 `publishing`은 `missionId`가 active mission이고 해당 robot이 active assignment일 때만 수락한다.
-- `roomId`는 반드시 mission 조회 응답의 `roomId`, 즉 `missionCode`와 같아야 한다.
-- 이전 호환 room 형식인 `missionCode__robotCode`는 metadata와 SFU publish 기준으로 사용하지 않는다.
-- 서버는 로봇이 보낸 `sentAt`을 metadata로 보존한다. live freshness 판단은 SFU observed stream의 `lastTrackAt` 또는 `lastDataAt` 기준 30초 window로 판단한다.
-- `stopped`, `failed`, `stale` 같은 종료성 status는 현재 저장된 robot streaming row의 `missionId + roomId`가 보고값과 같을 때만 반영한다. 늦게 도착한 이전 임무의 stop 보고가 새 임무 송출 상태를 덮어쓰면 안 된다.
-
-응답:
-
-```json
-{
-  "accepted": true,
-  "serverTime": "2026-05-18T08:01:00.100Z"
-}
-```
+로봇 쪽 필수 책임은 heartbeat, active mission 조회, WebRTC signaling 접속, track/DataChannel publish다. 송출 여부는 로봇이 REST로 보고하는 값이 아니라 app-server 내부 SFU가 실제로 수신한 publisher, media track, DataChannel 상태로 판단한다.
 
 ### 6.4 Control ACK
 
@@ -373,7 +306,7 @@ Browser WebSocket은 실시간 센서 표시의 필수 경로가 아니다.
 | `online` | heartbeat 성공 또는 최근 gateway 통신 성공 |
 | `fault` | 오류 상태 |
 
-`robots.status`는 장치 online/offline/fault 성격의 상태다. 임무 배정 상태는 `mission_robots.status`, WebRTC live 송출 상태는 app-server 내부 SFU의 observed stream 상태에서 판단한다. `streaming_statuses`는 선택 metadata 저장소이며 live 판정의 source of truth가 아니다.
+`robots.status`는 장치 online/offline/fault 성격의 상태다. 임무 배정 상태는 `mission_robots.status`, WebRTC live 송출 상태는 app-server 내부 SFU의 observed stream 상태에서 판단한다.
 
 ## 10. 재시도 정책
 

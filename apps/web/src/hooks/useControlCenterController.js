@@ -28,7 +28,6 @@ export function useControlCenterController({
     missions,
     missionLiveStatuses,
     observedStreams,
-    streamingStatuses,
     recordings,
     statusError,
     loadAll,
@@ -66,15 +65,15 @@ export function useControlCenterController({
   );
   const activeLiveTargets = useMemo(
     () => activeMissions
-      .flatMap((mission) => createMissionRobotTargets(mission, robots, streamingStatuses, observedStreams)),
-    [activeMissions, observedStreams, robots, streamingStatuses]
+      .flatMap((mission) => createMissionRobotTargets(mission, robots, observedStreams)),
+    [activeMissions, observedStreams, robots]
   );
   const missionControlTargets = useMemo(() => {
     if (!missionControlMission) {
       return [];
     }
-    return createMissionRobotTargets(missionControlMission, robots, streamingStatuses, observedStreams, missionControlLiveStatus);
-  }, [missionControlLiveStatus, missionControlMission, observedStreams, robots, streamingStatuses]);
+    return createMissionRobotTargets(missionControlMission, robots, observedStreams, missionControlLiveStatus);
+  }, [missionControlLiveStatus, missionControlMission, observedStreams, robots]);
   const liveTargets = useMemo(
     () => (missionControlMission ? missionControlTargets : activeLiveTargets),
     [activeLiveTargets, missionControlMission, missionControlTargets]
@@ -139,8 +138,7 @@ export function useControlCenterController({
     setMissionControlCode,
     setSelectedLiveTargetKey,
     showNotification,
-    observedStreams,
-    streamingStatuses
+    observedStreams
   });
 
   const closeMissionControl = useCallback((options = {}) => {
@@ -221,8 +219,7 @@ export function useControlCenterController({
       robots,
       selectedMission: missionController.selectedMission,
       selectedMissionTargetKey: selectedLiveTargetKey,
-      setSelectedMissionTargetKey: setSelectedLiveTargetKey,
-      streamingStatuses
+      setSelectedMissionTargetKey: setSelectedLiveTargetKey
     },
     missionModalProps: {
       createMission: missionController.createMission,
@@ -232,8 +229,7 @@ export function useControlCenterController({
       observedStreams,
       onClose: missionController.closeMissionModal,
       robots,
-      setMissionForm: missionController.setMissionForm,
-      streamingStatuses
+      setMissionForm: missionController.setMissionForm
     },
     playbackModalProps: {
       recordingPlaybackFile: recordingsController.recordingPlaybackFile,

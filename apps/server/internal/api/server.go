@@ -79,7 +79,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/rtc-config", s.handleRTCConfig)
 	mux.HandleFunc("GET /api/recording-targets", s.handleRecordingTargets)
 	mux.HandleFunc("GET /api/observed-streams", s.handleObservedStreams)
-	mux.HandleFunc("GET /api/streaming-statuses", s.handleListStreamingStatuses)
 	mux.HandleFunc("GET /api/sensor-descriptors", s.handleListSensorDescriptors)
 	mux.HandleFunc("POST /api/sensor-descriptors", s.handleCreateSensorSamples)
 	mux.HandleFunc("GET /api/sensor-samples", s.handleListSensorSamples)
@@ -102,7 +101,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/missions/{missionCode}/end", s.handleEndMission)
 	mux.HandleFunc("POST /api/robot-gateway/heartbeat", s.handleRobotGatewayHeartbeat)
 	mux.HandleFunc("GET /api/robot-gateway/mission", s.handleRobotGatewayMission)
-	mux.HandleFunc("POST /api/robot-gateway/streaming-status", s.handleRobotGatewayStreamingStatus)
 	mux.HandleFunc("GET /sfu/ws", s.handleSFUWebSocket)
 
 	if s.config.WebStaticDir != "" {
@@ -187,17 +185,6 @@ func (s *Server) handleRecordingTargets(w http.ResponseWriter, r *http.Request) 
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"targets": dto.Missions(targets),
-	})
-}
-
-func (s *Server) handleListStreamingStatuses(w http.ResponseWriter, r *http.Request) {
-	statuses, err := s.services.Streaming.ListStreamingStatuses(r.Context())
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"streamingStatuses": dto.StreamingStatuses(statuses),
 	})
 }
 
@@ -648,30 +635,6 @@ func (s *Server) handleRobotGatewayMission(w http.ResponseWriter, r *http.Reques
 		"videoPolicy": map[string]string{
 			"mode": "robot_defined",
 		},
-	})
-}
-
-func (s *Server) handleRobotGatewayStreamingStatus(w http.ResponseWriter, r *http.Request) {
-	var request domain.StreamingStatus
-	if err := decodeJSON(r, &request); err != nil {
-		writeError(w, http.StatusBadRequest, err)
-		return
-	}
-	if request.SentAt.IsZero() {
-		request.SentAt = time.Now().UTC()
-	}
-
-	robot, err := s.services.Streaming.ApplyStreamingStatus(r.Context(), request, bearerToken(r))
-	if err != nil {
-		writeStoreError(w, err)
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"accepted":   true,
-		"robotCode":  robot.RobotCode,
-		"status":     robot.Status,
-		"serverTime": time.Now().UTC().Format(time.RFC3339Nano),
 	})
 }
 
