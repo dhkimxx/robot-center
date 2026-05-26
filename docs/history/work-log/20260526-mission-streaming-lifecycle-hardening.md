@@ -1,7 +1,7 @@
 ---
 title: "mission-streaming-lifecycle-hardening"
 created: 2026-05-26
-updated: 2026-05-26
+updated: '2026-05-26'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>"]
 type: "log"
@@ -10,6 +10,8 @@ tags: ["mission", "streaming", "webrtc", "sfu", "robot"]
 history:
 - "2026-05-26 danya.kim <danya.kim@thundersoft.com>: mission scoped streaming lifecycle hardening 기록"
 - "2026-05-26 danya.kim <danya.kim@thundersoft.com>: moved into docs/history lifecycle structure"
+- "2026-05-26 danya.kim <danya.kim@thundersoft.com>: renamed log file to YYYYMMDD-title format"
+- '2026-05-26 danya.kim <danya.kim@thundersoft.com>: standardized work log path and filename'
 ---
 
 # Mission Streaming Lifecycle Hardening
@@ -65,5 +67,5 @@ curl -fsS http://127.0.0.1:18080/api/streaming-statuses
 
 ## 남은 한계
 
-- 과거 `docs/history/rebuild-results/*` 삭제분 복구 여부는 별도 정책 결정이 필요하다.
+- 과거 작업 로그 삭제분 복구 여부는 별도 정책 결정이 필요하다.
 - Browser MCP가 기존 browser lock으로 열리지 않아 브라우저 스크린샷 검증은 수행하지 못했다. API/Mock Robot/SFU 상태는 확인했다.

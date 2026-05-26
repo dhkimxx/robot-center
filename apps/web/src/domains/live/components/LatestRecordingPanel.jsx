@@ -9,7 +9,7 @@ import {
 } from "../../../utils/formatters.js";
 import { createRecordingPlaybackFile } from "../../recordings/recordingHelpers.js";
 
-export function LatestRecordingPanel({ recording, compact = false, onOpenRecordings, onPlayRecording, playbackRecording }) {
+export function LatestRecordingPanel({ recording, compact = false, onOpenReplay, onPlayRecording, playbackRecording }) {
   const playableFile = createRecordingPlaybackFile(playbackRecording ?? recording);
   return (
     <Surface className={cn("grid gap-3", compact && "rounded-xl p-3 shadow-none")}>
@@ -34,8 +34,8 @@ export function LatestRecordingPanel({ recording, compact = false, onOpenRecordi
                 재생
               </Button>
             ) : null}
-            <Button size="sm" onClick={onOpenRecordings}>
-              녹화 목록
+            <Button size="sm" onClick={onOpenReplay}>
+              리플레이
             </Button>
           </div>
         </div>

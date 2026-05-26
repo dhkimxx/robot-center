@@ -1,12 +1,7 @@
 import Button from "../../../components/ui/Button.jsx";
 import EmptyState from "../../../components/ui/EmptyState.jsx";
-import SectionHeader from "../../../components/ui/SectionHeader.jsx";
 import Surface from "../../../components/ui/Surface.jsx";
-import {
-  makeLiveStatusLabel,
-  makeStatusLabel,
-  missionTypeLabel
-} from "../../../utils/formatters.js";
+import { makeLiveStatusLabel } from "../../../utils/formatters.js";
 import {
   connectedLiveConnectionStatuses,
   reconnectableLiveStatuses
@@ -29,12 +24,9 @@ export function MissionControlView({
   liveSessions,
   mission,
   missionTargets,
-  onBackToMissionList,
-  onEndMission,
-  onOpenRecordings,
+  onOpenMissionReplay,
   onPlayLatestRecording,
   onReconnectSelectedMissionTarget,
-  onStartMission,
   operationStatuses,
   playbackRecording,
   selectedMissionTargetKey,
@@ -53,20 +45,7 @@ export function MissionControlView({
 
   return (
     <section className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)_336px] items-stretch gap-3.5 max-[1240px]:grid-cols-1">
-      <Surface className="grid h-full min-h-0 grid-rows-[auto_auto_auto_minmax(0,1fr)] gap-3 overflow-hidden">
-        <SectionHeader
-          className="mb-0 items-start"
-          title={mission.name}
-          meta={`${mission.missionCode} / ${missionTypeLabel(mission.missionType)} / ${makeStatusLabel(mission.status)} / ${missionTargets.length}대`}
-          action={(
-            <div className="flex flex-wrap justify-end gap-2">
-              <Button size="sm" onClick={onBackToMissionList}>임무 목록</Button>
-              <Button size="sm" disabled={mission.status !== "ready"} onClick={() => onStartMission(mission.missionCode)}>시작</Button>
-              <Button size="sm" disabled={mission.status !== "active"} onClick={() => onEndMission(mission.missionCode)}>종료</Button>
-            </div>
-          )}
-        />
-
+      <Surface className="grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] gap-3 overflow-hidden">
         <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-500/20 bg-white/[0.045] p-3 max-[900px]:grid">
           <div className="min-w-0">
             <strong className="block truncate text-sm font-bold text-slate-50">{mission.missionCode}</strong>
@@ -125,7 +104,7 @@ export function MissionControlView({
       <aside className="grid min-h-0 content-start gap-3 overflow-auto">
         <ConnectionStatusPanel statuses={operationStatuses} />
         <LatestRecordingPanel
-          onOpenRecordings={onOpenRecordings}
+          onOpenReplay={() => onOpenMissionReplay(mission)}
           onPlayRecording={onPlayLatestRecording}
           playbackRecording={playbackRecording}
           recording={latestRecording}

@@ -1,7 +1,6 @@
 export const navigationItems = [
   { key: "missions", label: "진행 임무", path: "/missions" },
   { key: "robots", label: "로봇", path: "/robots" },
-  { key: "recordings", label: "녹화", path: "/recordings" },
   { key: "system", label: "시스템", path: "/system" }
 ];
 

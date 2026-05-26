@@ -13,6 +13,8 @@ history:
 - '2026-05-26 danya.kim <danya.kim@thundersoft.com>: removed retired implementation-log dependency from current verification criteria'
 - '2026-05-26 danya.kim <danya.kim@thundersoft.com>: removed retired PRD dependency after consolidating P0 criteria into docs README'
 - "2026-05-26 danya.kim <danya.kim@thundersoft.com>: moved into docs/stable lifecycle structure"
+- "2026-05-26 danya.kim <danya.kim@thundersoft.com>: merged retired harness server/SFU docs into architecture source of truth"
+- '2026-05-26 danya.kim <danya.kim@thundersoft.com>: merged redundant server and SFU harness docs into architecture'
 ---
 
 # Architecture
@@ -21,7 +23,7 @@ history:
 
 AI Web P0의 현재 서버/로봇/WebRTC/SFU/저장 아키텍처를 설명한다.
 
-본 문서는 현재 구현과 `docs/stable/harness/` 문서에서 확정한 구조를 기준으로 한다.
+본 문서는 현재 구현과 검증된 서버/SFU 구조를 기준으로 한다.
 
 이 문서는 다음을 정의한다.
 
@@ -595,4 +597,4 @@ PostgreSQL / MinIO
 -> sensor/recording 저장
 ```
 
-검증 기준은 최신 `docs/stable/harness/*` 문서와 현재 코드 실행 결과를 함께 따른다.
+검증 기준은 현재 코드 실행 결과와 `docs/stable/multi-robot-sfu-checklist.md`를 함께 따른다.

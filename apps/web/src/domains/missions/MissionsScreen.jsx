@@ -1,7 +1,9 @@
 import { MissionControlView } from "../live/components/MissionControlView.jsx";
 import { MissionDetailPanel } from "./MissionDetailPanel.jsx";
 import { MissionListPanel } from "./MissionListPanel.jsx";
+import { MissionReplayScreen } from "./MissionReplayScreen.jsx";
 import { getMissionRobotDetails } from "./missionHelpers.js";
+import Surface from "../../components/ui/Surface.jsx";
 
 export default function MissionsScreen({
   controlMission,
@@ -14,21 +16,38 @@ export default function MissionsScreen({
   missions,
   onBackToMissionList,
   onEndMission,
-  onOpenCreateMissionModal,
   onOpenMissionControl,
-  onOpenRecordings,
+  onOpenMissionReplay,
+  onOpenPlaybackFile,
   onPlayLatestRecording,
   onReconnectSelectedMissionTarget,
   onSelectMission,
   onStartMission,
   operationStatuses,
   playbackRecording,
+  recordings,
+  replayMission,
+  replayMissionCode,
   robots,
   selectedMission,
   selectedMissionTargetKey,
   setSelectedMissionTargetKey,
   streamingStatuses
 }) {
+  if (replayMissionCode) {
+    return (
+      <MissionReplayScreen
+        missingMissionCode={replayMissionCode}
+        mission={replayMission}
+        onBackToMissionList={onBackToMissionList}
+        onOpenPlaybackFile={onOpenPlaybackFile}
+        recordings={recordings}
+        robots={robots}
+        streamingStatuses={streamingStatuses}
+      />
+    );
+  }
+
   if (controlMission) {
     return (
       <MissionControlView
@@ -39,12 +58,9 @@ export default function MissionsScreen({
         liveSessions={liveSessions}
         mission={controlMission}
         missionTargets={missionTargets}
-        onBackToMissionList={onBackToMissionList}
-        onEndMission={onEndMission}
-        onOpenRecordings={onOpenRecordings}
+        onOpenMissionReplay={onOpenMissionReplay}
         onPlayLatestRecording={onPlayLatestRecording}
         onReconnectSelectedMissionTarget={onReconnectSelectedMissionTarget}
-        onStartMission={onStartMission}
         operationStatuses={operationStatuses}
         playbackRecording={playbackRecording}
         selectedMissionTargetKey={selectedMissionTargetKey}
@@ -54,35 +70,37 @@ export default function MissionsScreen({
   }
 
   return (
-    <section className="grid h-full min-h-0 grid-cols-[minmax(0,1.52fr)_minmax(340px,0.88fr)] items-start gap-3 max-[1180px]:grid-cols-1">
+    <section className="grid h-full min-h-0 grid-cols-[400px_minmax(0,1fr)] items-stretch gap-3 max-[1180px]:grid-cols-1">
       <MissionListPanel
         missions={missions}
-        onOpenCreateMissionModal={onOpenCreateMissionModal}
         onSelectMission={onSelectMission}
         robots={robots}
         selectedMission={selectedMission}
         streamingStatuses={streamingStatuses}
       />
 
-      <article className="self-start rounded-[14px] border border-slate-500/25 bg-command-800/95 p-6 shadow-command">
-        <div className="mb-6 flex min-w-0 items-start justify-between gap-4">
-          <h2 className="text-lg font-bold text-slate-50">임무 상세</h2>
+      <Surface className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden" padding="none">
+        <div className="flex min-h-14 min-w-0 items-center justify-between gap-4 border-b border-slate-700/70 px-4">
+          <h2 className="text-base font-bold text-slate-50">임무 상세</h2>
           <span className="truncate text-sm font-bold text-slate-400">{selectedMission?.missionCode ?? "선택 없음"}</span>
         </div>
-        {!selectedMission ? (
-          <p className="rounded-xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-sm font-semibold text-amber-200">
-            임무를 선택하세요.
-          </p>
-        ) : (
-          <MissionDetailPanel
-            mission={selectedMission}
-            onEndMission={onEndMission}
-            onOpenMissionControl={onOpenMissionControl}
-            onStartMission={onStartMission}
-            robotDetails={getMissionRobotDetails(selectedMission, robots, streamingStatuses)}
-          />
-        )}
-      </article>
+        <div className="min-h-0 overflow-auto p-4">
+          {!selectedMission ? (
+            <p className="rounded-xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-sm font-semibold text-amber-200">
+              임무를 선택하세요.
+            </p>
+          ) : (
+            <MissionDetailPanel
+              mission={selectedMission}
+              onEndMission={onEndMission}
+              onOpenMissionControl={onOpenMissionControl}
+              onOpenMissionReplay={onOpenMissionReplay}
+              onStartMission={onStartMission}
+              robotDetails={getMissionRobotDetails(selectedMission, robots, streamingStatuses)}
+            />
+          )}
+        </div>
+      </Surface>
     </section>
   );
 }

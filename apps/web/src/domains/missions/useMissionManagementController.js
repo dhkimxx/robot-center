@@ -7,7 +7,8 @@ import {
 import {
   createInitialMissionForm,
   createMissionRobotTargets,
-  getBusyRobotReasonForMissionCreate
+  getBusyRobotReasonForMissionCreate,
+  isClosedMission
 } from "./missionHelpers.js";
 
 export function useMissionManagementController({
@@ -17,6 +18,7 @@ export function useMissionManagementController({
   navigateToPath,
   resolveStoredLiveTargetKey,
   robots,
+  routeSelectedMissionCode = "",
   setMissionControlCode,
   setSelectedLiveTargetKey,
   showNotification,
@@ -27,7 +29,10 @@ export function useMissionManagementController({
   const [selectedMissionManagementCode, setSelectedMissionManagementCode] = useState("");
 
   const selectedMission = useMemo(
-    () => missions.find((mission) => mission.missionCode === selectedMissionManagementCode) ?? missions[0] ?? null,
+    () => missions.find((mission) => mission.missionCode === selectedMissionManagementCode)
+      ?? missions.find((mission) => !isClosedMission(mission))
+      ?? missions[0]
+      ?? null,
     [missions, selectedMissionManagementCode]
   );
 
@@ -49,32 +54,51 @@ export function useMissionManagementController({
       return;
     }
     if (!selectedMissionManagementCode || !missions.some((mission) => mission.missionCode === selectedMissionManagementCode)) {
-      setSelectedMissionManagementCode(missions[0].missionCode);
+      setSelectedMissionManagementCode((missions.find((mission) => !isClosedMission(mission)) ?? missions[0]).missionCode);
     }
   }, [missions, selectedMissionManagementCode]);
+
+  useEffect(() => {
+    if (!routeSelectedMissionCode || !missions.some((mission) => mission.missionCode === routeSelectedMissionCode)) {
+      return;
+    }
+    setSelectedMissionManagementCode(routeSelectedMissionCode);
+  }, [missions, routeSelectedMissionCode]);
 
   const closeMissionModal = useCallback(() => {
     setMissionModal(null);
   }, []);
 
-  const openMissionControl = useCallback((mission) => {
+  const openMissionControl = useCallback((mission, options = {}) => {
     const targets = createMissionRobotTargets(mission, robots, streamingStatuses);
-    setMissionControlCode(mission.missionCode);
-    setSelectedLiveTargetKey(resolveStoredLiveTargetKey(targets));
-    if (navigateToPath) {
+    if (options.navigate !== false && navigateToPath) {
       navigateToPath(`/missions/${encodeURIComponent(mission.missionCode)}/control`);
     }
+    setSelectedMissionManagementCode(mission.missionCode);
+    setMissionControlCode(mission.missionCode);
+    setSelectedLiveTargetKey(resolveStoredLiveTargetKey(targets));
   }, [navigateToPath, resolveStoredLiveTargetKey, robots, setMissionControlCode, setSelectedLiveTargetKey, streamingStatuses]);
 
-  const closeMissionControl = useCallback((missionControlCode) => {
+  const closeMissionControl = useCallback((missionControlCode, options = {}) => {
     if (missionControlCode) {
       disconnectMissionByCode(missionControlCode);
     }
     setMissionControlCode("");
-    if (navigateToPath) {
-      navigateToPath("/missions");
+    if (options.navigate !== false && navigateToPath) {
+      const selectedQuery = missionControlCode ? `?selected=${encodeURIComponent(missionControlCode)}` : "";
+      navigateToPath(`/missions${selectedQuery}`);
     }
   }, [disconnectMissionByCode, navigateToPath, setMissionControlCode]);
+
+  const openMissionReplay = useCallback((mission, options = {}) => {
+    if (!mission?.missionCode) {
+      return;
+    }
+    setSelectedMissionManagementCode(mission.missionCode);
+    if (options.navigate !== false && navigateToPath) {
+      navigateToPath(`/missions/${encodeURIComponent(mission.missionCode)}/replay`);
+    }
+  }, [navigateToPath]);
 
   function openMissionCreateModal() {
     setMissionForm((current) => {
@@ -155,6 +179,7 @@ export function useMissionManagementController({
     missionModal,
     openMissionControl,
     openMissionCreateModal,
+    openMissionReplay,
     selectedMission,
     selectedMissionManagementCode,
     setMissionForm,

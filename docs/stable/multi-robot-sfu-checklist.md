@@ -1,17 +1,19 @@
 ---
 title: "multi-robot-sfu-checklist"
 created: 2026-05-23
-updated: 2026-05-25
+updated: '2026-05-26'
 author: "dhkimxx <dhkimxx@naver.com>"
-editors: ["dhkimxx <dhkimxx@naver.com>"]
+editors: ["dhkimxx <dhkimxx@naver.com>", danya.kim <danya.kim@thundersoft.com>]
 type: "checklist"
 status: "stable"
-tags: ["harness", "webrtc", "sfu", "multi-robot", "regression"]
+tags: ["webrtc", "sfu", "multi-robot", "regression"]
 history:
 - "2026-05-23 dhkimxx <dhkimxx@naver.com>: initial mission-level multi-robot SFU validation checklist"
 - "2026-05-23 dhkimxx <dhkimxx@naver.com>: added internal PoC selective subscribe QA checklist"
 - "2026-05-25 Codex: aligned checklist with RobotStreamBundle slot roles"
-- "2026-05-26 danya.kim <danya.kim@thundersoft.com>: moved into docs/stable/harness lifecycle structure"
+- "2026-05-26 danya.kim <danya.kim@thundersoft.com>: moved into docs/stable lifecycle structure"
+- "2026-05-26 danya.kim <danya.kim@thundersoft.com>: flattened from harness directory into stable docs"
+- '2026-05-26 danya.kim <danya.kim@thundersoft.com>: flattened multi-robot SFU checklist from harness directory into stable docs'
 ---
 # Multi-Robot SFU Selective Subscribe Checklist
 

@@ -53,9 +53,37 @@ export function getMissionCodeFromRobotKey(targetKey) {
 
 const streamingStatusFreshMs = 30_000;
 const closedMissionStatuses = new Set(["completed", "ended", "cancelled"]);
+const missionStatusOrder = { active: 0, ready: 1, completed: 2, ended: 2, cancelled: 3 };
 
 export function isClosedMission(mission) {
   return closedMissionStatuses.has(mission?.status);
+}
+
+export function sortMissionsByLifecycle(missions) {
+  return [...missions].sort((left, right) => {
+    const leftOrder = missionStatusOrder[left.status] ?? 9;
+    const rightOrder = missionStatusOrder[right.status] ?? 9;
+    if (leftOrder !== rightOrder) {
+      return leftOrder - rightOrder;
+    }
+    return (right.startedAt ?? right.createdAt ?? "").localeCompare(left.startedAt ?? left.createdAt ?? "");
+  });
+}
+
+export function groupMissionsByLifecycle(missions) {
+  const orderedMissions = sortMissionsByLifecycle(missions);
+  return {
+    openMissions: orderedMissions.filter((mission) => !isClosedMission(mission)),
+    closedMissions: orderedMissions.filter(isClosedMission)
+  };
+}
+
+function isFreshStreamingStatusReport(streamingStatus, nowMs = Date.now()) {
+  if (!streamingStatus || (streamingStatus.status !== "streaming" && streamingStatus.status !== "publishing")) {
+    return false;
+  }
+  const freshAtMs = Date.parse(streamingStatus.updatedAt ?? streamingStatus.sentAt ?? "");
+  return Number.isFinite(freshAtMs) && Math.abs(nowMs - freshAtMs) <= streamingStatusFreshMs;
 }
 
 export function isFreshMissionStreamingStatus(mission, robotCode, streamingStatus, nowMs = Date.now()) {
@@ -65,11 +93,10 @@ export function isFreshMissionStreamingStatus(mission, robotCode, streamingStatu
   if (streamingStatus.missionId !== mission.id || streamingStatus.robotCode !== robotCode) {
     return false;
   }
-  if (streamingStatus.status !== "streaming" && streamingStatus.status !== "publishing") {
+  if (streamingStatus.roomId !== makeMissionRoomId(mission)) {
     return false;
   }
-  const sentAtMs = Date.parse(streamingStatus.sentAt ?? "");
-  return Number.isFinite(sentAtMs) && nowMs - sentAtMs <= streamingStatusFreshMs;
+  return isFreshStreamingStatusReport(streamingStatus, nowMs);
 }
 
 export function findMissionStreamingStatus(mission, robotCode, streamingStatuses) {
@@ -142,11 +169,11 @@ export function getBusyRobotReasonForMissionCreate(robotCode, missions = [], str
   }
 
   const freshStreamingStatus = streamingStatuses.find((status) => {
-    if (status.robotCode !== robotCode || (status.status !== "streaming" && status.status !== "publishing")) {
+    if (status.robotCode !== robotCode || !isFreshStreamingStatusReport(status, nowMs)) {
       return false;
     }
-    const sentAtMs = Date.parse(status.sentAt ?? "");
-    return Number.isFinite(sentAtMs) && nowMs - sentAtMs <= streamingStatusFreshMs;
+    const statusMission = missions.find((mission) => mission.id === status.missionId);
+    return !statusMission || status.roomId === makeMissionRoomId(statusMission);
   });
   if (freshStreamingStatus) {
     return "실시간 송출 중";

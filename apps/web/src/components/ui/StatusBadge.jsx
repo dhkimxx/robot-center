@@ -8,9 +8,14 @@ const statusBadgeTones = {
   warning: "border-amber-300/30 bg-amber-300/[0.12] text-amber-100"
 };
 
-export default function StatusBadge({ children, className, tone = "neutral" }) {
+const statusBadgeSizes = {
+  sm: "min-h-7 px-2.5 text-xs",
+  xs: "min-h-6 px-2 text-[11px]"
+};
+
+export default function StatusBadge({ children, className, size = "sm", tone = "neutral" }) {
   return (
-    <span className={cn("inline-flex min-h-7 items-center rounded-full border px-2.5 text-xs font-semibold", statusBadgeTones[tone], className)}>
+    <span className={cn("inline-flex items-center rounded-full border font-semibold", statusBadgeTones[tone], statusBadgeSizes[size], className)}>
       {children}
     </span>
   );

@@ -1,8 +1,26 @@
 import { cn } from "../../utils/cn.js";
 
-export default function Surface({ as: Component = "article", children, className }) {
+const surfaceVariants = {
+  panel: "border-slate-700/70 bg-command-850/90",
+  section: "border-slate-700/60 bg-command-800/65",
+  subtle: "border-slate-800/80 bg-slate-950/20"
+};
+
+const surfacePadding = {
+  md: "p-4",
+  none: "p-0",
+  sm: "p-3"
+};
+
+export default function Surface({
+  as: Component = "article",
+  children,
+  className,
+  padding = "md",
+  variant = "panel"
+}) {
   return (
-    <Component className={cn("rounded-[14px] border border-slate-500/25 bg-command-800/95 p-4 shadow-command", className)}>
+    <Component className={cn("rounded-xl border shadow-none", surfaceVariants[variant], surfacePadding[padding], className)}>
       {children}
     </Component>
   );

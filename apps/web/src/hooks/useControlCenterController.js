@@ -22,6 +22,8 @@ import { useNotifications } from "./useNotifications.js";
 export function useControlCenterController({
   activeSection = "missions",
   missionControlCode: routeMissionControlCode = "",
+  missionReplayCode: routeMissionReplayCode = "",
+  selectedMissionCode: routeSelectedMissionCode = "",
   navigateToPath = null
 } = {}) {
   const {
@@ -57,6 +59,10 @@ export function useControlCenterController({
   const missionControlMission = useMemo(
     () => missions.find((mission) => mission.missionCode === missionControlCode) ?? null,
     [missionControlCode, missions]
+  );
+  const missionReplayMission = useMemo(
+    () => missions.find((mission) => mission.missionCode === routeMissionReplayCode) ?? null,
+    [missions, routeMissionReplayCode]
   );
   const activeLiveTargets = useMemo(
     () => activeMissions
@@ -146,14 +152,15 @@ export function useControlCenterController({
     navigateToPath,
     resolveStoredLiveTargetKey,
     robots,
+    routeSelectedMissionCode,
     setMissionControlCode,
     setSelectedLiveTargetKey,
     showNotification,
     streamingStatuses
   });
 
-  const closeMissionControl = useCallback(() => {
-    missionController.closeMissionControl(missionControlCode);
+  const closeMissionControl = useCallback((options = {}) => {
+    missionController.closeMissionControl(missionControlCode, options);
   }, [missionControlCode, missionController]);
 
   useEffect(() => {
@@ -188,13 +195,17 @@ export function useControlCenterController({
       onEndMission: missionController.endMission,
       onOpenCreateMissionModal: missionController.openMissionCreateModal,
       onOpenMissionControl: missionController.openMissionControl,
-      onOpenRecordings: () => navigateToPath?.("/recordings"),
+      onOpenMissionReplay: missionController.openMissionReplay,
+      onOpenPlaybackFile: recordingsController.setRecordingPlaybackFile,
       onPlayLatestRecording: recordingsController.playLatestRecording,
       onReconnectSelectedMissionTarget: reconnectLive,
       onSelectMission: missionController.setSelectedMissionManagementCode,
       onStartMission: missionController.startMission,
       operationStatuses,
       playbackRecording: latestPlayableRecording,
+      recordings,
+      replayMission: missionReplayMission,
+      replayMissionCode: routeMissionReplayCode,
       robots,
       selectedMission: missionController.selectedMission,
       selectedMissionTargetKey: selectedLiveTargetKey,
@@ -214,10 +225,6 @@ export function useControlCenterController({
     playbackModalProps: {
       recordingPlaybackFile: recordingsController.recordingPlaybackFile,
       setRecordingPlaybackFile: recordingsController.setRecordingPlaybackFile
-    },
-    recordingRouteProps: {
-      onOpenPlaybackFile: recordingsController.setRecordingPlaybackFile,
-      recordings
     },
     robotModalProps: {
       closeRobotModal: robotController.closeRobotModal,

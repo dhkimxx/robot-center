@@ -2,66 +2,117 @@ import {
   makeStatusLabel,
   missionTypeLabel
 } from "../../utils/formatters.js";
+import { Link } from "react-router-dom";
 import Button from "../../components/ui/Button.jsx";
-import { formatMissionRobotCount } from "./missionHelpers.js";
+import DefinitionList from "../../components/ui/DefinitionList.jsx";
+import ListRow from "../../components/ui/ListRow.jsx";
+import StatusBadge from "../../components/ui/StatusBadge.jsx";
+import Surface from "../../components/ui/Surface.jsx";
+import { formatMissionRobotCount, isClosedMission } from "./missionHelpers.js";
 
-export function MissionDetailPanel({ mission, onEndMission, onOpenMissionControl, onStartMission, robotDetails }) {
-  const metadataItems = [
-    ["시나리오", missionTypeLabel(mission.missionType)],
-    ["상태", makeStatusLabel(mission.status)],
-    ["배정 로봇", formatMissionRobotCount(robotDetails)],
-    ["현장 메모", mission.siteNote || "-"]
+export function MissionDetailPanel({
+  mission,
+  onEndMission,
+  onOpenMissionControl,
+  onOpenMissionReplay,
+  onStartMission,
+  robotDetails
+}) {
+  const isClosed = isClosedMission(mission);
+  const missionOverviewItems = [
+    { label: "시나리오", value: missionTypeLabel(mission.missionType) },
+    { label: "상태", value: makeStatusLabel(mission.status) },
+    { label: "배정 로봇", value: formatMissionRobotCount(robotDetails) },
+    { className: "min-[981px]:col-span-3", label: "현장 메모", value: mission.siteNote || "-", wrap: true }
   ];
 
   return (
-    <div className="grid gap-5">
-      <div className="min-w-0">
-        <strong className="block truncate text-xl font-bold leading-tight text-slate-50">{mission.name}</strong>
-        <span className="mt-2 block text-sm font-semibold text-slate-400">{mission.missionCode}</span>
-      </div>
-
-      <div className="grid gap-3 rounded-xl border border-slate-500/20 bg-white/[0.045] p-4">
-        {metadataItems.map(([label, value]) => (
-          <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-3 text-sm" key={label}>
-            <span className="font-semibold text-slate-400">{label}</span>
-            <span className="min-w-0 break-words font-semibold text-slate-200">{value}</span>
+    <div className="grid min-h-0 content-start gap-4">
+      <div className="flex min-w-0 items-start justify-between gap-4 max-[760px]:grid">
+        <div className="min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <strong className="truncate text-lg font-bold leading-tight text-slate-50">{mission.name}</strong>
+            <StatusBadge tone={isClosed ? "neutral" : mission.status === "active" ? "success" : "warning"}>
+              {makeStatusLabel(mission.status)}
+            </StatusBadge>
           </div>
-        ))}
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        {robotDetails.length === 0 ? (
-          <span className="inline-flex min-h-8 items-center rounded-full border border-slate-500/20 bg-white/[0.04] px-3 text-sm font-semibold text-slate-400">
-            미배정
+          <span className="mt-1 block truncate text-sm font-semibold text-slate-400">
+            {mission.missionCode} · {missionTypeLabel(mission.missionType)} · {formatMissionRobotCount(robotDetails)}
           </span>
-        ) : (
-          robotDetails.map((robot) => (
-            <span
-              className="inline-flex min-h-8 max-w-full items-center rounded-full border border-slate-500/30 bg-white/[0.06] px-3 text-sm font-semibold text-slate-100"
-              key={robot.robotCode}
+        </div>
+        <div className="flex shrink-0 flex-wrap justify-end gap-2 max-[760px]:justify-start">
+          {isClosed ? (
+            <Button
+              as={Link}
+              reloadDocument
+              to={`/missions/${encodeURIComponent(mission.missionCode)}/replay`}
+              variant="primary"
+              onClick={() => onOpenMissionReplay(mission, { navigate: false })}
             >
-              {robot.robotCode} · {robot.liveLabel}
-            </span>
-          ))
-        )}
+              리플레이 보기
+            </Button>
+          ) : (
+            <>
+              <Button
+                as={Link}
+                reloadDocument
+                to={`/missions/${encodeURIComponent(mission.missionCode)}/control`}
+                variant="primary"
+                onClick={() => onOpenMissionControl(mission, { navigate: false })}
+              >
+                관제 진입
+              </Button>
+              <Button
+                disabled={mission.status !== "ready"}
+                onClick={() => onStartMission(mission.missionCode)}
+              >
+                시작
+              </Button>
+              <Button
+                disabled={mission.status !== "active"}
+                onClick={() => onEndMission(mission.missionCode)}
+              >
+                종료
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
-      <div className="flex flex-wrap justify-end gap-3 pt-1">
-        <Button variant="primary" onClick={() => onOpenMissionControl(mission)}>
-          관제 진입
-        </Button>
-        <Button
-          disabled={mission.status !== "ready"}
-          onClick={() => onStartMission(mission.missionCode)}
-        >
-          시작
-        </Button>
-        <Button
-          disabled={mission.status !== "active"}
-          onClick={() => onEndMission(mission.missionCode)}
-        >
-          종료
-        </Button>
+      <div className="grid min-h-0 gap-3">
+        <Surface className="grid min-w-0 content-start gap-3" padding="sm" variant="section">
+          <h3 className="text-xs font-bold uppercase tracking-normal text-slate-500">임무 개요</h3>
+          <DefinitionList className="grid-cols-3 gap-x-6 max-[980px]:grid-cols-1" items={missionOverviewItems} />
+        </Surface>
+
+        <Surface className="grid min-w-0 content-start gap-2" padding="sm" variant="section">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-xs font-bold uppercase tracking-normal text-slate-500">배정 로봇</h3>
+            <span className="text-xs font-bold text-slate-500">{robotDetails.length}대</span>
+          </div>
+          {robotDetails.length === 0 ? (
+            <span className="inline-flex min-h-10 items-center rounded-lg border border-slate-500/20 bg-white/[0.04] px-3 text-sm font-semibold text-slate-400">
+              미배정
+            </span>
+          ) : (
+            <div className="grid grid-cols-2 gap-2 max-[980px]:grid-cols-1">
+              {robotDetails.map((robot) => (
+                <ListRow
+                  as="div"
+                  description={robot.robotCode}
+                  key={robot.robotCode}
+                  right={(
+                    <StatusBadge size="xs" tone={robot.isStreaming ? "success" : isClosed ? "neutral" : "warning"}>
+                      {robot.liveLabel}
+                    </StatusBadge>
+                  )}
+                  title={robot.displayName}
+                >
+                </ListRow>
+              ))}
+            </div>
+          )}
+        </Surface>
       </div>
     </div>
   );

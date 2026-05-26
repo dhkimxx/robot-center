@@ -1,7 +1,7 @@
 ---
 title: "docs-lifecycle-renewal"
 created: 2026-05-26
-updated: 2026-05-26
+updated: '2026-05-26'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>"]
 type: "log"
@@ -9,6 +9,9 @@ status: "verified"
 tags: ["docs", "stable", "planned", "history"]
 history:
 - "2026-05-26 danya.kim <danya.kim@thundersoft.com>: docs stable/planned/history renewal 기록"
+- "2026-05-26 danya.kim <danya.kim@thundersoft.com>: renamed log file to YYYYMMDD-title format"
+- '2026-05-26 danya.kim <danya.kim@thundersoft.com>: standardized work log path and filename'
+- '2026-05-26 danya.kim <danya.kim@thundersoft.com>: recorded removal of index files and harness directory'
 ---
 
 # Docs Lifecycle Renewal
@@ -18,8 +21,8 @@ history:
 - `docs/stable/`를 현재 구현과 검증이 일치하는 기준 문서 위치로 정했다.
 - `docs/planned/`를 앞으로 진행할 사항과 미확정 설계 위치로 정했다.
 - `docs/history/`를 작업 기록, 리뷰 결과, 검증 로그 위치로 정했다.
-- 기존 `appendix`, `harness`, `rebuild-results` 문서를 lifecycle 구조로 재배치했다.
-- `docs/README.md`, 각 디렉토리별 `README.md`, `docs/planned/roadmap.md`를 추가했다.
+- 기존 `appendix`, `harness`, 작업 로그 문서를 lifecycle 구조로 재배치했다.
+- 이후 중복된 `index.md`와 별도 `harness/` 디렉토리는 제거하고 필요한 문서만 stable/planned/history에 직접 배치했다.
 - 문서 frontmatter에 `status`를 추가하고, 새 경로 기준으로 내부 링크를 갱신했다.
 
 ## 새 구조
@@ -29,6 +32,7 @@ docs/
   stable/
   planned/
   history/
+    work-log/
 ```
 
 ## 검증 명령

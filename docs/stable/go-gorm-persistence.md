@@ -1,25 +1,27 @@
 ---
 title: "go-gorm-persistence"
 created: 2026-05-22
-updated: '2026-05-22'
+updated: '2026-05-26'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>", "dhkimxx <dhkimxx@naver.com>"]
 type: "guide"
 status: "stable"
-tags: ["harness", "server", "go", "gorm", "persistence", "postgresql"]
+tags: ["server", "go", "gorm", "persistence", "postgresql"]
 source_url: "https://github.com/dhkimxx/ai-agent-skills/blob/main/skills/go-gorm-persistence/SKILL.md"
 history:
 - "2026-05-22 danya.kim <danya.kim@thundersoft.com>: initial entry"
 - '2026-05-22 danya.kim <danya.kim@thundersoft.com>: added Go GORM persistence guide from skill reference'
 - '2026-05-22 danya.kim <danya.kim@thundersoft.com>: clarified recorder chunk file format scope'
 - '2026-05-22 dhkimxx <dhkimxx@naver.com>: documented staged GORM adoption and recording storage object metadata rule'
-- "2026-05-26 danya.kim <danya.kim@thundersoft.com>: moved into docs/stable/harness lifecycle structure"
+- "2026-05-26 danya.kim <danya.kim@thundersoft.com>: moved into docs/stable lifecycle structure"
+- "2026-05-26 danya.kim <danya.kim@thundersoft.com>: flattened from harness directory into stable docs"
+- '2026-05-26 danya.kim <danya.kim@thundersoft.com>: flattened persistence guide from harness directory into stable docs'
 ---
-# Go GORM Persistence Harness
+# Go GORM Persistence
 
 이 문서는 Go 서버에서 GORM 기반 persistence 코드를 설계하거나 수정할 때 따를 기준을 정의한다.
 
-이 문서는 robot-center 서버 harness의 persistence 작성 원칙이며, 구체적인 DB DDL, REST JSON, DataChannel payload, MinIO object key는 정의하지 않는다.
+이 문서는 robot-center 서버 persistence 작성 원칙이며, 구체적인 DB DDL, REST JSON, DataChannel payload, MinIO object key는 정의하지 않는다.
 
 ## 적용 범위
 
