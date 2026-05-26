@@ -139,6 +139,13 @@ func (h *Hub) handleRobotOffer(sender *peer, payload map[string]any) error {
 	if err != nil {
 		return err
 	}
+	if err := h.validateRobotPublisher(sender.roomID, robotCode); err != nil {
+		h.sendServerSignal(sender.roomID, sender.id, "publish-error", map[string]any{
+			"robotCode": robotCode,
+			"reason":    "robot is not assigned to an active mission room",
+		})
+		return err
+	}
 
 	peerConnection, err := h.createPeerConnection()
 	if err != nil {
@@ -168,6 +175,13 @@ func (h *Hub) handleRobotOffer(sender *peer, payload map[string]any) error {
 		"robotCode": robotCode,
 	})
 	return nil
+}
+
+func (h *Hub) validateRobotPublisher(roomID string, robotCode string) error {
+	if h.config.ValidateRobotPublisher == nil {
+		return nil
+	}
+	return h.config.ValidateRobotPublisher(roomID, robotCode)
 }
 
 func (h *Hub) registerPublisherSession(roomID string, publisherSession *publisherSession) {
@@ -491,7 +505,7 @@ func (h *Hub) handleSubscriberRobotSelection(sender *peer, payload map[string]an
 		h.sendSelectRobotError(sender, robotCode, "robot stream bundle is not usable")
 		return fmt.Errorf("robot %s has no usable stream bundle in room %s", robotCode, sender.roomID)
 	}
-	targetPeer.robotCode = robotCode
+	targetPeer.selectedRobotCode = robotCode
 	if session := currentRoom.subscribers[sender.id]; session != nil {
 		session.selectRobot(robotCode)
 		session.deferOffer()

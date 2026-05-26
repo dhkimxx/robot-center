@@ -241,13 +241,6 @@ func (s *MemoryStore) StartMission(_ context.Context, missionCode string) (domai
 	mission.UpdatedAt = now
 	s.missionsByCode[missionCode] = mission
 
-	for _, robotCode := range missionRobotCodes(mission) {
-		robot := s.robotsByCode[robotCode]
-		robot.Status = "assigned"
-		robot.UpdatedAt = now
-		s.robotsByCode[robotCode] = robot
-	}
-
 	return copyMission(mission), nil
 }
 
@@ -300,7 +293,11 @@ func (s *MemoryStore) findActiveMissionConflictsLocked(targetMissionCode string,
 		if !ok || (status.Status != "streaming" && status.Status != "publishing") {
 			continue
 		}
-		if !status.SentAt.IsZero() && now.Sub(status.SentAt) > streamingStatusFreshnessWindow {
+		updatedAt := status.UpdatedAt
+		if updatedAt.IsZero() {
+			updatedAt = status.SentAt
+		}
+		if !updatedAt.IsZero() && (now.Sub(updatedAt) > streamingStatusFreshnessWindow || updatedAt.Sub(now) > streamingStatusFreshnessWindow) {
 			continue
 		}
 		if targetMissionID != "" && status.MissionID == targetMissionID {
@@ -350,10 +347,11 @@ func (s *MemoryStore) EndMission(_ context.Context, missionCode string) (domain.
 		if status, ok := s.streamingByRobotCode[robotCode]; ok && status.MissionID == mission.ID {
 			status.Status = "stopped"
 			status.SentAt = now
+			status.UpdatedAt = now
 			s.streamingByRobotCode[robotCode] = status
 		}
 		robot := s.robotsByCode[robotCode]
-		if robot.Status != "offline" {
+		if robot.Status == "assigned" {
 			robot.Status = "online"
 			robot.UpdatedAt = now
 			s.robotsByCode[robotCode] = robot
@@ -409,6 +407,13 @@ func (s *MemoryStore) ApplyStreamingStatus(_ context.Context, status domain.Stre
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if status.SentAt.IsZero() {
+		status.SentAt = now
+	}
+	status.RobotCode = strings.TrimSpace(status.RobotCode)
+	status.MissionID = strings.TrimSpace(status.MissionID)
+	status.RoomID = strings.TrimSpace(status.RoomID)
+	status.Status = strings.TrimSpace(status.Status)
 	if !s.authorizedLocked(status.RobotCode, bearerToken) {
 		return domain.Robot{}, ErrUnauthorized
 	}
@@ -416,9 +421,19 @@ func (s *MemoryStore) ApplyStreamingStatus(_ context.Context, status domain.Stre
 	if !ok {
 		return domain.Robot{}, ErrNotFound
 	}
-	if isPublishingStatus(status.Status) && !s.streamingMissionActiveForRobotLocked(status.MissionID, status.RobotCode) {
-		return domain.Robot{}, ErrInvalidState
+	if isPublishingStatus(status.Status) {
+		missionCode, ok := s.findActiveStreamingMissionCodeForRobotLocked(status.MissionID, status.RobotCode)
+		if !ok || status.RoomID != missionCode {
+			return domain.Robot{}, ErrInvalidState
+		}
 	}
+	if isTerminalStreamingStatus(status.Status) {
+		currentStatus, ok := s.streamingByRobotCode[status.RobotCode]
+		if !ok || currentStatus.MissionID != status.MissionID || currentStatus.RoomID != status.RoomID {
+			return robot, nil
+		}
+	}
+	status.UpdatedAt = now
 	robot.Status = normalizeRobotDeviceStatus(status.Status)
 	robot.LastStreamingAt = &now
 	robot.UpdatedAt = now
@@ -427,13 +442,24 @@ func (s *MemoryStore) ApplyStreamingStatus(_ context.Context, status domain.Stre
 	return robot, nil
 }
 
-func (s *MemoryStore) streamingMissionActiveForRobotLocked(missionID string, robotCode string) bool {
+func (s *MemoryStore) ValidateActiveMissionRobot(_ context.Context, missionCode string, robotCode string) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	mission, ok := s.missionsByCode[strings.TrimSpace(missionCode)]
+	if !ok || mission.Status != "active" || !missionHasRobotCode(mission, strings.TrimSpace(robotCode)) {
+		return ErrInvalidState
+	}
+	return nil
+}
+
+func (s *MemoryStore) findActiveStreamingMissionCodeForRobotLocked(missionID string, robotCode string) (string, bool) {
 	for _, mission := range s.missionsByCode {
 		if mission.ID == missionID && mission.Status == "active" && missionHasRobotCode(mission, robotCode) {
-			return true
+			return mission.MissionCode, true
 		}
 	}
-	return false
+	return "", false
 }
 
 func (s *MemoryStore) ListStreamingStatuses(_ context.Context) ([]domain.StreamingStatus, error) {
@@ -505,6 +531,12 @@ func (s *MemoryStore) SaveSensorEnvelope(_ context.Context, envelope domain.Sens
 		}
 		key := sensorDescriptorKey(envelope.MissionID, envelope.RobotCode, sample.SensorID)
 		descriptor := s.sensorDescriptors[key]
+		if descriptor.ID == "" {
+			descriptor = createAutoSensorDescriptor(envelope, sample)
+		} else {
+			descriptor.LastSeenAt = envelope.ReceivedAt
+		}
+		s.sensorDescriptors[key] = descriptor
 		if sample.ID == "" {
 			sample.ID = "ssam_" + randomHex(12)
 		}
@@ -584,14 +616,15 @@ func (s *MemoryStore) ListLatestSensorSamples(_ context.Context, missionID strin
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	latestBySensorID := map[string]domain.SensorSample{}
+	latestByDescriptorKey := map[string]domain.SensorSample{}
 	for _, sample := range s.sensorSamplesByMissionID[missionID] {
 		if strings.TrimSpace(robotCode) != "" && sample.RobotCode != strings.TrimSpace(robotCode) {
 			continue
 		}
-		current := latestBySensorID[sample.SensorID]
+		key := sensorDescriptorKey(missionID, sample.RobotCode, sample.SensorID)
+		current := latestByDescriptorKey[key]
 		if current.ID == "" || sample.ReceivedAt.After(current.ReceivedAt) {
-			latestBySensorID[sample.SensorID] = sample
+			latestByDescriptorKey[key] = sample
 		}
 	}
 	latest := make([]domain.SensorLatest, 0)
@@ -603,15 +636,35 @@ func (s *MemoryStore) ListLatestSensorSamples(_ context.Context, missionID strin
 			continue
 		}
 		item := domain.SensorLatest{Descriptor: descriptor}
-		if sample, ok := latestBySensorID[descriptor.SensorID]; ok {
+		if sample, ok := latestByDescriptorKey[sensorDescriptorKey(descriptor.MissionID, descriptor.RobotCode, descriptor.SensorID)]; ok {
 			item.LatestSample = &sample
 		}
 		latest = append(latest, item)
 	}
 	sort.Slice(latest, func(i, j int) bool {
-		return latest[i].Descriptor.SensorID < latest[j].Descriptor.SensorID
+		if latest[i].Descriptor.RobotCode == latest[j].Descriptor.RobotCode {
+			return latest[i].Descriptor.SensorID < latest[j].Descriptor.SensorID
+		}
+		return latest[i].Descriptor.RobotCode < latest[j].Descriptor.RobotCode
 	})
 	return latest, nil
+}
+
+func createAutoSensorDescriptor(envelope domain.SensorEnvelope, sample domain.SensorSample) domain.SensorDescriptor {
+	return domain.SensorDescriptor{
+		ID:          "sdesc_" + randomHex(12),
+		MissionID:   envelope.MissionID,
+		RobotCode:   envelope.RobotCode,
+		SensorID:    sample.SensorID,
+		ChannelRole: firstNonEmpty(sample.ChannelRole, envelope.ChannelRole, "channel.telemetry"),
+		DisplayName: sample.SensorID,
+		SensorType:  inferSensorTypeFromID(sample.SensorID),
+		ValueType:   inferSensorValueType(sample),
+		Enabled:     true,
+		Metadata:    []byte(`{"source":"auto-sample"}`),
+		FirstSeenAt: envelope.ReceivedAt,
+		LastSeenAt:  envelope.ReceivedAt,
+	}
 }
 
 func (s *MemoryStore) FindRecordingTarget(_ context.Context, missionCode string, robotCode string) (RecordingTarget, error) {

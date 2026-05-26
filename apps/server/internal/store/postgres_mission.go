@@ -200,17 +200,6 @@ func (s *PostgresStore) transitionMission(ctx context.Context, missionCode strin
 				}).Error; err != nil {
 				return err
 			}
-			assignedRobotIDs := tx.Table(missionRobotRecord{}.TableName()).
-				Select("robot_id").
-				Where("mission_id = ? AND status != ?", row.ID, "removed")
-			if err := tx.Model(&robotRecord{}).
-				Where("id IN (?)", assignedRobotIDs).
-				Updates(map[string]any{
-					"status":     "assigned",
-					"updated_at": gorm.Expr("now()"),
-				}).Error; err != nil {
-				return err
-			}
 		case "ended":
 			if err := tx.Model(&missionRecord{}).
 				Where("id = ?", row.ID).
@@ -234,7 +223,7 @@ func (s *PostgresStore) transitionMission(ctx context.Context, missionCode strin
 				return err
 			}
 			if err := tx.Model(&robotRecord{}).
-				Where("id IN (?) AND status != ?", assignedRobotIDs, "offline").
+				Where("id IN (?) AND status = ?", assignedRobotIDs, "assigned").
 				Updates(map[string]any{
 					"status":     "online",
 					"updated_at": gorm.Expr("now()"),
@@ -265,6 +254,23 @@ func (s *PostgresStore) transitionMission(ctx context.Context, missionCode strin
 		return domain.Mission{}, err
 	}
 	return mission, nil
+}
+
+func (s *PostgresStore) ValidateActiveMissionRobot(ctx context.Context, missionCode string, robotCode string) error {
+	var count int64
+	err := s.db.WithContext(ctx).
+		Table("missions AS m").
+		Joins("JOIN mission_robots mr ON mr.mission_id = m.id").
+		Joins("JOIN robots r ON r.id = mr.robot_id").
+		Where("m.mission_code = ? AND m.status = ? AND r.robot_code = ? AND mr.status = ?", strings.TrimSpace(missionCode), "active", strings.TrimSpace(robotCode), "active").
+		Count(&count).Error
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return ErrInvalidState
+	}
+	return nil
 }
 
 func (s *PostgresStore) lockMissionRobotsForStart(tx *gorm.DB, missionID string) error {
@@ -330,11 +336,11 @@ func (s *PostgresStore) findBusyMissionCreateConflicts(tx *gorm.DB, robotIDs []s
 		FROM robots r
 		JOIN streaming_statuses ss ON ss.robot_id = r.id
 		LEFT JOIN missions m ON m.id = ss.mission_id
-		WHERE r.id IN ?
-			AND ss.status IN ('streaming', 'publishing')
-			AND ss.sent_at > ?
-		ORDER BY r.robot_code
-	`, robotIDs, time.Now().UTC().Add(-streamingStatusFreshnessWindow)).Scan(&streamingConflicts).Error; err != nil {
+			WHERE r.id IN ?
+				AND ss.status IN ('streaming', 'publishing')
+				AND ss.updated_at > ?
+			ORDER BY r.robot_code
+		`, robotIDs, time.Now().UTC().Add(-streamingStatusFreshnessWindow)).Scan(&streamingConflicts).Error; err != nil {
 		return nil, err
 	}
 
@@ -351,12 +357,12 @@ func (s *PostgresStore) findFreshStreamingConflictsForMissionRobots(tx *gorm.DB,
 		JOIN robots r ON r.id = target_mr.robot_id
 		JOIN streaming_statuses ss ON ss.robot_id = r.id
 		LEFT JOIN missions m ON m.id = ss.mission_id
-		WHERE target_mr.mission_id = ?
-			AND target_mr.status != 'removed'
-			AND ss.status IN ('streaming', 'publishing')
-			AND ss.sent_at > ?
-			AND (ss.mission_id IS NULL OR ss.mission_id != ?)
-		ORDER BY r.robot_code
+			WHERE target_mr.mission_id = ?
+				AND target_mr.status != 'removed'
+				AND ss.status IN ('streaming', 'publishing')
+				AND ss.updated_at > ?
+				AND (ss.mission_id IS NULL OR ss.mission_id != ?)
+			ORDER BY r.robot_code
 	`, missionID, time.Now().UTC().Add(-streamingStatusFreshnessWindow), missionID).Scan(&conflicts).Error
 	if err != nil {
 		return nil, err

@@ -35,13 +35,19 @@ func NewServer(cfg config.AppServerConfig) *Server {
 }
 
 func NewServerWithStore(cfg config.AppServerConfig, repository store.Store) *Server {
+	services := service.NewServices(repository)
 	return &Server{
 		config:   cfg,
-		services: service.NewServices(repository),
+		services: services,
 		sfuHub: sfu.NewHub(sfu.Config{
 			TURNURL:      cfg.TURNURL,
 			TURNUsername: cfg.TURNUsername,
 			TURNPassword: cfg.TURNPassword,
+			ValidateRobotPublisher: func(roomID string, robotCode string) error {
+				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+				defer cancel()
+				return services.Missions.ValidateActiveMissionRobot(ctx, roomID, robotCode)
+			},
 		}),
 		started: time.Now().UTC(),
 	}

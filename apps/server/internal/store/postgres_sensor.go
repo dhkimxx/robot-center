@@ -8,6 +8,7 @@ import (
 
 	"robot-center/apps/server/internal/domain"
 
+	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
@@ -102,6 +103,13 @@ func (s *PostgresStore) SaveSensorEnvelope(ctx context.Context, envelope domain.
 				descriptorIDs[descriptor.SensorID] = descriptor.ID
 			}
 		}
+	}
+	sampleDescriptorIDs, err := s.ensureSensorDescriptorIDsForSamples(ctx, envelope, robotID)
+	if err != nil {
+		return nil, err
+	}
+	for sensorID, descriptorID := range sampleDescriptorIDs {
+		descriptorIDs[sensorID] = descriptorID
 	}
 
 	records := make([]sensorSampleRecord, 0, len(envelope.Samples))
@@ -244,7 +252,7 @@ func (s *PostgresStore) ListLatestSensorSamples(ctx context.Context, missionID s
 	}
 	var rows []sensorLatestQueryRow
 	query := s.db.WithContext(ctx).Raw(`
-		SELECT DISTINCT ON (sd.sensor_id)
+		SELECT DISTINCT ON (r.robot_code, sd.sensor_id)
 			sd.id AS descriptor_id,
 			sd.mission_id,
 			r.robot_code,
@@ -279,7 +287,7 @@ func (s *PostgresStore) ListLatestSensorSamples(ctx context.Context, missionID s
 			AND ss.sensor_id = sd.sensor_id
 		WHERE sd.mission_id = ?
 			AND (? = '' OR r.robot_code = ?)
-		ORDER BY sd.sensor_id, ss.received_at DESC NULLS LAST
+		ORDER BY r.robot_code, sd.sensor_id, ss.received_at DESC NULLS LAST
 	`, strings.TrimSpace(missionID), strings.TrimSpace(robotCode), strings.TrimSpace(robotCode))
 	if err := query.Scan(&rows).Error; err != nil {
 		return nil, err
@@ -289,6 +297,84 @@ func (s *PostgresStore) ListLatestSensorSamples(ctx context.Context, missionID s
 		latest = append(latest, row.toDomain())
 	}
 	return latest, nil
+}
+
+func (s *PostgresStore) ensureSensorDescriptorIDsForSamples(ctx context.Context, envelope domain.SensorEnvelope, robotID string) (map[string]string, error) {
+	samplesBySensorID := map[string]domain.SensorSample{}
+	sensorIDs := make([]string, 0, len(envelope.Samples))
+	for _, sample := range envelope.Samples {
+		sensorID := strings.TrimSpace(sample.SensorID)
+		if sensorID == "" {
+			continue
+		}
+		if _, exists := samplesBySensorID[sensorID]; exists {
+			continue
+		}
+		sample.SensorID = sensorID
+		samplesBySensorID[sensorID] = sample
+		sensorIDs = append(sensorIDs, sensorID)
+	}
+	if len(sensorIDs) == 0 {
+		return map[string]string{}, nil
+	}
+
+	db := s.db.WithContext(ctx)
+	descriptorIDs, err := findSensorDescriptorIDs(db, envelope.MissionID, robotID, sensorIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	records := make([]sensorDescriptorRecord, 0)
+	for _, sensorID := range sensorIDs {
+		if descriptorIDs[sensorID] != "" {
+			continue
+		}
+		sample := samplesBySensorID[sensorID]
+		records = append(records, sensorDescriptorRecord{
+			MissionID:   envelope.MissionID,
+			RobotID:     robotID,
+			SensorID:    sensorID,
+			ChannelRole: firstNonEmpty(sample.ChannelRole, envelope.ChannelRole, "channel.telemetry"),
+			DisplayName: sensorID,
+			SensorType:  inferSensorTypeFromID(sensorID),
+			ValueType:   inferSensorValueType(sample),
+			Enabled:     true,
+			Metadata:    []byte(`{"source":"auto-sample"}`),
+			FirstSeenAt: envelope.ReceivedAt,
+			LastSeenAt:  envelope.ReceivedAt,
+		})
+	}
+	if len(records) > 0 {
+		if err := db.Clauses(clause.OnConflict{
+			Columns: []clause.Column{
+				{Name: "mission_id"},
+				{Name: "robot_id"},
+				{Name: "sensor_id"},
+			},
+			DoUpdates: clause.AssignmentColumns([]string{"last_seen_at"}),
+		}).Create(&records).Error; err != nil {
+			return nil, err
+		}
+		descriptorIDs, err = findSensorDescriptorIDs(db, envelope.MissionID, robotID, sensorIDs)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return descriptorIDs, nil
+}
+
+func findSensorDescriptorIDs(db *gorm.DB, missionID string, robotID string, sensorIDs []string) (map[string]string, error) {
+	var persisted []sensorDescriptorRecord
+	if err := db.
+		Where("mission_id = ? AND robot_id = ? AND sensor_id IN ?", missionID, robotID, sensorIDs).
+		Find(&persisted).Error; err != nil {
+		return nil, err
+	}
+	descriptorIDs := make(map[string]string, len(persisted))
+	for _, descriptor := range persisted {
+		descriptorIDs[descriptor.SensorID] = descriptor.ID
+	}
+	return descriptorIDs, nil
 }
 
 type sensorDescriptorQueryRow struct {
@@ -452,6 +538,41 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func inferSensorTypeFromID(sensorID string) string {
+	normalized := strings.ToLower(strings.TrimSpace(sensorID))
+	switch {
+	case strings.Contains(normalized, "position"), strings.Contains(normalized, "location"), strings.Contains(normalized, "gps"):
+		return "position"
+	case strings.Contains(normalized, "imu"):
+		return "imu"
+	case strings.Contains(normalized, "gas"):
+		return "gas"
+	case strings.Contains(normalized, "point_cloud"), strings.Contains(normalized, "pointcloud"), strings.Contains(normalized, "lidar"):
+		return "point_cloud"
+	case strings.Contains(normalized, "event"), strings.Contains(normalized, "alarm"):
+		return "event"
+	default:
+		return "unknown"
+	}
+}
+
+func inferSensorValueType(sample domain.SensorSample) string {
+	switch {
+	case sample.NumericValue != nil:
+		return "number"
+	case sample.BoolValue != nil:
+		return "boolean"
+	case len(sample.VectorValue) > 0:
+		return "vector"
+	case strings.TrimSpace(sample.TextValue) != "":
+		return "string"
+	case strings.TrimSpace(sample.ObjectKey) != "":
+		return "object_ref"
+	default:
+		return "object"
+	}
 }
 
 func optionalString(value string) *string {

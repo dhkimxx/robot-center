@@ -1,6 +1,7 @@
 package sfu
 
 import (
+	"errors"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -56,22 +57,65 @@ func TestOperatorQueryRobotCodeDoesNotPreselectRobot(t *testing.T) {
 	}
 
 	summary := waitForRoomSummary(t, hub, "mission-001")
-	if len(summary.Peers) != 1 || summary.Peers[0].RobotCode != "" {
+	if len(summary.Peers) != 1 || summary.Peers[0].RobotCode != "" || summary.Peers[0].SelectedRobotCode != "" {
 		t.Fatalf("expected operator query robotCode to be ignored, got %#v", summary.Peers)
 	}
 
 	hub.mu.RLock()
 	currentRoom := hub.rooms["mission-001"]
-	if currentRoom == nil || currentRoom.peers[summary.Peers[0].PeerID].robotCode != "" {
-		t.Fatalf("expected operator peer robotCode to stay empty")
+	if currentRoom == nil ||
+		currentRoom.peers[summary.Peers[0].PeerID].robotCode != "" ||
+		currentRoom.peers[summary.Peers[0].PeerID].selectedRobotCode != "" {
+		t.Fatalf("expected operator peer robotCode and selectedRobotCode to stay empty")
 	}
 	hub.mu.RUnlock()
+}
+
+func TestHubRejectsRobotOfferWhenPublisherGuardFails(t *testing.T) {
+	guardError := errors.New("inactive mission assignment")
+	hub := NewHub(Config{
+		ValidateRobotPublisher: func(roomID string, robotCode string) error {
+			if roomID != "mission-ended" || robotCode != "robot-001" {
+				t.Fatalf("guard received room=%q robot=%q", roomID, robotCode)
+			}
+			return guardError
+		},
+	})
+	robotPeer := testPeer("robot-peer", "mission-ended", "robot", "robot-001")
+
+	hub.mu.Lock()
+	hub.rooms[robotPeer.roomID] = &room{
+		id: robotPeer.roomID,
+		peers: map[string]*peer{
+			robotPeer.id: robotPeer,
+		},
+		publishers:  map[string]*publisherSession{},
+		subscribers: map[string]*subscriberSession{},
+	}
+	hub.mu.Unlock()
+
+	err := hub.handleRobotOffer(robotPeer, map[string]any{"sdp": "fake-offer"})
+	if !errors.Is(err, guardError) {
+		t.Fatalf("handleRobotOffer error = %v, want %v", err, guardError)
+	}
+	message := readPeerSignal(t, robotPeer)
+	if message.Type != "publish-error" || message.Payload["robotCode"] != "robot-001" {
+		t.Fatalf("expected publish-error for guarded robot offer, got %#v", message)
+	}
+
+	hub.mu.RLock()
+	publisherCount := len(hub.rooms[robotPeer.roomID].publishers)
+	hub.mu.RUnlock()
+	if publisherCount != 0 {
+		t.Fatalf("expected guarded robot offer not to register publisher, got %d", publisherCount)
+	}
 }
 
 func TestNewOperatorSubscriberSessionUsesValidatedSelectedRobotCode(t *testing.T) {
 	hub := NewHub()
 	roomID := "mission-001"
-	operatorPeer := testPeer("operator-peer", roomID, "operator", "robot-001")
+	operatorPeer := testPeer("operator-peer", roomID, "operator", "")
+	operatorPeer.selectedRobotCode = "robot-001"
 
 	hub.mu.Lock()
 	hub.rooms[roomID] = &room{
@@ -209,6 +253,13 @@ func TestHubAcknowledgesSelectingPublishedRobotBundle(t *testing.T) {
 	message := readPeerSignal(t, operatorPeer)
 	if message.Type != "select-robot-ack" || message.Payload["robotCode"] != "robot-001" {
 		t.Fatalf("expected select-robot-ack, got %#v", message)
+	}
+	hub.mu.RLock()
+	selectedRobotCode := hub.rooms[roomID].peers[operatorPeer.id].selectedRobotCode
+	operatorRobotCode := hub.rooms[roomID].peers[operatorPeer.id].robotCode
+	hub.mu.RUnlock()
+	if operatorRobotCode != "" || selectedRobotCode != "robot-001" {
+		t.Fatalf("operator state robotCode=%q selectedRobotCode=%q, want identity empty and selection robot-001", operatorRobotCode, selectedRobotCode)
 	}
 	waitForSubscriberSelection(t, hub, roomID, operatorPeer.id, "robot-001")
 }

@@ -1,10 +1,11 @@
 ---
 title: "server-architecture"
 created: 2026-05-22
-updated: '2026-05-23'
+updated: '2026-05-26'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>", "dhkimxx <dhkimxx@naver.com>"]
 type: "design"
+status: "stable"
 tags: ["harness", "server", "go", "postgresql", "minio"]
 history:
 - "2026-05-22 danya.kim <danya.kim@thundersoft.com>: initial entry"
@@ -13,6 +14,8 @@ history:
 - '2026-05-22 danya.kim <danya.kim@thundersoft.com>: aligned recorder metadata flow and JSONL recording status with current implementation'
 - '2026-05-22 dhkimxx <dhkimxx@naver.com>: aligned storage_objects, relay-only failure behavior, and staged GORM transition'
 - '2026-05-23 dhkimxx <dhkimxx@naver.com>: aligned WebRTC room flow with mission-level multi-robot publishers'
+- '2026-05-26 danya.kim <danya.kim@thundersoft.com>: updated PostgreSQL storage targets to current sensor descriptor/sample tables'
+- "2026-05-26 danya.kim <danya.kim@thundersoft.com>: moved into docs/stable/harness lifecycle structure"
 ---
 # Server Architecture Harness
 
@@ -113,11 +116,13 @@ PostgreSQL은 구조화된 운영 데이터의 기준 저장소다.
 - robots
 - robot tokens
 - missions
+- mission robots
 - robot sessions
 - browser sessions
 - recorder sessions
-- telemetry snapshots
-- sensor readings
+- streaming statuses
+- sensor descriptors
+- sensor samples
 - recording sessions
 - recording chunks
 - storage object metadata

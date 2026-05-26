@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 .runtime/
+.agents/
 .agents/skills/*/.venv/
 apps/server/.runtime/
 

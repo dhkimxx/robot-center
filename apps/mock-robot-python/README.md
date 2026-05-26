@@ -36,7 +36,7 @@ The mock publishes:
 - `channel.telemetry`: `SensorDescriptor` / `SensorSample` payloads for GPS, environment, battery
 - `channel.spatial`: `SensorDescriptor` / `SensorSample` payloads for IMU and odometry
 - `channel.event`: robot heartbeat events
-- `channel.control`: reserved stub, command handling is TODO
+- `channel.control`: reserved stub; the mock creates the channel but does not emit control payloads
 
 Runtime options keep the robot-team integration path explicit:
 

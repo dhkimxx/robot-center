@@ -1,17 +1,32 @@
-# Appendix. Robot Gateway Interface
+---
+title: "robot-interface"
+created: 2026-05-26
+updated: '2026-05-26'
+author: "danya.kim <danya.kim@thundersoft.com>"
+editors: ["danya.kim <danya.kim@thundersoft.com>"]
+type: "design"
+status: "stable"
+tags: ["robot", "gateway", "webrtc", "sfu", "streaming", "mission"]
+history:
+- "2026-05-26 danya.kim <danya.kim@thundersoft.com>: mission scoped robot gateway and WebRTC interface 정리"
+- "2026-05-26 danya.kim <danya.kim@thundersoft.com>: missionId UUID, roomId missionCode, streaming freshness updatedAt 기준 명시"
+- "2026-05-26 danya.kim <danya.kim@thundersoft.com>: moved into docs/stable lifecycle structure"
+---
+
+# Robot Gateway Interface
 
 ## 1. 문서 목적
 
-Android Mock Robot과 향후 실제 Robot Gateway가 관제센터에 연결하기 위한 최소 API, WebRTC, DataChannel 계약을 정의한다.
+Python Mock Robot, Android Mock Robot, 향후 실제 Robot Gateway가 관제센터에 연결하기 위한 최소 API, WebRTC, DataChannel 계약을 정의한다.
 
-P0에서는 Android Mock Robot을 로봇 샘플로 사용한다.
+P0에서는 Python Mock Robot을 기본 로컬 검증 샘플로 사용하고, Android Mock Robot은 단말 검증용 샘플로 둔다.
 
 이 문서의 JSON과 track 값은 현재 mock/harness 연동 예시다. 확정되지 않은 DataChannel payload 세부 필드, track metadata, codec 세부 정책은 별도 schema가 생기기 전까지 고정 계약으로 간주하지 않는다.
 
 ## 2. 설계 원칙
 
 - 로봇 등록 생성은 관제센터 UI/Backend에서 수행한다.
-- Android Mock Robot은 발급받은 연결 정보를 입력받아 연결한다.
+- Mock Robot 또는 실제 Robot Gateway는 발급받은 연결 정보를 입력받아 연결한다.
 - 별도 CLI는 만들지 않는다.
 - QR 등록은 P0에서 제외한다.
 - gatewayVersion, capabilities, hardware fingerprint는 P0 필수값에서 제외한다.
@@ -23,17 +38,17 @@ P0에서는 Android Mock Robot을 로봇 샘플로 사용한다.
 ```text
 1. 관제 UI에서 로봇 생성
 2. Backend가 robotCode, robotToken, serverUrl 발급
-3. 관제 UI가 Android Mock 입력값을 표시
-4. Android Mock Robot에 값 입력
-5. Android Mock Robot이 heartbeat 호출
+3. 관제 UI가 Mock Robot / Robot Gateway 입력값을 표시
+4. Mock Robot 또는 Robot Gateway에 값 입력
+5. Mock Robot 또는 Robot Gateway가 heartbeat 호출
 6. Backend가 로봇 online 표시
-7. Android Mock Robot이 mission 조회
+7. Mock Robot 또는 Robot Gateway가 mission 조회
 8. active mission이면 mission room으로 SFU publish 시작
-9. Android Mock Robot이 streaming status 보고
+9. Mock Robot 또는 Robot Gateway가 streaming status 보고
 10. Browser와 Recorder가 SFU subscriber로 수신
 ```
 
-## 4. Android Mock에 입력할 값
+## 4. Mock Robot / Robot Gateway에 입력할 값
 
 ```yaml
 serverUrl: http://192.168.20.26:8080
@@ -41,7 +56,7 @@ robotCode: robot-001
 robotToken: rb_poc_xxxxx
 ```
 
-Android Mock Robot은 `serverUrl`을 기준으로 REST API를 호출하고, mission 응답에 포함된 SFU/TURN 설정으로 WebRTC publish를 시작한다. 같은 mission에 여러 Robot이 배정되더라도 각 Android Mock은 자기 `robotCode`와 `robotToken`으로 개별 실행한다.
+Mock Robot 또는 실제 Robot Gateway는 `serverUrl`을 기준으로 REST API를 호출하고, mission 응답에 포함된 SFU/TURN 설정으로 WebRTC publish를 시작한다. 같은 mission에 여러 Robot이 배정되더라도 각 Robot Gateway 인스턴스는 자기 `robotCode`와 `robotToken`으로 개별 실행한다.
 
 P0 UI에서는 이 값을 복사하기 쉬운 형태로 표시한다.
 
@@ -107,12 +122,12 @@ active mission이 있을 때:
 
 ```json
 {
-  "missionId": "mission-001",
+  "missionId": "9d3c1e5d-0c41-4e4f-a21f-8b69f7c0a001",
   "missionCode": "mission-001",
   "missionStatus": "active",
   "roomId": "mission-001",
   "sfu": {
-    "signalingUrl": "ws://192.168.20.26:8081/ws?room=mission-001&role=robot",
+    "signalingUrl": "ws://192.168.20.26:8081/ws?room=mission-001&role=robot&robotCode=robot-001",
     "iceTransportPolicy": "relay"
   },
   "turnServers": [
@@ -122,7 +137,7 @@ active mission이 있을 때:
       "credential": "robot-pass"
     }
   ],
-  "tracks": ["track.video_1", "track.video_2", "track.audio_1"],
+  "tracks": ["track.video_1", "track.video_2", "track.audio_1", "track.audio_2"],
   "dataChannels": ["channel.telemetry", "channel.spatial", "channel.event", "channel.control"],
   "videoPolicy": {
     "mode": "robot_defined"
@@ -130,7 +145,7 @@ active mission이 있을 때:
 }
 ```
 
-Mission 단위 multi-robot 구조에서 `roomId`는 `missionCode`와 같아야 한다. `robotCode`는 room id에 합치지 않고 payload, status, recording metadata에서 별도로 유지한다.
+Mission 단위 multi-robot 구조에서 `roomId`는 `missionCode`와 같아야 한다. `robotCode`는 room id에 합치지 않고 payload, status, recording metadata에서 별도로 유지한다. `missionId`는 DB UUID이고, `missionCode`는 사람이 읽는 코드이자 SFU room id다.
 
 active mission이 없을 때:
 
@@ -156,7 +171,7 @@ Content-Type: application/json
 ```json
 {
   "robotCode": "robot-001",
-  "missionId": "mission-001",
+  "missionId": "9d3c1e5d-0c41-4e4f-a21f-8b69f7c0a001",
   "roomId": "mission-001",
   "status": "streaming",
   "publishedTracks": [
@@ -194,6 +209,14 @@ Content-Type: application/json
 
 `publishedTracks`와 `publishedDataChannels`는 실제 mock/robot이 송출한 값을 보고하는 metadata다. 슬롯명은 `track.video_1`, `channel.telemetry` 같은 canonical role을 사용하고, 화면 표시 의미는 `displayName` 등 metadata로 분리한다.
 
+Streaming status 수락 규칙:
+
+- `status=streaming` 또는 `publishing`은 `missionId`가 active mission이고 해당 robot이 active assignment일 때만 수락한다.
+- `roomId`는 반드시 mission 조회 응답의 `roomId`, 즉 `missionCode`와 같아야 한다.
+- 이전 호환 room 형식인 `missionCode__robotCode`는 streaming status와 SFU publish 기준으로 사용하지 않는다.
+- 서버는 로봇이 보낸 `sentAt`을 metadata로 보존하지만, 송출 freshness와 임무 생성 차단 판단은 서버가 status를 받은 `updatedAt` 기준 30초 window로 판단한다.
+- `stopped`, `failed`, `stale` 같은 종료성 status는 현재 저장된 robot streaming row의 `missionId + roomId`가 보고값과 같을 때만 반영한다. 늦게 도착한 이전 임무의 stop 보고가 새 임무 송출 상태를 덮어쓰면 안 된다.
+
 응답:
 
 ```json
@@ -214,10 +237,10 @@ Authorization: Bearer {robotToken}
 
 ## 7. WebRTC publish
 
-Android Mock Robot은 active mission 수신 후 mission room에 SFU publish한다.
+Mock Robot 또는 실제 Robot Gateway는 active mission 수신 후 mission room에 SFU publish한다.
 
 ```text
-Android Mock Robot
+Mock Robot / Robot Gateway
   -> SFU signalingUrl 접속
   -> offer 생성
   -> track.video_1 / track.video_2 / track.audio_1 track 추가
@@ -228,8 +251,6 @@ Android Mock Robot
 
 P0 mock 예시 track:
 
-| Track | Codec | Source | Required |
-| --- | --- | --- | --- |
 | Slot | Codec | Display Metadata Example | Required |
 | --- | --- | --- | --- |
 | track.video_1 | H.264 | RGB / front camera | Yes |
@@ -342,15 +363,14 @@ Browser WebSocket은 실시간 센서 표시의 필수 경로가 아니다.
 | 상태 | 의미 |
 | --- | --- |
 | `offline` | heartbeat 없음 |
-| `online` | heartbeat 성공, mission 대기 |
-| `assigned` | active 또는 ready mission에 배정됨 |
-| `streaming` | WebRTC publish 중 |
-| `reconnecting` | 재접속 중 |
+| `online` | heartbeat 성공 또는 최근 gateway 통신 성공 |
 | `fault` | 오류 상태 |
+
+`robots.status`는 장치 online/offline/fault 성격의 상태다. 임무 배정 상태는 `mission_robots.status`, WebRTC 송출 상태는 `streaming_statuses.status`에서 판단한다.
 
 ## 10. 재시도 정책
 
-Android Mock Robot 기본 재시도:
+Mock Robot / Robot Gateway 기본 재시도:
 
 - heartbeat 실패: 2초, 5초, 10초 backoff
 - mission 조회 실패: 2초, 5초, 10초 backoff

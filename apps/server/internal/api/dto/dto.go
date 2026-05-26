@@ -59,6 +59,7 @@ type StreamingStatusResponse struct {
 	PublishedTracks       []StreamingTrackResponse `json:"publishedTracks"`
 	PublishedDataChannels []string                 `json:"publishedDataChannels"`
 	SentAt                time.Time                `json:"sentAt"`
+	UpdatedAt             time.Time                `json:"updatedAt"`
 }
 
 type SensorDescriptorResponse struct {
@@ -190,6 +191,7 @@ func StreamingStatus(status domain.StreamingStatus) StreamingStatusResponse {
 		PublishedTracks:       tracks,
 		PublishedDataChannels: append([]string(nil), status.PublishedDataChannels...),
 		SentAt:                status.SentAt,
+		UpdatedAt:             status.UpdatedAt,
 	}
 }
 

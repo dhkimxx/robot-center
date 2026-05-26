@@ -24,8 +24,11 @@ func peerPresencePayload(peer *peer) map[string]any {
 		"peerId":   peer.id,
 		"joinedAt": peer.joinedAt.Format(time.RFC3339Nano),
 	}
-	if peer.robotCode != "" {
+	if peer.role == "robot" && peer.robotCode != "" {
 		payload["robotCode"] = peer.robotCode
+	}
+	if peer.role == "operator" && peer.selectedRobotCode != "" {
+		payload["selectedRobotCode"] = peer.selectedRobotCode
 	}
 	return payload
 }
@@ -38,7 +41,7 @@ func selectedRobotCodeForNewSubscriber(targetPeer *peer) string {
 	if targetPeer == nil || targetPeer.role != "operator" {
 		return ""
 	}
-	return strings.TrimSpace(targetPeer.robotCode)
+	return strings.TrimSpace(targetPeer.selectedRobotCode)
 }
 
 func isTargetingServer(payload map[string]any) bool {

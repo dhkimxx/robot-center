@@ -5,6 +5,7 @@ updated: '2026-05-22'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>", "dhkimxx <dhkimxx@naver.com>"]
 type: "guide"
+status: "stable"
 tags: ["harness", "server", "go", "gorm", "persistence", "postgresql"]
 source_url: "https://github.com/dhkimxx/ai-agent-skills/blob/main/skills/go-gorm-persistence/SKILL.md"
 history:
@@ -12,6 +13,7 @@ history:
 - '2026-05-22 danya.kim <danya.kim@thundersoft.com>: added Go GORM persistence guide from skill reference'
 - '2026-05-22 danya.kim <danya.kim@thundersoft.com>: clarified recorder chunk file format scope'
 - '2026-05-22 dhkimxx <dhkimxx@naver.com>: documented staged GORM adoption and recording storage object metadata rule'
+- "2026-05-26 danya.kim <danya.kim@thundersoft.com>: moved into docs/stable/harness lifecycle structure"
 ---
 # Go GORM Persistence Harness
 

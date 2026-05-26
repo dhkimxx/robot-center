@@ -169,6 +169,10 @@ func (s *recordingStoreSpy) FindActiveMissionForRobot(_ context.Context, _ strin
 	return domain.Mission{}, false, nil
 }
 
+func (s *recordingStoreSpy) ValidateActiveMissionRobot(_ context.Context, _ string, _ string) error {
+	return nil
+}
+
 func (s *recordingStoreSpy) RecordingTargets(_ context.Context) ([]domain.Mission, error) {
 	return nil, nil
 }

@@ -31,10 +31,11 @@ func (h *Hub) Summaries() []RoomSummary {
 				summary.RecorderCount++
 			}
 			summary.Peers = append(summary.Peers, PeerSummary{
-				PeerID:    peer.id,
-				Role:      peer.role,
-				RobotCode: peer.robotCode,
-				JoinedAt:  peer.joinedAt,
+				PeerID:            peer.id,
+				Role:              peer.role,
+				RobotCode:         peer.robotCode,
+				SelectedRobotCode: peer.selectedRobotCode,
+				JoinedAt:          peer.joinedAt,
 			})
 		}
 		sort.Slice(summary.Peers, func(i, j int) bool {

@@ -1,4 +1,17 @@
-# Appendix. AI Agent
+---
+title: "ai-agent"
+created: 2026-05-26
+updated: 2026-05-26
+author: "danya.kim <danya.kim@thundersoft.com>"
+editors: ["danya.kim <danya.kim@thundersoft.com>"]
+type: "design"
+status: "planned"
+tags: ["ai-agent", "eino", "llm", "sop", "control"]
+history:
+- "2026-05-26 danya.kim <danya.kim@thundersoft.com>: moved into docs/planned lifecycle structure"
+---
+
+# AI Agent
 
 > Canonical document for Go/Eino based AI Agent requirements.
 

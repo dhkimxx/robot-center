@@ -58,6 +58,7 @@ type StreamingStatus struct {
 	PublishedTracks       []StreamingTrack `json:"publishedTracks"`
 	PublishedDataChannels []string         `json:"publishedDataChannels"`
 	SentAt                time.Time        `json:"sentAt"`
+	UpdatedAt             time.Time        `json:"updatedAt"`
 }
 
 type SensorDescriptor struct {

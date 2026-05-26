@@ -5,6 +5,7 @@ updated: '2026-05-23'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>", "dhkimxx <dhkimxx@naver.com>"]
 type: "design"
+status: "stable"
 tags: ["harness", "webrtc", "sfu", "server"]
 history:
 - "2026-05-22 danya.kim <danya.kim@thundersoft.com>: initial entry"
@@ -14,6 +15,7 @@ history:
 - '2026-05-22 dhkimxx <dhkimxx@naver.com>: clarified relay-only TURN policy in SFU topology'
 - '2026-05-23 dhkimxx <dhkimxx@naver.com>: aligned topology with mission-level multi-robot SFU room model'
 - '2026-05-23 dhkimxx <dhkimxx@naver.com>: documented internal PoC selective subscribe behavior'
+- "2026-05-26 danya.kim <danya.kim@thundersoft.com>: moved into docs/stable/harness lifecycle structure"
 ---
 # WebRTC SFU Topology Harness
 
@@ -128,7 +130,7 @@ flowchart LR
 - TURN relay-only 경로에서 WebRTC 연결이 성립하는 흐름
 - Recorder subscriber가 media/data 흐름을 받아 저장 파이프라인으로 넘기는 흐름
 
-다중 Robot publisher가 같은 mission room에 동시에 붙는 검증 기준은 `docs/harness/20260523-multi-robot-sfu-checklist.md`에 둔다.
+다중 Robot publisher가 같은 mission room에 동시에 붙는 검증 기준은 `docs/stable/harness/20260523-multi-robot-sfu-checklist.md`에 둔다.
 
 ## 현재 harness 기준 구현 대상
 

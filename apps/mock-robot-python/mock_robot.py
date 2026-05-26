@@ -554,7 +554,6 @@ class MockRobot:
         asyncio.create_task(self.data_channel_loop("channel.telemetry", self.telemetry_channel))
         asyncio.create_task(self.data_channel_loop("channel.event", self.event_channel))
         asyncio.create_task(self.data_channel_loop("channel.spatial", self.spatial_channel))
-        asyncio.create_task(self.data_channel_loop("channel.control", self.control_channel))
 
         offer = await self.peer_connection.createOffer()
         await self.peer_connection.setLocalDescription(offer)
@@ -658,8 +657,6 @@ class MockRobot:
                 payload = self.create_event_payload()
             elif label == "channel.spatial":
                 payload = self.create_spatial_payload()
-            elif label == "channel.control":
-                payload = self.create_control_payload()
             else:
                 payload = self.create_telemetry_payload()
             channel.send(json.dumps(payload, separators=(",", ":")))
@@ -865,20 +862,6 @@ class MockRobot:
                 },
             ],
             "state": "available",
-        }
-
-    def create_control_payload(self) -> dict[str, Any]:
-        return {
-            "messageId": f"{self.robot_code}-control-{self.sequence}",
-            "messageType": "control.ack",
-            "channelRole": "channel.control",
-            "robotCode": self.robot_code,
-            "missionId": self.mission["missionId"],
-            "sequence": self.sequence,
-            "sentAt": utc_now_iso(),
-            "ack": {
-                "state": "idle",
-            },
         }
 
     def current_position(self) -> tuple[float, float]:

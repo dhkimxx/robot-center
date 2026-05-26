@@ -5,6 +5,7 @@ updated: '2026-05-23'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>", "dhkimxx <dhkimxx@naver.com>"]
 type: "guide"
+status: "stable"
 tags: ["harness", "webrtc", "server", "sfu"]
 history:
 - "2026-05-22 danya.kim <danya.kim@thundersoft.com>: initial entry"
@@ -14,6 +15,7 @@ history:
 - '2026-05-22 dhkimxx <dhkimxx@naver.com>: added relay-only, storage_objects, and test/regression agent criteria'
 - '2026-05-23 dhkimxx <dhkimxx@naver.com>: added mission-level multi-robot SFU checklist'
 - '2026-05-23 dhkimxx <dhkimxx@naver.com>: marked selective subscribe signaling as internal PoC provisional'
+- "2026-05-26 danya.kim <danya.kim@thundersoft.com>: moved into docs/stable/harness lifecycle structure"
 ---
 # Harness Index
 
@@ -25,10 +27,10 @@ history:
 
 | 문서 | 역할 |
 | --- | --- |
-| `docs/harness/20260522-server-architecture.md` | 서버 기본 아키텍처 정의 |
-| `docs/harness/20260522-go-gorm-persistence.md` | Go/GORM persistence 작성 기준 |
-| `docs/harness/20260522-webrtc-sfu-topology.md` | WebRTC SFU 송/수신 구조 정의 |
-| `docs/harness/20260523-multi-robot-sfu-checklist.md` | mission 단위 multi-robot SFU selective subscribe 검증 체크리스트 |
+| `docs/stable/harness/20260522-server-architecture.md` | 서버 기본 아키텍처 정의 |
+| `docs/stable/harness/20260522-go-gorm-persistence.md` | Go/GORM persistence 작성 기준 |
+| `docs/stable/harness/20260522-webrtc-sfu-topology.md` | WebRTC SFU 송/수신 구조 정의 |
+| `docs/stable/harness/20260523-multi-robot-sfu-checklist.md` | mission 단위 multi-robot SFU selective subscribe 검증 체크리스트 |
 
 ## 확정 범위
 

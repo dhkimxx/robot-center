@@ -96,6 +96,10 @@ func (s *MissionService) FindActiveMissionForRobot(ctx context.Context, robotCod
 	return s.repository.FindActiveMissionForRobot(ctx, robotCode, bearerToken)
 }
 
+func (s *MissionService) ValidateActiveMissionRobot(ctx context.Context, missionCode string, robotCode string) error {
+	return s.repository.ValidateActiveMissionRobot(ctx, missionCode, robotCode)
+}
+
 func (s *MissionService) RecordingTargets(ctx context.Context) ([]domain.Mission, error) {
 	return s.repository.RecordingTargets(ctx)
 }

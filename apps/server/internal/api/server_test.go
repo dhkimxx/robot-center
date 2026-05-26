@@ -163,6 +163,17 @@ func TestControlPlaneFlow(t *testing.T) {
 		t.Fatalf("expected active support robot mission in shared room, got %#v", supportMissionPayload)
 	}
 
+	mismatchedRoomStatus, mismatchedRoomPayload := requestRawJSON(t, server.URL, http.MethodPost, "/api/robot-gateway/streaming-status", robotToken, map[string]any{
+		"robotCode": robotCode,
+		"missionId": startedMission["id"],
+		"roomId":    missionCode + "__" + robotCode,
+		"status":    "streaming",
+		"sentAt":    time.Now().UTC().Format(time.RFC3339Nano),
+	})
+	if mismatchedRoomStatus != http.StatusConflict {
+		t.Fatalf("expected streaming room mismatch conflict, got %d payload %#v", mismatchedRoomStatus, mismatchedRoomPayload)
+	}
+
 	requestJSON[map[string]any](t, server.URL, http.MethodPost, "/api/robot-gateway/streaming-status", robotToken, map[string]any{
 		"robotCode": robotCode,
 		"missionId": startedMission["id"],
@@ -186,6 +197,10 @@ func TestControlPlaneFlow(t *testing.T) {
 	streamingStatuses := streamingPayload["streamingStatuses"].([]any)
 	if len(streamingStatuses) != 1 {
 		t.Fatalf("expected one streaming status, got %#v", streamingStatuses)
+	}
+	streamingStatus := streamingStatuses[0].(map[string]any)
+	if streamingStatus["roomId"] != missionCode || streamingStatus["updatedAt"] == "" {
+		t.Fatalf("expected mission room and updatedAt in streaming status, got %#v", streamingStatus)
 	}
 
 	missionID := startedMission["id"].(string)

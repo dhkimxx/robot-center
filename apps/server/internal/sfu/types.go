@@ -9,9 +9,10 @@ import (
 )
 
 type Config struct {
-	TURNURL      string
-	TURNUsername string
-	TURNPassword string
+	TURNURL                string
+	TURNUsername           string
+	TURNPassword           string
+	ValidateRobotPublisher func(roomID string, robotCode string) error
 }
 
 type Hub struct {
@@ -32,10 +33,11 @@ type RoomSummary struct {
 }
 
 type PeerSummary struct {
-	PeerID    string    `json:"peerId"`
-	Role      string    `json:"role"`
-	RobotCode string    `json:"robotCode,omitempty"`
-	JoinedAt  time.Time `json:"joinedAt"`
+	PeerID            string    `json:"peerId"`
+	Role              string    `json:"role"`
+	RobotCode         string    `json:"robotCode,omitempty"`
+	SelectedRobotCode string    `json:"selectedRobotCode,omitempty"`
+	JoinedAt          time.Time `json:"joinedAt"`
 }
 
 type room struct {
@@ -46,13 +48,14 @@ type room struct {
 }
 
 type peer struct {
-	id        string
-	roomID    string
-	role      string
-	robotCode string
-	joinedAt  time.Time
-	conn      *websocket.Conn
-	send      chan signalMessage
+	id                string
+	roomID            string
+	role              string
+	robotCode         string
+	selectedRobotCode string
+	joinedAt          time.Time
+	conn              *websocket.Conn
+	send              chan signalMessage
 }
 
 type publisherSession struct {
