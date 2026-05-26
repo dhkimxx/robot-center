@@ -173,6 +173,39 @@ func TestWorkerOpensChunkWhenMediaArrives(t *testing.T) {
 	}
 }
 
+func TestWorkerMarksRecorderRobotTrackActivityOnMediaPacket(t *testing.T) {
+	worker := NewWorker(config.RecorderWorkerConfig{})
+	observedAt := time.Date(2026, 5, 26, 9, 10, 0, 0, time.UTC)
+	mediaKey := recorderMediaKey("mission-001", "robot-001")
+
+	worker.markRecorderRobotTrackActivity(mediaKey, "track.video_1", observedAt)
+
+	status := worker.SubscriberStatus()
+	if len(status.Rooms) != 1 {
+		t.Fatalf("room statuses = %d, want 1", len(status.Rooms))
+	}
+	room := status.Rooms[0]
+	if room.RoomID != "mission-001" {
+		t.Fatalf("room id = %q, want mission-001", room.RoomID)
+	}
+	if room.TrackCount != 1 {
+		t.Fatalf("room track count = %d, want 1", room.TrackCount)
+	}
+	if len(room.Robots) != 1 {
+		t.Fatalf("robot statuses = %d, want 1", len(room.Robots))
+	}
+	robot := room.Robots[0]
+	if robot.RobotCode != "robot-001" {
+		t.Fatalf("robot code = %q, want robot-001", robot.RobotCode)
+	}
+	if robot.TrackCount != 1 {
+		t.Fatalf("robot track count = %d, want 1", robot.TrackCount)
+	}
+	if !robot.LastTrackAt.Equal(observedAt) {
+		t.Fatalf("lastTrackAt = %s, want %s", robot.LastTrackAt, observedAt)
+	}
+}
+
 func TestWorkerFinalizesPreviousChunkOnRollover(t *testing.T) {
 	target := domain.Mission{
 		MissionCode: "mission-001",

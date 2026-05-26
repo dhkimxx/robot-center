@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/pion/webrtc/v4"
 
@@ -110,6 +111,32 @@ func ensureRecorderRobotRuntime(status *recorderSessionStatus, robotCode string)
 		runtime.dataChannelLabels = map[string]struct{}{}
 	}
 	return runtime
+}
+
+func (w *Worker) markRecorderRobotTrackActivity(mediaKey string, label string, observedAt time.Time) {
+	if observedAt.IsZero() {
+		observedAt = time.Now().UTC()
+	}
+	missionCode, robotCode := splitRecorderMediaKey(mediaKey)
+	if missionCode == "" || robotCode == "" {
+		return
+	}
+	w.updateSubscriberStatus(missionCode, func(status *recorderSessionStatus) {
+		status.robotCodes[robotCode] = struct{}{}
+		if status.robotCode == "" {
+			status.robotCode = robotCode
+		}
+		robotStatus := ensureRecorderRobotRuntime(status, robotCode)
+		trackLabel := strings.TrimSpace(label)
+		if trackLabel != "" {
+			robotStatus.trackLabels[trackLabel] = struct{}{}
+			status.trackLabels[recorderTrackLabel(robotCode, trackLabel)] = struct{}{}
+			status.lastTrackLabel = recorderTrackLabel(robotCode, trackLabel)
+		}
+		robotStatus.lastTrackAt = observedAt
+		robotStatus.updatedAt = observedAt
+		status.robotStatuses[robotCode] = robotStatus
+	})
 }
 
 func subscriberRobotStatuses(status recorderSessionStatus) []SubscriberRobotStatus {

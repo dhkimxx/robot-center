@@ -196,6 +196,7 @@ func (w *Worker) recordH264Track(ctx context.Context, roomID string, label strin
 		if err != nil {
 			return
 		}
+		w.markRecorderRobotTrackActivity(roomID, label, time.Now().UTC())
 		payload, err := depacketizer.Unmarshal(packet.Payload)
 		if err != nil {
 			w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
@@ -227,6 +228,7 @@ func (w *Worker) recordOpusTrack(ctx context.Context, roomID string, label strin
 		if err != nil {
 			return
 		}
+		w.markRecorderRobotTrackActivity(roomID, label, time.Now().UTC())
 		if err := w.appendOpusPacket(ctx, roomID, label, packet); err != nil {
 			w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
 				status.lastError = err.Error()
