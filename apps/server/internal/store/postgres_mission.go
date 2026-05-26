@@ -36,6 +36,13 @@ func (s *PostgresStore) CreateMission(ctx context.Context, input CreateMissionIn
 			}
 			robotIDs = append(robotIDs, robot.ID)
 		}
+		conflicts, err := s.findBusyMissionCreateConflicts(tx, robotIDs)
+		if err != nil {
+			return err
+		}
+		if len(conflicts) > 0 {
+			return &MissionStartConflictError{Conflicts: conflicts}
+		}
 
 		missionCode, err := s.nextCodeWithGorm(tx, "mission", missionRecord{}.TableName())
 		if err != nil {
@@ -167,6 +174,11 @@ func (s *PostgresStore) transitionMission(ctx context.Context, missionCode strin
 			if err != nil {
 				return err
 			}
+			streamingConflicts, err := s.findFreshStreamingConflictsForMissionRobots(tx, row.ID)
+			if err != nil {
+				return err
+			}
+			conflicts = mergeMissionStartConflicts(conflicts, streamingConflicts)
 			if len(conflicts) > 0 {
 				return &MissionStartConflictError{Conflicts: conflicts}
 			}
@@ -229,6 +241,15 @@ func (s *PostgresStore) transitionMission(ctx context.Context, missionCode strin
 				}).Error; err != nil {
 				return err
 			}
+			if err := tx.Model(&streamingStatusRecord{}).
+				Where("mission_id = ?", row.ID).
+				Updates(map[string]any{
+					"status":     "stopped",
+					"sent_at":    gorm.Expr("now()"),
+					"updated_at": gorm.Expr("now()"),
+				}).Error; err != nil {
+				return err
+			}
 		default:
 			return ErrInvalidState
 		}
@@ -279,6 +300,84 @@ func (s *PostgresStore) findActiveMissionConflictsForStart(tx *gorm.DB, missionI
 		return nil, err
 	}
 	return conflicts, nil
+}
+
+func (s *PostgresStore) findBusyMissionCreateConflicts(tx *gorm.DB, robotIDs []string) ([]MissionStartConflict, error) {
+	if len(robotIDs) == 0 {
+		return nil, nil
+	}
+	var activeConflicts []MissionStartConflict
+	if err := tx.Raw(`
+		SELECT
+			r.robot_code AS robot_code,
+			active_m.mission_code AS active_mission_code
+		FROM robots r
+		JOIN mission_robots active_mr ON active_mr.robot_id = r.id
+		JOIN missions active_m ON active_m.id = active_mr.mission_id
+		WHERE r.id IN ?
+			AND active_m.status = 'active'
+			AND active_mr.status != 'removed'
+		ORDER BY r.robot_code, active_m.started_at DESC, active_m.mission_code
+	`, robotIDs).Scan(&activeConflicts).Error; err != nil {
+		return nil, err
+	}
+
+	var streamingConflicts []MissionStartConflict
+	if err := tx.Raw(`
+		SELECT
+			r.robot_code AS robot_code,
+			COALESCE(m.mission_code, NULLIF(ss.room_id, ''), 'streaming') AS active_mission_code
+		FROM robots r
+		JOIN streaming_statuses ss ON ss.robot_id = r.id
+		LEFT JOIN missions m ON m.id = ss.mission_id
+		WHERE r.id IN ?
+			AND ss.status IN ('streaming', 'publishing')
+			AND ss.sent_at > ?
+		ORDER BY r.robot_code
+	`, robotIDs, time.Now().UTC().Add(-streamingStatusFreshnessWindow)).Scan(&streamingConflicts).Error; err != nil {
+		return nil, err
+	}
+
+	return mergeMissionStartConflicts(activeConflicts, streamingConflicts), nil
+}
+
+func (s *PostgresStore) findFreshStreamingConflictsForMissionRobots(tx *gorm.DB, missionID string) ([]MissionStartConflict, error) {
+	var conflicts []MissionStartConflict
+	err := tx.Raw(`
+		SELECT
+			r.robot_code AS robot_code,
+			COALESCE(m.mission_code, NULLIF(ss.room_id, ''), 'streaming') AS active_mission_code
+		FROM mission_robots target_mr
+		JOIN robots r ON r.id = target_mr.robot_id
+		JOIN streaming_statuses ss ON ss.robot_id = r.id
+		LEFT JOIN missions m ON m.id = ss.mission_id
+		WHERE target_mr.mission_id = ?
+			AND target_mr.status != 'removed'
+			AND ss.status IN ('streaming', 'publishing')
+			AND ss.sent_at > ?
+			AND (ss.mission_id IS NULL OR ss.mission_id != ?)
+		ORDER BY r.robot_code
+	`, missionID, time.Now().UTC().Add(-streamingStatusFreshnessWindow), missionID).Scan(&conflicts).Error
+	if err != nil {
+		return nil, err
+	}
+	return conflicts, nil
+}
+
+func mergeMissionStartConflicts(conflictGroups ...[]MissionStartConflict) []MissionStartConflict {
+	seen := map[string]struct{}{}
+	merged := make([]MissionStartConflict, 0)
+	for _, conflicts := range conflictGroups {
+		for _, conflict := range conflicts {
+			key := conflict.RobotCode + "\x00" + conflict.ActiveMissionCode
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			merged = append(merged, conflict)
+		}
+	}
+	return merged
 }
 
 func (s *PostgresStore) listMissionsWithGorm(tx *gorm.DB) ([]domain.Mission, error) {

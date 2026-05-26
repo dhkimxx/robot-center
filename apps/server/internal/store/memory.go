@@ -184,6 +184,9 @@ func (s *MemoryStore) CreateMission(_ context.Context, input CreateMissionInput)
 			return domain.Mission{}, fmt.Errorf("robotCode %s not found", robotCode)
 		}
 	}
+	if conflicts := s.findActiveMissionConflictsLocked("", robotCodes); len(conflicts) > 0 {
+		return domain.Mission{}, &MissionStartConflictError{Conflicts: conflicts}
+	}
 
 	s.missionSeq++
 	missionCode := fmt.Sprintf("mission-%03d", s.missionSeq)
@@ -263,7 +266,20 @@ func (s *MemoryStore) findActiveMissionConflictsLocked(targetMissionCode string,
 		return nil
 	}
 
+	targetMissionID := ""
+	if targetMissionCode != "" {
+		targetMissionID = s.missionsByCode[targetMissionCode].ID
+	}
 	conflicts := make([]MissionStartConflict, 0)
+	seen := map[string]struct{}{}
+	appendConflict := func(conflict MissionStartConflict) {
+		key := conflict.RobotCode + "\x00" + conflict.ActiveMissionCode
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+		conflicts = append(conflicts, conflict)
+	}
 	for _, mission := range s.missionsByCode {
 		if mission.MissionCode == targetMissionCode || mission.Status != "active" {
 			continue
@@ -272,11 +288,38 @@ func (s *MemoryStore) findActiveMissionConflictsLocked(targetMissionCode string,
 			if _, ok := targetRobots[robotCode]; !ok {
 				continue
 			}
-			conflicts = append(conflicts, MissionStartConflict{
+			appendConflict(MissionStartConflict{
 				RobotCode:         robotCode,
 				ActiveMissionCode: mission.MissionCode,
 			})
 		}
+	}
+	now := time.Now().UTC()
+	for robotCode := range targetRobots {
+		status, ok := s.streamingByRobotCode[robotCode]
+		if !ok || (status.Status != "streaming" && status.Status != "publishing") {
+			continue
+		}
+		if !status.SentAt.IsZero() && now.Sub(status.SentAt) > streamingStatusFreshnessWindow {
+			continue
+		}
+		if targetMissionID != "" && status.MissionID == targetMissionID {
+			continue
+		}
+		activeMissionCode := strings.TrimSpace(status.RoomID)
+		for _, mission := range s.missionsByCode {
+			if mission.ID == status.MissionID {
+				activeMissionCode = mission.MissionCode
+				break
+			}
+		}
+		if activeMissionCode == "" {
+			activeMissionCode = "streaming"
+		}
+		appendConflict(MissionStartConflict{
+			RobotCode:         robotCode,
+			ActiveMissionCode: activeMissionCode,
+		})
 	}
 	sort.Slice(conflicts, func(i, j int) bool {
 		if conflicts[i].RobotCode == conflicts[j].RobotCode {
@@ -304,6 +347,11 @@ func (s *MemoryStore) EndMission(_ context.Context, missionCode string) (domain.
 	mission.UpdatedAt = now
 	s.missionsByCode[missionCode] = mission
 	for _, robotCode := range missionRobotCodes(mission) {
+		if status, ok := s.streamingByRobotCode[robotCode]; ok && status.MissionID == mission.ID {
+			status.Status = "stopped"
+			status.SentAt = now
+			s.streamingByRobotCode[robotCode] = status
+		}
 		robot := s.robotsByCode[robotCode]
 		if robot.Status != "offline" {
 			robot.Status = "online"
@@ -330,7 +378,7 @@ func (s *MemoryStore) ApplyHeartbeat(_ context.Context, input HeartbeatInput, be
 	if status == "" {
 		status = "online"
 	}
-	robot.Status = status
+	robot.Status = normalizeRobotDeviceStatus(status)
 	robot.LastSeenAt = &now
 	robot.UpdatedAt = now
 	s.robotsByCode[input.RobotCode] = robot
@@ -368,12 +416,24 @@ func (s *MemoryStore) ApplyStreamingStatus(_ context.Context, status domain.Stre
 	if !ok {
 		return domain.Robot{}, ErrNotFound
 	}
-	robot.Status = status.Status
+	if isPublishingStatus(status.Status) && !s.streamingMissionActiveForRobotLocked(status.MissionID, status.RobotCode) {
+		return domain.Robot{}, ErrInvalidState
+	}
+	robot.Status = normalizeRobotDeviceStatus(status.Status)
 	robot.LastStreamingAt = &now
 	robot.UpdatedAt = now
 	s.robotsByCode[status.RobotCode] = robot
 	s.streamingByRobotCode[status.RobotCode] = status
 	return robot, nil
+}
+
+func (s *MemoryStore) streamingMissionActiveForRobotLocked(missionID string, robotCode string) bool {
+	for _, mission := range s.missionsByCode {
+		if mission.ID == missionID && mission.Status == "active" && missionHasRobotCode(mission, robotCode) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *MemoryStore) ListStreamingStatuses(_ context.Context) ([]domain.StreamingStatus, error) {

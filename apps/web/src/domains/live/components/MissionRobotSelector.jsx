@@ -1,8 +1,7 @@
 import EmptyState from "../../../components/ui/EmptyState.jsx";
 import { cn } from "../../../utils/cn.js";
 import {
-  makeLiveStatusLabel,
-  makeStatusLabel
+  makeLiveStatusLabel
 } from "../../../utils/formatters.js";
 import {
   createEmptyLiveSession,
@@ -35,8 +34,10 @@ export function MissionRobotSelector({
             >
               <div className="grid min-w-0 gap-1">
                 <strong className="truncate text-sm font-bold text-slate-50">{target.robot?.displayName ?? target.robotCode}</strong>
-                <span className="truncate text-xs font-semibold text-slate-400">{target.robotCode} / {makeStatusLabel(target.robot?.status ?? "offline")}</span>
-                <span className="truncate text-xs font-semibold text-slate-400">{formatMediaChannelCount(target.streamingStatus)} / {formatStreamingSubscriberCount(target.streamingStatus)}</span>
+                <span className="truncate text-xs font-semibold text-slate-400">{target.robotCode} / {target.liveLabel}</span>
+                <span className="truncate text-xs font-semibold text-slate-400">
+                  {target.isStreaming ? `${formatMediaChannelCount(target.streamingStatus)} / ${formatStreamingSubscriberCount(target.streamingStatus)}` : target.liveLabel}
+                </span>
               </div>
               <small className="shrink-0 rounded-full bg-sapphire-500/[0.13] px-2 py-1 text-xs font-bold text-blue-100">
                 {makeLiveStatusLabel(session.status)}

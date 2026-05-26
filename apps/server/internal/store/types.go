@@ -15,6 +15,8 @@ var (
 	ErrInvalidState = errors.New("invalid state")
 )
 
+const streamingStatusFreshnessWindow = 30 * time.Second
+
 type MissionStartConflict struct {
 	RobotCode         string
 	ActiveMissionCode string
@@ -37,6 +39,17 @@ func (e *MissionStartConflictError) Error() string {
 
 func (e *MissionStartConflictError) Unwrap() error {
 	return ErrInvalidState
+}
+
+func normalizeRobotDeviceStatus(status string) string {
+	switch strings.TrimSpace(status) {
+	case "offline":
+		return "offline"
+	case "fault":
+		return "fault"
+	default:
+		return "online"
+	}
 }
 
 type CreateRobotInput struct {

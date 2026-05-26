@@ -10,17 +10,17 @@ import {
 } from "../../utils/formatters.js";
 import {
   formatMissionRobotCount,
-  getMissionRobotDetails
+  getMissionRobotDetails,
+  isClosedMission
 } from "./missionHelpers.js";
-
-const closedMissionStatuses = new Set(["completed", "ended", "cancelled"]);
 
 export function MissionListPanel({
   missions,
   onOpenCreateMissionModal,
   onSelectMission,
   robots,
-  selectedMission
+  selectedMission,
+  streamingStatuses
 }) {
   const orderedMissions = useMemo(() => {
     const statusOrder = { active: 0, ready: 1, completed: 2, ended: 2, cancelled: 3 };
@@ -48,8 +48,8 @@ export function MissionListPanel({
         ) : (
           orderedMissions.map((mission) => {
             const isSelectedMission = selectedMission?.missionCode === mission.missionCode;
-            const isClosedMission = closedMissionStatuses.has(mission.status);
-            const robotDetails = getMissionRobotDetails(mission, robots);
+            const isClosed = isClosedMission(mission);
+            const robotDetails = getMissionRobotDetails(mission, robots, streamingStatuses);
             return (
               <button
                 aria-label={`${mission.name} ${mission.missionCode} 선택`}
@@ -57,8 +57,8 @@ export function MissionListPanel({
                 className={cn(
                   "grid min-h-[58px] gap-1 rounded-lg border border-slate-500/20 bg-white/[0.045] px-3 py-2 text-left transition hover:border-sapphire-500/[0.34] hover:bg-sapphire-500/[0.09] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sapphire-500",
                   isSelectedMission && "border-sapphire-500/50 bg-sapphire-500/[0.09] shadow-[inset_3px_0_0_var(--color-sapphire)]",
-                  isClosedMission && "bg-slate-400/[0.12] opacity-75 hover:bg-slate-400/[0.16]",
-                  isClosedMission && isSelectedMission && "bg-slate-400/[0.20]"
+                  isClosed && "bg-slate-400/[0.12] opacity-75 hover:bg-slate-400/[0.16]",
+                  isClosed && isSelectedMission && "bg-slate-400/[0.20]"
                 )}
                 key={mission.missionCode}
                 type="button"
@@ -70,7 +70,7 @@ export function MissionListPanel({
                 </span>
                 {robotDetails.length > 0 ? (
                   <span className="truncate text-xs font-semibold text-slate-500">
-                    {robotDetails.map((robot) => `${robot.robotCode} ${makeStatusLabel(robot.status)}`).join(" / ")}
+                    {robotDetails.map((robot) => `${robot.robotCode} ${robot.liveLabel}`).join(" / ")}
                   </span>
                 ) : null}
               </button>

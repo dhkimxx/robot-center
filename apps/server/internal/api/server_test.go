@@ -119,15 +119,13 @@ func TestControlPlaneFlow(t *testing.T) {
 	}
 	assertStringListEqual(t, startedMission["robotCodes"], []string{robotCode, supportRobotCode})
 
-	conflictMissionPayload := requestJSON[map[string]any](t, server.URL, http.MethodPost, "/api/missions", "", map[string]any{
+	conflictStatus, conflictPayload := requestRawJSON(t, server.URL, http.MethodPost, "/api/missions", "", map[string]any{
 		"name":        "Conflicting Mission",
 		"missionType": "mountain_rescue",
 		"robotCode":   robotCode,
 	})
-	conflictMission := conflictMissionPayload["mission"].(map[string]any)
-	conflictStatus, conflictPayload := requestRawJSON(t, server.URL, http.MethodPost, "/api/missions/"+conflictMission["missionCode"].(string)+"/start", "", nil)
 	if conflictStatus != http.StatusConflict {
-		t.Fatalf("expected mission start conflict status, got %d payload %#v", conflictStatus, conflictPayload)
+		t.Fatalf("expected mission create conflict status, got %d payload %#v", conflictStatus, conflictPayload)
 	}
 	conflicts := conflictPayload["conflicts"].([]any)
 	if len(conflicts) != 1 {
@@ -295,6 +293,15 @@ func TestControlPlaneFlow(t *testing.T) {
 	endedGatewayPayload := requestJSON[map[string]any](t, server.URL, http.MethodGet, "/api/robot-gateway/mission?robotCode="+supportRobotCode, supportRobotToken, nil)
 	if endedGatewayPayload["missionStatus"] != "none" {
 		t.Fatalf("expected no active support robot mission after end, got %#v", endedGatewayPayload)
+	}
+	stoppedStreamingPayload := requestJSON[map[string]any](t, server.URL, http.MethodGet, "/api/streaming-statuses", "", nil)
+	stoppedStreamingStatuses := stoppedStreamingPayload["streamingStatuses"].([]any)
+	if len(stoppedStreamingStatuses) != 1 {
+		t.Fatalf("expected one stopped streaming status, got %#v", stoppedStreamingPayload)
+	}
+	stoppedStreamingStatus := stoppedStreamingStatuses[0].(map[string]any)
+	if stoppedStreamingStatus["status"] != "stopped" {
+		t.Fatalf("expected stopped streaming status after mission end, got %#v", stoppedStreamingStatus)
 	}
 }
 

@@ -328,6 +328,7 @@ class MockRobot:
         self.stop_event = asyncio.Event()
         self.sequence = 0
         self.offer_sent = False
+        self.stopped_reported = False
 
     async def run(self) -> None:
         timeout = aiohttp.ClientTimeout(total=10)
@@ -345,6 +346,7 @@ class MockRobot:
             await self.send_heartbeat("streaming")
             await self.connect_signaling()
         finally:
+            await self.report_publish_stopped()
             await self.close()
 
     def has_mission_override(self) -> bool:
@@ -398,10 +400,8 @@ class MockRobot:
 
     async def wait_for_active_mission(self) -> dict[str, Any]:
         while not self.stop_event.is_set():
-            mission = await self.get_json(
-                f"/api/robot-gateway/mission?robotCode={self.robot_code}"
-            )
-            if mission.get("missionStatus") == "active":
+            mission = await self.fetch_active_mission()
+            if mission:
                 self.log(
                     "mission active: "
                     f"{mission.get('missionCode')} room={mission.get('roomId')}"
@@ -411,12 +411,22 @@ class MockRobot:
             await asyncio.sleep(2)
         raise asyncio.CancelledError
 
-    async def send_streaming_status(self) -> None:
+    async def fetch_active_mission(self) -> dict[str, Any]:
+        mission = await self.get_json(
+            f"/api/robot-gateway/mission?robotCode={self.robot_code}"
+        )
+        if mission.get("missionStatus") == "active":
+            return mission
+        return {}
+
+    async def send_streaming_status(self, status: str = "streaming") -> None:
+        if not self.mission:
+            return
         payload = {
             "robotCode": self.robot_code,
             "missionId": self.mission["missionId"],
             "roomId": self.mission["roomId"],
-            "status": "streaming",
+            "status": status,
             "publishedTracks": [
                 {
                     "name": "track.video_1",
@@ -498,6 +508,11 @@ class MockRobot:
         if message_type == "joined":
             self.local_peer_id = payload.get("peerId", "")
             self.log(f"room joined: {payload.get('room')} / {payload.get('role')}")
+            return
+
+        if message_type == "mission-ended":
+            self.log(f"mission ended signal received: {payload.get('room')}")
+            await self.stop_publish("mission ended signal")
             return
 
         if message_type in ("peer-present", "peer-joined") and payload.get("role") == "sfu":
@@ -652,8 +667,18 @@ class MockRobot:
     async def heartbeat_loop(self) -> None:
         while not self.stop_event.is_set():
             await asyncio.sleep(10)
-            await self.send_heartbeat("streaming")
-            await self.send_streaming_status()
+            active_mission = await self.fetch_active_mission()
+            if not active_mission or active_mission.get("missionCode") != self.mission.get("missionCode"):
+                self.log("active mission disappeared; stopping publish")
+                await self.stop_publish("active mission ended")
+                return
+            try:
+                await self.send_heartbeat("streaming")
+                await self.send_streaming_status()
+            except Exception as error:
+                self.log(f"streaming status rejected; stopping publish: {error}")
+                await self.stop_publish("streaming status rejected")
+                return
 
     def create_telemetry_payload(self) -> dict[str, Any]:
         latitude, longitude = self.current_position()
@@ -881,10 +906,33 @@ class MockRobot:
             response.raise_for_status()
             return await response.json()
 
-    async def close(self) -> None:
+    async def report_publish_stopped(self) -> None:
+        if self.stopped_reported or not self.mission or self.session is None or self.session.closed:
+            return
+        self.stopped_reported = True
+        try:
+            await self.send_streaming_status("stopped")
+            await self.send_heartbeat("online")
+            self.log("publish stopped")
+        except Exception as error:
+            self.log(f"publish stopped report failed: {error}")
+
+    async def stop_publish(self, reason: str) -> None:
+        self.log(f"stopping publish: {reason}")
         self.stop_event.set()
+        if self.websocket is not None and not self.websocket.closed:
+            await self.websocket.close()
         if self.peer_connection is not None:
             await self.peer_connection.close()
+            self.peer_connection = None
+
+    async def close(self) -> None:
+        self.stop_event.set()
+        if self.websocket is not None and not self.websocket.closed:
+            await self.websocket.close()
+        if self.peer_connection is not None:
+            await self.peer_connection.close()
+            self.peer_connection = None
         if self.session is not None:
             await self.session.close()
 

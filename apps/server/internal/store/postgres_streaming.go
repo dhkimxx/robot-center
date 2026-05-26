@@ -31,6 +31,11 @@ func (s *PostgresStore) ApplyStreamingStatus(ctx context.Context, status domain.
 		if err != nil {
 			return err
 		}
+		if isPublishingStatus(status.Status) {
+			if err := s.ensureStreamingMissionIsActiveForRobot(tx, authorizedRobot.ID, status.MissionID); err != nil {
+				return err
+			}
+		}
 
 		updates := map[string]any{
 			"mission_id":              gorm.Expr("EXCLUDED.mission_id"),
@@ -63,7 +68,7 @@ func (s *PostgresStore) ApplyStreamingStatus(ctx context.Context, status domain.
 		if err := tx.Model(&robotRecord{}).
 			Where("id = ?", authorizedRobot.ID).
 			Updates(map[string]any{
-				"status":            status.Status,
+				"status":            normalizeRobotDeviceStatus(status.Status),
 				"last_streaming_at": gorm.Expr("now()"),
 				"updated_at":        gorm.Expr("now()"),
 			}).Error; err != nil {
@@ -81,6 +86,21 @@ func (s *PostgresStore) ApplyStreamingStatus(ctx context.Context, status domain.
 		return domain.Robot{}, err
 	}
 	return robot, nil
+}
+
+func (s *PostgresStore) ensureStreamingMissionIsActiveForRobot(tx *gorm.DB, robotID string, missionID string) error {
+	var count int64
+	err := tx.Table("missions AS m").
+		Joins("JOIN mission_robots mr ON mr.mission_id = m.id").
+		Where("m.id = ? AND m.status = ? AND mr.robot_id = ? AND mr.status = ?", missionID, "active", robotID, "active").
+		Count(&count).Error
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return ErrInvalidState
+	}
+	return nil
 }
 
 func (s *PostgresStore) ListStreamingStatuses(ctx context.Context) ([]domain.StreamingStatus, error) {
@@ -108,6 +128,10 @@ func (s *PostgresStore) ListStreamingStatuses(ctx context.Context) ([]domain.Str
 		statuses = append(statuses, row.toDomainStreamingStatus())
 	}
 	return statuses, nil
+}
+
+func isPublishingStatus(status string) bool {
+	return status == "streaming" || status == "publishing"
 }
 
 type streamingStatusQueryRow struct {

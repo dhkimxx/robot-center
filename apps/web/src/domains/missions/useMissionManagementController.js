@@ -6,7 +6,8 @@ import {
 } from "../../api/missionsApi.js";
 import {
   createInitialMissionForm,
-  createMissionRobotTargets
+  createMissionRobotTargets,
+  getBusyRobotReasonForMissionCreate
 } from "./missionHelpers.js";
 
 export function useMissionManagementController({
@@ -33,13 +34,14 @@ export function useMissionManagementController({
   useEffect(() => {
     const selectedRobotCodes = missionForm.robotCodes ?? [];
     if (selectedRobotCodes.length === 0 && robots.length > 0) {
+      const firstAssignableRobot = robots.find((robot) => !getBusyRobotReasonForMissionCreate(robot.robotCode, missions, streamingStatuses));
       setMissionForm((current) => ({
         ...current,
-        robotCode: robots[0].robotCode,
-        robotCodes: [robots[0].robotCode]
+        robotCode: firstAssignableRobot?.robotCode ?? "",
+        robotCodes: firstAssignableRobot ? [firstAssignableRobot.robotCode] : []
       }));
     }
-  }, [missionForm.robotCodes, robots]);
+  }, [missionForm.robotCodes, missions, robots, streamingStatuses]);
 
   useEffect(() => {
     if (missions.length === 0) {
@@ -81,10 +83,11 @@ export function useMissionManagementController({
         : current.robotCode
           ? [current.robotCode]
           : [];
+      const assignableRobotCodes = robotCodes.filter((robotCode) => !getBusyRobotReasonForMissionCreate(robotCode, missions, streamingStatuses));
       return {
         ...createInitialMissionForm(),
-        robotCode: robotCodes[0] ?? "",
-        robotCodes
+        robotCode: assignableRobotCodes[0] ?? "",
+        robotCodes: assignableRobotCodes
       };
     });
     setMissionModal("create");
@@ -93,7 +96,11 @@ export function useMissionManagementController({
   async function createMission(event) {
     event.preventDefault();
     try {
-      const robotCodes = missionForm.robotCodes ?? [];
+      const robotCodes = (missionForm.robotCodes ?? []).filter((robotCode) => !getBusyRobotReasonForMissionCreate(robotCode, missions, streamingStatuses));
+      if (robotCodes.length === 0) {
+        showNotification("배정 가능한 로봇이 없습니다.", "warning");
+        return;
+      }
       const legacyRobotCode = robotCodes[0] ?? "";
       const payload = await createMissionRequest({
         ...missionForm,

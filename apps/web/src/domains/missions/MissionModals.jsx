@@ -6,9 +6,11 @@ export function MissionModals({
   createMission,
   missionForm,
   missionModal,
+  missions,
   onClose,
   robots,
-  setMissionForm
+  setMissionForm,
+  streamingStatuses
 }) {
   return missionModal === "create" ? (
     <Modal
@@ -23,7 +25,13 @@ export function MissionModals({
       title="임무 생성"
     >
       <form className="grid gap-3" id="mission-create-form" onSubmit={createMission}>
-        <MissionFormFields form={missionForm} robots={robots} setForm={setMissionForm} />
+        <MissionFormFields
+          form={missionForm}
+          missions={missions}
+          robots={robots}
+          setForm={setMissionForm}
+          streamingStatuses={streamingStatuses}
+        />
       </form>
     </Modal>
   ) : null;

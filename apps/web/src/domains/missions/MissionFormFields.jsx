@@ -2,8 +2,9 @@ import MultiSelectField from "../../components/MultiSelectField.jsx";
 import SelectField from "../../components/SelectField.jsx";
 import { missionTypes } from "../../config/controlCenterConfig.js";
 import { makeStatusLabel } from "../../utils/formatters.js";
+import { getBusyRobotReasonForMissionCreate } from "./missionHelpers.js";
 
-export function MissionFormFields({ form, robots, setForm }) {
+export function MissionFormFields({ form, missions, robots, setForm, streamingStatuses }) {
   return (
     <>
       <label className="grid gap-1.5 text-xs font-extrabold text-slate-400">
@@ -21,11 +22,15 @@ export function MissionFormFields({ form, robots, setForm }) {
       />
       <MultiSelectField
         label="배정 로봇"
-        options={robots.map((robot) => ({
-          value: robot.robotCode,
-          label: robot.displayName || robot.robotCode,
-          description: `${robot.robotCode} / ${makeStatusLabel(robot.status)}`
-        }))}
+        options={robots.map((robot) => {
+          const busyReason = getBusyRobotReasonForMissionCreate(robot.robotCode, missions, streamingStatuses);
+          return {
+            value: robot.robotCode,
+            label: robot.displayName || robot.robotCode,
+            description: busyReason || `${robot.robotCode} / ${makeStatusLabel(robot.status)}`,
+            disabled: Boolean(busyReason)
+          };
+        })}
         value={form.robotCodes ?? []}
         onChange={(robotCodes) => setForm({ ...form, robotCode: robotCodes[0] ?? "", robotCodes })}
       />

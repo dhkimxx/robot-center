@@ -40,7 +40,7 @@ export function MissionDetailPanel({ mission, onEndMission, onOpenMissionControl
               className="inline-flex min-h-8 max-w-full items-center rounded-full border border-slate-500/30 bg-white/[0.06] px-3 text-sm font-semibold text-slate-100"
               key={robot.robotCode}
             >
-              {robot.robotCode} · {makeStatusLabel(robot.status)}
+              {robot.robotCode} · {robot.liveLabel}
             </span>
           ))
         )}

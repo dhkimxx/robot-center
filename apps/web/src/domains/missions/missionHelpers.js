@@ -51,6 +51,44 @@ export function getMissionCodeFromRobotKey(targetKey) {
   return String(targetKey ?? "").split(":")[0] ?? "";
 }
 
+const streamingStatusFreshMs = 30_000;
+const closedMissionStatuses = new Set(["completed", "ended", "cancelled"]);
+
+export function isClosedMission(mission) {
+  return closedMissionStatuses.has(mission?.status);
+}
+
+export function isFreshMissionStreamingStatus(mission, robotCode, streamingStatus, nowMs = Date.now()) {
+  if (!mission || mission.status !== "active" || !streamingStatus) {
+    return false;
+  }
+  if (streamingStatus.missionId !== mission.id || streamingStatus.robotCode !== robotCode) {
+    return false;
+  }
+  if (streamingStatus.status !== "streaming" && streamingStatus.status !== "publishing") {
+    return false;
+  }
+  const sentAtMs = Date.parse(streamingStatus.sentAt ?? "");
+  return Number.isFinite(sentAtMs) && nowMs - sentAtMs <= streamingStatusFreshMs;
+}
+
+export function findMissionStreamingStatus(mission, robotCode, streamingStatuses) {
+  return streamingStatuses.find((status) => status.missionId === mission?.id && status.robotCode === robotCode) ?? null;
+}
+
+export function makeMissionRobotLiveLabel(mission, isStreaming) {
+  if (isStreaming) {
+    return "송출 중";
+  }
+  if (isClosedMission(mission)) {
+    return "임무 종료";
+  }
+  if (mission?.status === "active") {
+    return "송출 대기";
+  }
+  return "배정 대기";
+}
+
 export function createMissionRobotTargets(mission, robots, streamingStatuses) {
   if (!mission) {
     return [];
@@ -65,9 +103,12 @@ export function createMissionRobotTargets(mission, robots, streamingStatuses) {
   });
 
   return Array.from(robotCodes).map((robotCode) => {
-    const streamingStatus = statusesForMission.find((status) => status.robotCode === robotCode) ?? null;
+    const streamingStatus = findMissionStreamingStatus(mission, robotCode, statusesForMission);
+    const isStreaming = isFreshMissionStreamingStatus(mission, robotCode, streamingStatus);
     return {
+      isStreaming,
       key: makeMissionRobotKey(mission.missionCode, robotCode),
+      liveLabel: makeMissionRobotLiveLabel(mission, isStreaming),
       mission,
       missionRoomId: makeMissionRoomId(mission),
       robot: robots.find((robot) => robot.robotCode === robotCode) ?? null,
@@ -78,15 +119,40 @@ export function createMissionRobotTargets(mission, robots, streamingStatuses) {
   });
 }
 
-export function getMissionRobotDetails(mission, robots) {
+export function getMissionRobotDetails(mission, robots, streamingStatuses = []) {
   return getMissionRobotCodes(mission).map((robotCode) => {
     const robot = robots.find((candidate) => candidate.robotCode === robotCode) ?? null;
+    const streamingStatus = findMissionStreamingStatus(mission, robotCode, streamingStatuses);
+    const isStreaming = isFreshMissionStreamingStatus(mission, robotCode, streamingStatus);
     return {
+      deviceStatus: robot?.status ?? "offline",
       displayName: robot?.displayName ?? robotCode,
+      isStreaming,
+      liveLabel: makeMissionRobotLiveLabel(mission, isStreaming),
       robotCode,
-      status: robot?.status ?? "offline"
+      streamingStatus
     };
   });
+}
+
+export function getBusyRobotReasonForMissionCreate(robotCode, missions = [], streamingStatuses = [], nowMs = Date.now()) {
+  const activeMission = missions.find((mission) => mission.status === "active" && getMissionRobotCodes(mission).includes(robotCode));
+  if (activeMission) {
+    return `진행 중 임무 ${activeMission.missionCode}`;
+  }
+
+  const freshStreamingStatus = streamingStatuses.find((status) => {
+    if (status.robotCode !== robotCode || (status.status !== "streaming" && status.status !== "publishing")) {
+      return false;
+    }
+    const sentAtMs = Date.parse(status.sentAt ?? "");
+    return Number.isFinite(sentAtMs) && nowMs - sentAtMs <= streamingStatusFreshMs;
+  });
+  if (freshStreamingStatus) {
+    return "실시간 송출 중";
+  }
+
+  return "";
 }
 
 export function formatMissionRobotCount(robotDetails) {

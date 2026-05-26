@@ -470,7 +470,7 @@ func (s *Server) handleCreateMission(w http.ResponseWriter, r *http.Request) {
 		RobotCodes:  request.RobotCodes,
 	})
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err)
+		writeStoreError(w, err)
 		return
 	}
 
@@ -507,6 +507,7 @@ func (s *Server) handleEndMission(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, err)
 		return
 	}
+	s.sfuHub.CloseRoom(mission.MissionCode)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"mission": dto.Mission(mission),
 	})

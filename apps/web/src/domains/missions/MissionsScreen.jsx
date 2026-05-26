@@ -26,7 +26,8 @@ export default function MissionsScreen({
   robots,
   selectedMission,
   selectedMissionTargetKey,
-  setSelectedMissionTargetKey
+  setSelectedMissionTargetKey,
+  streamingStatuses
 }) {
   if (controlMission) {
     return (
@@ -60,6 +61,7 @@ export default function MissionsScreen({
         onSelectMission={onSelectMission}
         robots={robots}
         selectedMission={selectedMission}
+        streamingStatuses={streamingStatuses}
       />
 
       <article className="self-start rounded-[14px] border border-slate-500/25 bg-command-800/95 p-6 shadow-command">
@@ -77,7 +79,7 @@ export default function MissionsScreen({
             onEndMission={onEndMission}
             onOpenMissionControl={onOpenMissionControl}
             onStartMission={onStartMission}
-            robotDetails={getMissionRobotDetails(selectedMission, robots)}
+            robotDetails={getMissionRobotDetails(selectedMission, robots, streamingStatuses)}
           />
         )}
       </article>

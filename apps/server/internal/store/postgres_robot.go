@@ -226,6 +226,7 @@ func (s *PostgresStore) ApplyHeartbeat(ctx context.Context, input HeartbeatInput
 	if status == "" {
 		status = "online"
 	}
+	status = normalizeRobotDeviceStatus(status)
 	err = tx.QueryRowContext(ctx, `
 		UPDATE robots
 		SET status = $2, last_seen_at = now(), updated_at = now()

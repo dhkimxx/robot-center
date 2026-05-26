@@ -12,7 +12,11 @@ export default function MultiSelectField({
   const fieldId = id ?? generatedId;
   const selectedValues = new Set(value);
 
-  function toggleOption(optionValue) {
+  function toggleOption(option) {
+    if (option.disabled) {
+      return;
+    }
+    const optionValue = option.value;
     if (selectedValues.has(optionValue)) {
       onChange(value.filter((currentValue) => currentValue !== optionValue));
       return;
@@ -29,15 +33,19 @@ export default function MultiSelectField({
         ) : (
           options.map((option) => (
             <label
-              className="grid min-h-10 min-w-0 grid-cols-[18px_minmax(0,1fr)] items-center gap-2 rounded-lg border border-transparent bg-white/[0.045] px-2 py-1.5 text-slate-100 transition hover:border-sapphire-500/35 hover:bg-sapphire-500/[0.11]"
+              className={[
+                "grid min-h-10 min-w-0 grid-cols-[18px_minmax(0,1fr)] items-center gap-2 rounded-lg border border-transparent bg-white/[0.045] px-2 py-1.5 text-slate-100 transition",
+                option.disabled ? "cursor-not-allowed opacity-45" : "hover:border-sapphire-500/35 hover:bg-sapphire-500/[0.11]"
+              ].join(" ")}
               key={option.value}
             >
               <input
                 className="m-0 h-4 w-4 accent-sapphire-500"
                 checked={selectedValues.has(option.value)}
+                disabled={option.disabled}
                 type="checkbox"
                 value={option.value}
-                onChange={() => toggleOption(option.value)}
+                onChange={() => toggleOption(option)}
               />
               <span className="block min-w-0">
                 <strong className="block truncate text-xs font-bold text-slate-50">{option.label}</strong>

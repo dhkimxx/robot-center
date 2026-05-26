@@ -198,15 +198,18 @@ export function useControlCenterController({
       robots,
       selectedMission: missionController.selectedMission,
       selectedMissionTargetKey: selectedLiveTargetKey,
-      setSelectedMissionTargetKey: setSelectedLiveTargetKey
+      setSelectedMissionTargetKey: setSelectedLiveTargetKey,
+      streamingStatuses
     },
     missionModalProps: {
       createMission: missionController.createMission,
       missionForm: missionController.missionForm,
       missionModal: missionController.missionModal,
+      missions,
       onClose: missionController.closeMissionModal,
       robots,
-      setMissionForm: missionController.setMissionForm
+      setMissionForm: missionController.setMissionForm,
+      streamingStatuses
     },
     playbackModalProps: {
       recordingPlaybackFile: recordingsController.recordingPlaybackFile,
