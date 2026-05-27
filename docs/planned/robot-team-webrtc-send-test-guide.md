@@ -23,6 +23,7 @@ history:
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: refresh verification timestamp after expanded TURN range deployment'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: keep robot team sharing guide on canonical schema only'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: normalize canonical guide history wording'
+- '2026-05-27 danya.kim <danya.kim@thundersoft.com>: add robot team signaling Q&A'
 ---
 
 # Robot Team WebRTC Send Test Guide
@@ -661,3 +662,114 @@ Sensor/UI:
 - sensor-latest 저장 여부
 - recorder chunk 생성 여부
 - 실패 로그와 재현 절차
+
+## 13. 질문과 답변
+
+### Q1. endpoint 주소는 무엇인가?
+
+로봇팀 구현에서 직접 호출하는 endpoint는 아래 3개다.
+
+| Purpose | Protocol | Endpoint |
+| --- | --- | --- |
+| Heartbeat | HTTP | `POST http://192.168.20.12:18080/api/robot-gateway/heartbeat` |
+| Active mission 조회 | HTTP | `GET http://192.168.20.12:18080/api/robot-gateway/mission` |
+| Robot WebRTC signaling | WebSocket | mission 조회 응답의 `sfu.signalingUrl` |
+
+현재 `mission-001` 기준 signaling URL은 `ws://192.168.20.12:18080/sfu/robot/ws?room=mission-001`다. 로봇 구현은 이 값을 직접 조립하지 말고 mission 조회 응답의 `sfu.signalingUrl`을 그대로 사용한다.
+
+### Q2. WebSocket인가, HTTP POST인가?
+
+둘 다 사용하지만 역할이 다르다.
+
+| Step | Transport |
+| --- | --- |
+| heartbeat | HTTP POST |
+| active mission 조회 | HTTP GET |
+| WebRTC offer/answer/candidate signaling | WebSocket |
+| 영상/오디오 | WebRTC media track |
+| 센서/telemetry | WebRTC DataChannel |
+
+영상과 센서 데이터를 HTTP POST로 계속 업로드하는 구조가 아니다. HTTP는 로봇 상태와 mission 조회까지만 사용하고, 송신 본류는 WebRTC 연결 이후 media track과 DataChannel로 보낸다.
+
+### Q3. Jetson이 offer를 보내는 방식인가?
+
+Yes. Jetson 쪽 Robot Gateway/Publisher가 WebSocket에 접속한 뒤 SDP offer를 서버로 보낸다.
+
+서버는 `joined`와 `peer-present`/`peer-joined` 메시지를 보낸다. Robot publisher는 SFU peer가 확인되면 `offer` 메시지를 보낸다.
+
+```json
+{
+  "type": "offer",
+  "payload": {
+    "targetPeerId": "sfu",
+    "type": "offer",
+    "sdp": "v=0..."
+  }
+}
+```
+
+`targetPeerId`는 생략 가능하지만, 명시할 경우 `sfu`를 사용한다.
+
+### Q4. answer JSON 형식은 무엇인가?
+
+서버가 Robot publisher에게 보내는 answer는 아래 형식이다.
+
+```json
+{
+  "type": "answer",
+  "payload": {
+    "room": "mission-001",
+    "fromRole": "sfu",
+    "fromPeerId": "sfu",
+    "targetPeerId": "peer_xxxxxxxxxxxxxxxx",
+    "type": "answer",
+    "sdp": "v=0...",
+    "robotCode": "robot-001"
+  }
+}
+```
+
+Robot publisher는 `payload.type`과 `payload.sdp`로 remote description을 설정한다. `room`, `fromRole`, `fromPeerId`, `targetPeerId`, `robotCode`는 라우팅/로깅용 metadata다.
+
+### Q5. ICE candidate는 어떻게 교환하는가?
+
+현재 테스트 서버는 `iceTransportPolicy=relay` 기준이다. Robot publisher는 mission 응답의 `turnServers`를 `RTCPeerConnection`에 넣고 TURN relay candidate를 사용한다.
+
+권장 방식은 ICE gathering 완료 후 relay candidate가 포함된 SDP offer를 보내는 것이다. 이 경우 서버 answer SDP에도 ICE 정보가 포함되므로 별도 candidate 메시지 없이 연결될 수 있다.
+
+trickle ICE를 구현한 경우에는 아래 WebSocket 메시지를 보낼 수 있다.
+
+```json
+{
+  "type": "candidate",
+  "payload": {
+    "targetPeerId": "sfu",
+    "candidate": "candidate:...",
+    "sdpMid": "0",
+    "sdpMLineIndex": 0
+  }
+}
+```
+
+현재 P0 테스트에서는 로봇 쪽에서 relay candidate가 생성됐는지, 최종 ICE state가 `connected` 또는 `completed`인지가 핵심이다.
+
+### Q6. 인증 token이 필요한가?
+
+Yes. REST와 Robot WebSocket 모두 같은 `robotToken`을 Bearer token으로 보낸다.
+
+```http
+Authorization: Bearer {robotToken}
+```
+
+token은 HTTP header에 넣는다. URL query, WebSocket message payload, DataChannel payload에 넣지 않는다.
+
+### Q7. `robot_id`, `session_id`, `room_id`가 필요한가?
+
+| Identifier | Robot team input 여부 | 기준 |
+| --- | --- | --- |
+| `robot_id` | No | 관제 서버 내부 UUID다. 로봇팀 구현 입력값으로 쓰지 않는다. |
+| `robotCode` | 직접 입력 최소화 | token으로 서버가 판단한다. 화면/로그 식별용으로만 다룬다. WebSocket query에 붙이지 않는다. |
+| `session_id` | No | 클라이언트가 만들 필요 없다. WebSocket join 후 서버가 `peerId`를 내려준다. |
+| `room_id` | Yes, but response-driven | room id는 `missionCode`와 같은 값이다. 직접 새로 정하지 말고 mission 응답의 `roomId` 또는 `sfu.signalingUrl`을 사용한다. |
+
+정리하면, 로봇팀이 보관해야 하는 필수 입력값은 `serverUrl`과 `robotToken`이다. active mission이 있으면 서버가 `robotCode`, `missionCode`, `roomId`, `sfu.signalingUrl`, `turnServers`를 응답으로 내려준다.
