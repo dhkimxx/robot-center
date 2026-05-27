@@ -23,15 +23,16 @@ func TestControlPlaneFlow(t *testing.T) {
 	defer recorderHealth.Close()
 
 	appServer, err := NewServerFromConfig(context.Background(), config.AppServerConfig{
-		PostgresDSN:         postgresDSN,
-		PublicURL:           "http://center.local",
-		RecorderWorkerURL:   recorderHealth.URL,
-		SFUWebSocketBaseURL: "ws://center.local",
-		TURNURL:             "turn:127.0.0.1:3478?transport=udp",
-		TURNUsername:        "robot",
-		TURNPassword:        "robot-pass",
-		MinIOEndpoint:       "http://127.0.0.1:9000",
-		MinIOBucket:         "robot-center-poc",
+		PostgresDSN:               postgresDSN,
+		PublicURL:                 "http://center.local",
+		RecorderWorkerURL:         recorderHealth.URL,
+		SFUWebSocketPublicBaseURL: "ws://center.local",
+		TURNPublicURL:             "turn:127.0.0.1:3478?transport=udp",
+		TURNInternalURL:           "turn:127.0.0.1:3478?transport=udp",
+		TURNUsername:              "robot",
+		TURNPassword:              "robot-pass",
+		MinIOEndpoint:             "http://127.0.0.1:9000",
+		MinIOBucket:               "robot-center-poc",
 	})
 	if err != nil {
 		t.Fatal(err)

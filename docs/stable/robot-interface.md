@@ -20,6 +20,7 @@ history:
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: simplify robot external contract with REST token identity and no publisher token'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: remove publisher token from P0 robot contract'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: document robot WebSocket endpoint with robot token authorization'
+- '2026-05-27 danya.kim <danya.kim@thundersoft.com>: sync TURN public/internal terminology with current config'
 ---
 
 # Robot Gateway Interface
@@ -189,7 +190,7 @@ Mission response field:
 | `roomId` | string | WebRTC room id. 현재 코드 기준 `missionCode`와 같다. |
 | `sfu.signalingUrl` | string | Robot Gateway가 재구성하지 않고 그대로 접속할 publisher WebSocket URL |
 | `sfu.iceTransportPolicy` | string | 현재 `relay` |
-| `turnServers` | array | `TURN_URL`, `TURN_USERNAME`, `TURN_PASSWORD`에서 내려간다. |
+| `turnServers` | array | 로봇 외부 계약은 `TURN_PUBLIC_URL`, `TURN_USERNAME`, `TURN_PASSWORD`에서 내려간다. Docker 내부 recorder/SFU용 `TURN_INTERNAL_URL`은 로봇 구현에 사용하지 않는다. |
 | `tracks` | string[] | canonical media track slot |
 | `dataChannels` | string[] | canonical DataChannel role |
 | `videoPolicy.mode` | string | 현재 `robot_defined` |

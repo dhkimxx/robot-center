@@ -24,7 +24,8 @@ history:
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: documented recording finalization job flow and recorder-worker scale-out considerations'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: documented finalization worker attempt fencing'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: clarified live connection status source uses robots.device_state plus heartbeat freshness'
-  - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: replace legacy SFU endpoint with role-specific signaling endpoints'
+- '2026-05-27 danya.kim <danya.kim@thundersoft.com>: replace legacy SFU endpoint with role-specific signaling endpoints'
+- '2026-05-27 danya.kim <danya.kim@thundersoft.com>: fix malformed frontmatter history entry'
 ---
 
 # Architecture

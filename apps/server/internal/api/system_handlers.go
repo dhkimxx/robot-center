@@ -67,7 +67,7 @@ func (s *Server) handleRTCConfig(w http.ResponseWriter, _ *http.Request) {
 		"iceTransportPolicy":   "relay",
 		"iceServers": []map[string]any{
 			{
-				"urls":       []string{s.config.TURNURL},
+				"urls":       []string{s.config.TURNPublicURL},
 				"username":   s.config.TURNUsername,
 				"credential": s.config.TURNPassword,
 			},

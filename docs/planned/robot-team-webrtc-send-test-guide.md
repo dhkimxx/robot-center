@@ -15,6 +15,14 @@ history:
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: align robot team WebRTC guide with canonical REST token contract and no publisher token'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: remove publisher token from robot team P0 guide'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: update robot team guide to role-specific SFU endpoint'
+- '2026-05-27 danya.kim <danya.kim@thundersoft.com>: add deployed dev-server connection, robot tokens, and TURN credentials for robot team test'
+- '2026-05-27 danya.kim <danya.kim@thundersoft.com>: add live dev-server connection details and TURN credentials'
+- '2026-05-27 danya.kim <danya.kim@thundersoft.com>: clarify public-only robot team address contract'
+- '2026-05-27 danya.kim <danya.kim@thundersoft.com>: record verified dev-server WebRTC send test results and clarify RTC checks'
+- '2026-05-27 danya.kim <danya.kim@thundersoft.com>: expand documented TURN relay range for dev-server testing'
+- '2026-05-27 danya.kim <danya.kim@thundersoft.com>: refresh verification timestamp after expanded TURN range deployment'
+- '2026-05-27 danya.kim <danya.kim@thundersoft.com>: keep robot team sharing guide on canonical schema only'
+- '2026-05-27 danya.kim <danya.kim@thundersoft.com>: normalize canonical guide history wording'
 ---
 
 # Robot Team WebRTC Send Test Guide
@@ -43,21 +51,107 @@ history:
 - HTTPS/WSS 운영화
 - 장기 운영 인증/권한 정책
 
-## 2. 테스트 서버
+## 2. 테스트 서버 접속 정보
+
+현재 임시 개발서버는 배포 완료 상태다.
 
 ```text
 serverUrl: http://192.168.20.12:18080
+operatorUi: http://192.168.20.12:18080
+recorderHealthUrl: http://192.168.20.12:18082/healthz
+missionCode: mission-001
+missionStatus: active
 ```
 
-관제팀은 테스트 전에 robot을 등록하고 active mission에 배정한다. 로봇팀에는 robot별로 다음 값을 별도 채널로 전달한다.
+현재 관제팀 재현 결과:
 
-```yaml
-serverUrl: http://192.168.20.12:18080
-robotCode: robot-001
-robotToken: rb_poc_xxxxx
+```text
+verifiedAt: 2026-05-27 18:01 KST
+verifiedWith: Android Robot app 2 devices
+robot-001: heartbeat OK, mission OK, WebSocket joined, relay ICE CONNECTED/COMPLETED
+robot-002: heartbeat OK, mission OK, WebSocket joined, relay ICE CONNECTED/COMPLETED
+app-server SFU: mission-001 room, robotCount 2, recorderCount 1
+recorder-worker: iceState connected, trackCount 6, dataChannelCount 4, appendFailedCount 0
+recording files: rgb.h264, thermal.h264, audio.ogg, telemetry.jsonl created per robot
 ```
 
-`robotToken`은 Bearer token이다. 문서, git, 공개 채팅에 남기지 않는다.
+현재 서버에 등록된 테스트 robot은 다음 2대다. 각 장비 또는 publisher 인스턴스는 서로 다른 `robotCode`와 `robotToken`을 사용한다.
+
+| Device | robotCode | robotToken |
+| --- | --- | --- |
+| Test Robot 1 | `robot-001` | `rb_p0_28dc9549c31ddfce63302c25e18f4f409425` |
+| Test Robot 2 | `robot-002` | `rb_p0_798e2ef9d1e7112a45cb2c961e1950684cf5` |
+
+`robotToken`은 Bearer token이다. 이 값은 임시 개발서버 테스트용이며, 테스트 종료 또는 재배포 시 교체될 수 있다.
+
+TURN 서버는 다음 값으로 기동 중이다.
+
+```json
+{
+  "iceTransportPolicy": "relay",
+  "iceServers": [
+    {
+      "urls": ["turn:192.168.20.12:3478?transport=udp"],
+      "username": "robot-center-turn",
+      "credential": "rc-turn-2026-0527",
+      "credentialType": "password"
+    }
+  ]
+}
+```
+
+로봇 구현에서는 TURN 값을 하드코딩하지 말고 `GET /api/robot-gateway/mission` 응답의 `turnServers`를 그대로 `RTCPeerConnection.iceServers`에 넣는다. 위 값은 네트워크 디버깅과 수동 테스트를 위한 현재 서버 값이다.
+
+이 문서의 주소는 모두 로봇팀 단말에서 접근하는 public address 기준이다. Docker 내부에서 쓰는 `app-server`, `turn` 같은 service DNS는 관제 서버 내부 구현값이며 로봇팀 구현에 사용하지 않는다.
+
+방화벽/네트워크 확인 대상:
+
+| Purpose | Address |
+| --- | --- |
+| REST API / Web UI / WebSocket signaling | `192.168.20.12:18080/tcp` |
+| TURN allocation | `192.168.20.12:3478/udp`, `192.168.20.12:3478/tcp` |
+| TURN relay port range | `192.168.20.12:49160-49300/udp`, `192.168.20.12:49160-49300/tcp` |
+| Recorder health check | `192.168.20.12:18082/tcp` |
+
+### 2.1 빠른 접속 확인
+
+아래 예시는 `robot-001` 기준이다. `robot-002`로 테스트할 때는 `ROBOT_TOKEN`만 `robot-002` 토큰으로 바꾼다.
+
+```bash
+SERVER_URL='http://192.168.20.12:18080'
+ROBOT_TOKEN='rb_p0_28dc9549c31ddfce63302c25e18f4f409425'
+```
+
+Heartbeat:
+
+```bash
+curl -fsS -X POST "$SERVER_URL/api/robot-gateway/heartbeat" \
+  -H "Authorization: Bearer $ROBOT_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "state": "online",
+    "batteryPercent": 82,
+    "networkQuality": "good"
+  }' | python3 -m json.tool
+```
+
+Active mission 조회:
+
+```bash
+curl -fsS "$SERVER_URL/api/robot-gateway/mission" \
+  -H "Authorization: Bearer $ROBOT_TOKEN" \
+  | python3 -m json.tool
+```
+
+현재 정상 응답이면 `missionStatus`는 `active`, `missionCode`는 `mission-001`, `sfu.signalingUrl`은 `ws://192.168.20.12:18080/sfu/robot/ws?room=mission-001`로 내려온다.
+
+RTC 설정 확인:
+
+```bash
+curl -fsS "$SERVER_URL/api/rtc-config" | python3 -m json.tool
+```
+
+현재 정상 응답이면 `signalingUrl`은 `ws://192.168.20.12:18080/sfu/operator/ws`, `turnServers[0].urls[0]`은 `turn:192.168.20.12:3478?transport=udp`, `iceTransportPolicy`는 `relay`다.
 
 ## 3. 전체 연결 구조
 
@@ -196,7 +290,7 @@ Error responses:
 | Status | Meaning |
 | --- | --- |
 | `400` | JSON body 파싱 실패 또는 요청 값 오류 |
-| `401` | Bearer token이 없거나 유효하지 않음. 전환용 `robotCode`를 같이 보냈다면 token의 robot과 일치하지 않음 |
+| `401` | Bearer token이 없거나 유효하지 않음 |
 | `404` | token에 해당하는 robot이 등록되어 있지 않음 |
 
 Client behavior:
@@ -227,7 +321,7 @@ Request example:
 method: GET
 url: http://192.168.20.12:18080/api/robot-gateway/mission
 headers:
-  Authorization: Bearer rb_poc_xxxxx
+  Authorization: Bearer rb_p0_28dc9549c31ddfce63302c25e18f4f409425
 ```
 
 `200 OK` response body when no active mission exists:
@@ -255,8 +349,8 @@ headers:
   "turnServers": [
     {
       "urls": ["turn:192.168.20.12:3478?transport=udp"],
-      "username": "robot",
-      "credential": "robot-pass"
+      "username": "robot-center-turn",
+      "credential": "rc-turn-2026-0527"
     }
   ],
   "tracks": ["track.video_1", "track.video_2", "track.audio_1", "track.audio_2"],
@@ -279,8 +373,8 @@ Active mission response schema:
 | `sfu.signalingUrl` | string | `ws://192.168.20.12:18080/sfu/robot/ws?room=mission-001` | Robot publisher WebSocket URL. client가 재구성하지 않고 그대로 사용 |
 | `sfu.iceTransportPolicy` | string | `relay` | 현재 `relay`만 사용 |
 | `turnServers[].urls` | string[] | `["turn:192.168.20.12:3478?transport=udp"]` | TURN URL 목록 |
-| `turnServers[].username` | string | `robot` | TURN username |
-| `turnServers[].credential` | string | `robot-pass` | TURN password |
+| `turnServers[].username` | string | `robot-center-turn` | TURN username |
+| `turnServers[].credential` | string | `rc-turn-2026-0527` | TURN password |
 | `tracks` | string[] | `track.video_1`, `track.video_2`, `track.audio_1`, `track.audio_2` | canonical media track slot 목록 |
 | `dataChannels` | string[] | `channel.telemetry`, `channel.spatial`, `channel.event`, `channel.control` | canonical DataChannel label 목록 |
 | `videoPolicy.mode` | string | `robot_defined` | 해상도/FPS는 로봇 송신 설정을 따름 |
@@ -289,7 +383,7 @@ Error responses:
 
 | Status | Meaning |
 | --- | --- |
-| `401` | Bearer token이 없거나 유효하지 않음. 전환용 `robotCode`를 같이 보냈다면 token의 robot과 일치하지 않음 |
+| `401` | Bearer token이 없거나 유효하지 않음 |
 | `404` | token에 해당하는 robot이 등록되어 있지 않음 |
 
 Client behavior:
@@ -303,13 +397,28 @@ Client behavior:
 
 Robot publisher는 mission 조회 응답의 `sfu.signalingUrl`로 WebSocket 연결한다.
 
-WebSocket URL:
+WebSocket request:
 
-```text
-{sfu.signalingUrl}
+```yaml
+method: GET
+url: "{sfu.signalingUrl}"
+auth: Bearer token required
+headers:
+  Authorization: Bearer {robotToken}
 ```
 
-Robot publisher는 mission 응답의 `sfu.signalingUrl`을 그대로 사용한다. URL query를 client가 다시 조립하지 않는다.
+위 `headers`는 WebSocket upgrade HTTP request header다. URL query나 JSON payload에 `Authorization`을 넣지 않는다.
+
+현재 `robot-001` 예시는 다음과 같다.
+
+```yaml
+method: GET
+url: ws://192.168.20.12:18080/sfu/robot/ws?room=mission-001
+headers:
+  Authorization: Bearer rb_p0_28dc9549c31ddfce63302c25e18f4f409425
+```
+
+Robot publisher는 mission 응답의 `sfu.signalingUrl`을 그대로 사용한다. URL query를 client가 다시 조립하지 않는다. `role`, `robotCode` query parameter는 붙이지 않는다. robot identity는 `Authorization` header의 `robotToken`으로 서버가 판단한다.
 
 연결 흐름:
 
@@ -336,7 +445,7 @@ Signaling message 개요:
 | `candidate` | both | ICE candidate |
 | `publish-error` | server -> robot | active mission assignment 검증 실패 |
 
-P0에서는 WebRTC signaling에 별도 publisher token을 요구하지 않는다. app-server는 robotCode와 active mission assignment를 기준으로 publish를 검증한다. 운영화 단계에서는 단기 publisher grant/token 추가를 검토한다.
+WebRTC signaling 인증은 REST와 같은 `robotToken` 하나만 사용한다. app-server는 robot token으로 robotCode를 확인하고 active mission assignment를 기준으로 publish를 검증한다.
 
 offer payload는 최소 다음 값을 포함한다.
 
@@ -365,7 +474,7 @@ ICE candidate payload는 browser/Pion 표준 candidate 필드를 사용한다.
 
 ## 7. Media Track
 
-신규 구현은 canonical track slot을 우선 사용한다.
+로봇팀 구현은 아래 canonical track slot만 사용한다.
 
 | Slot | Kind | Expected value | Required |
 | --- | --- | --- | --- |
@@ -373,8 +482,6 @@ ICE candidate payload는 browser/Pion 표준 candidate 필드를 사용한다.
 | `track.video_2` | video | Thermal 또는 보조 영상. H.264 우선 테스트 | Recommended |
 | `track.audio_1` | audio | Audio. Opus 우선 테스트 | Optional |
 | `track.audio_2` | audio | Reserved secondary audio slot | Optional |
-
-서버는 일부 legacy label fallback을 지원하지만, 로봇팀 연동 기준은 canonical slot이다.
 
 권장:
 
@@ -385,7 +492,7 @@ ICE candidate payload는 browser/Pion 표준 candidate 필드를 사용한다.
 
 ## 8. DataChannel
 
-신규 구현은 canonical DataChannel label을 우선 사용한다.
+로봇팀 구현은 아래 canonical DataChannel label만 사용한다.
 
 | Label | Expected messageType | 용도 |
 | --- | --- | --- |
@@ -393,16 +500,6 @@ ICE candidate payload는 browser/Pion 표준 candidate 필드를 사용한다.
 | `channel.spatial` | `spatial` 또는 domain-specific type | IMU, odometry, point cloud descriptor. recorder-worker가 sensor API로 저장 |
 | `channel.event` | `event` 또는 domain-specific type | alarm, fault, detection, mission event. 현재 recorder-worker 저장 대상은 아님 |
 | `channel.control` | reserved | reserved control/ack side channel. 현재 recorder-worker 저장 대상은 아님 |
-
-Legacy label fallback:
-
-| Incoming label | Server normalized label |
-| --- | --- |
-| `telemetry` | `channel.telemetry` |
-| `sensor` | `channel.telemetry` |
-| `spatial` | `channel.spatial` |
-| `event` | `channel.event` |
-| `control` | `channel.control` |
 
 `channel.telemetry` 예시:
 
@@ -447,7 +544,6 @@ Telemetry envelope schema:
 | `sentAt` | string(date-time) | Recommended | `2026-05-27T05:00:00.000Z` | 로봇 송신 시각 |
 | `descriptors` | array | No | SensorDescriptor list | 센서 metadata |
 | `samples` | array | No | SensorSample list | 실제 측정값 |
-| `payload` | object | No | `{ "batteryPercent": 82 }` | `descriptors`/`samples`가 없을 때 legacy sample로 저장 |
 
 SensorDescriptor schema:
 
@@ -456,11 +552,9 @@ SensorDescriptor schema:
 | `sensorId` | string | Yes | `telemetry.position_1`, `telemetry.battery_1`, `spatial.imu_1` | robot 내부에서 안정적으로 쓰는 sensor id |
 | `displayName` | string | Recommended | `GPS`, `Battery`, `IMU` | UI 표시 이름 |
 | `sensorType` | string | Recommended | `position`, `battery`, `environment`, `imu`, `odometry`, `point_cloud`, `gas`, `event` | 센서 계열 |
-| `kind` | string | No | `position`, `battery`, `gas` | legacy alias. `sensorType`이 없을 때 서버가 사용 |
 | `valueType` | string | Recommended | `number`, `boolean`, `string`, `vector`, `object`, `object_ref` | sample 값 형태 |
 | `unit` | string | No | `percent`, `celsius`, `ppm`, `m`, `m/s` | 표시 단위 |
 | `sampleRateHz` | number | No | `1`, `5`, `0.2` | canonical sampling rate |
-| `samplingRate` | number | No | `1`, `5`, `0.2` | legacy alias. `sampleRateHz`가 없을 때 서버가 사용 |
 | `enabled` | boolean | No | `true`, `false` | UI/저장 대상으로 활성화할지 여부 |
 | `metadata` | object | No | `{ "frameId": "base_link" }` | frameId, axes 같은 부가 정보 |
 
@@ -473,14 +567,8 @@ SensorSample schema:
 | `timestamp` | string(date-time) | No | `2026-05-27T05:00:00.000Z` | sample 측정 시각. sample `sentAt`보다 우선 |
 | `sentAt` | string(date-time) | No | `2026-05-27T05:00:00.000Z` | sample 송신 시각. 없으면 envelope `sentAt` 사용 |
 | `quality` | string | No | `good`, `normal`, `poor`, `unknown` | 로봇 측 품질값. 현재 typed sample field로는 저장하지 않음 |
-| `values` | any | Recommended | `{ "latitude": 37.402183 }` | 실제 측정값. 서버는 `objectValue`로 저장 |
-| `objectValue` | object | No | `{ "latitude": 37.402183 }` | `values` 대신 사용할 수 있는 object 값 |
-| `vectorValue` | object | No | `{ "x": 1.0, "y": 2.0, "z": 3.0 }` | vector 값 |
-| `numericValue` | number | No | `82` | 단일 숫자 값일 때 사용 가능 |
-| `textValue` | string | No | `nominal` | 단일 문자열 값일 때 사용 가능 |
-| `boolValue` | boolean | No | `true` | 단일 boolean 값일 때 사용 가능 |
+| `values` | any | Recommended | `{ "latitude": 37.402183 }` | 실제 측정값. `valueType`에 맞는 JSON number/string/boolean/object/vector 형태 |
 | `objectKey` | string | No | `missions/.../point_cloud.bin` | object storage 참조가 필요할 때 |
-| `rawPayload` | object | No | `{ "source": "robot-gateway" }` | sample 원문 일부 |
 
 Position `values` 권장 필드:
 
@@ -500,43 +588,7 @@ Position `values` 권장 필드:
 - `sentAt`은 로봇 송신 시각이다.
 - descriptor는 매번 보내도 되고, sensor 구성이 바뀔 때 다시 보내도 된다.
 
-## 9. 관제팀 확인 기준
-
-관제팀은 다음 API와 UI로 로봇 송신을 확인한다.
-
-System:
-
-```bash
-curl -fsS http://192.168.20.12:18080/api/system/status | python3 -m json.tool
-```
-
-Mission live-status:
-
-```bash
-curl -fsS http://192.168.20.12:18080/api/missions/{missionCode}/live-status \
-  | python3 -m json.tool
-```
-
-Latest sensor:
-
-```bash
-curl -fsS 'http://192.168.20.12:18080/api/sensor-latest?missionId={missionId}&robotCode={robotCode}' \
-  | python3 -m json.tool
-```
-
-Recorder runtime:
-
-```bash
-curl -fsS http://192.168.20.12:18082/healthz | python3 -m json.tool
-```
-
-UI:
-
-```text
-http://192.168.20.12:18080
-```
-
-## 10. 통과 기준
+## 9. 통과 기준
 
 Robot gateway:
 
@@ -550,8 +602,10 @@ SFU/WebRTC:
 - `/api/system/status`의 `sfuRooms`에 mission room 표시
 - 해당 room의 `robotCount`가 송신 로봇 수와 일치
 - published tracks에 `robotCode:track.video_1` 표시
+- Robot publisher ICE state가 `connected` 또는 `completed`
 - `GET /api/missions/{missionCode}/live-status`에서 robot별 `stream.state=streaming`
-- recorder-worker health에서 해당 robot의 track/data 수신 시각 확인
+- recorder-worker health에서 `iceState=connected`, 해당 robot의 track/data 수신 시각 확인
+- recorder-worker health에서 `appendFailedCount=0`
 
 Sensor/UI:
 
@@ -559,22 +613,24 @@ Sensor/UI:
 - GPS/position sample이 있으면 관제 UI 위치 영역에 표시
 - RGB/Thermal 영상이 live 화면에 표시
 - recording 상태가 `recording` 또는 기대 상태로 표시
+- recorder runtime 또는 object storage에 robot별 recording artifact가 생성됨
 
-## 11. 장애 대응
+## 10. 장애 대응
 
 | 증상 | 우선 확인 |
 | --- | --- |
-| heartbeat 401 | robotToken 누락/만료/불일치. 전환용 robotCode를 같이 보냈다면 token의 robot과 mismatch |
+| heartbeat 401 | robotToken 누락/만료/불일치 |
 | mission 조회가 `missionStatus=none` | active mission 없음, robot assignment 누락 |
 | WebSocket 400 | mission 응답의 `sfu.signalingUrl`을 사용하지 않았거나 필수 query 누락 |
 | `publish-error` | robot이 active mission에 배정되지 않았거나 room이 missionCode와 다름 |
-| ICE `failed` | TURN URL, UDP 3478, relay port range, 방화벽 |
+| ICE `failed` | mission 응답의 `turnServers` 사용 여부, UDP 3478, relay port range, 방화벽, relay candidate 생성 여부 |
 | room은 보이나 영상 없음 | track publish, codec negotiation, track label/order |
 | 영상은 보이나 센서 없음 | DataChannel label, open 상태, payload envelope |
 | 센서는 오나 위치 없음 | position sensorId/value shape |
 | recorder가 idle | recorder-worker join, active recording target, ICE state |
+| recorder는 connected인데 저장 실패 | recorder health의 `appendFailedCount`, `lastAppendError`, recording artifact 생성 여부 |
 
-## 12. 로봇팀이 관제팀에 공유할 로그
+## 11. 로봇팀이 관제팀에 공유할 로그
 
 문제가 발생하면 다음 로그를 함께 공유한다.
 
@@ -589,7 +645,7 @@ Sensor/UI:
 - 열린 DataChannel label 목록
 - 마지막으로 송신한 DataChannel payload 예시
 
-## 13. 테스트 결과 기록
+## 12. 테스트 결과 기록
 
 관제팀과 로봇팀은 테스트 후 다음 정보를 남긴다.
 

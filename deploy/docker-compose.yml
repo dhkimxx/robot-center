@@ -44,11 +44,12 @@ services:
       - --lt-cred-mech
       - --fingerprint
       - --realm=${TURN_REALM:-robot-center.local}
-      - --user=${TURN_USERNAME:-robot}:${TURN_PASSWORD:-robot-pass}
+      - --user=${TURN_USERNAME:-robot}:${TURN_PASSWORD:-change-me-turn-pass}
       - --listening-ip=0.0.0.0
-      - --external-ip=${TURN_DOCKER_EXTERNAL_IP:-127.0.0.1}
+      - --relay-ip=${TURN_DOCKER_RELAY_IP:-172.28.0.10}
+      - --external-ip=${TURN_DOCKER_EXTERNAL_IP:-127.0.0.1}/${TURN_DOCKER_RELAY_IP:-172.28.0.10}
       - --min-port=${TURN_RELAY_MIN_PORT:-49160}
-      - --max-port=${TURN_RELAY_MAX_PORT:-49180}
+      - --max-port=${TURN_RELAY_MAX_PORT:-49300}
       - --allow-loopback-peers
       - --no-cli
       - --no-tls
@@ -56,8 +57,11 @@ services:
     ports:
       - "${TURN_HOST_PORT:-3478}:3478/tcp"
       - "${TURN_HOST_PORT:-3478}:3478/udp"
-      - "${TURN_RELAY_MIN_PORT:-49160}-${TURN_RELAY_MAX_PORT:-49180}:${TURN_RELAY_MIN_PORT:-49160}-${TURN_RELAY_MAX_PORT:-49180}/tcp"
-      - "${TURN_RELAY_MIN_PORT:-49160}-${TURN_RELAY_MAX_PORT:-49180}:${TURN_RELAY_MIN_PORT:-49160}-${TURN_RELAY_MAX_PORT:-49180}/udp"
+      - "${TURN_RELAY_MIN_PORT:-49160}-${TURN_RELAY_MAX_PORT:-49300}:${TURN_RELAY_MIN_PORT:-49160}-${TURN_RELAY_MAX_PORT:-49300}/tcp"
+      - "${TURN_RELAY_MIN_PORT:-49160}-${TURN_RELAY_MAX_PORT:-49300}:${TURN_RELAY_MIN_PORT:-49160}-${TURN_RELAY_MAX_PORT:-49300}/udp"
+    networks:
+      default:
+        ipv4_address: ${TURN_DOCKER_RELAY_IP:-172.28.0.10}
 
   app-server:
     build:
@@ -75,10 +79,11 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-robot_center}
       MINIO_ENDPOINT: http://minio:9000
       MINIO_BUCKET: ${MINIO_BUCKET:-robot-center}
-      TURN_URL: ${TURN_URL:-turn:127.0.0.1:3478?transport=udp}
+      TURN_PUBLIC_URL: ${TURN_PUBLIC_URL:-turn:127.0.0.1:3478?transport=udp}
+      TURN_INTERNAL_URL: ${TURN_INTERNAL_URL:-turn:turn:3478?transport=udp}
       TURN_USERNAME: ${TURN_USERNAME:-robot}
-      TURN_PASSWORD: ${TURN_PASSWORD:-robot-pass}
-      SFU_WS_BASE_URL: ${SFU_WS_BASE_URL:-ws://localhost:8080}
+      TURN_PASSWORD: ${TURN_PASSWORD:-change-me-turn-pass}
+      SFU_WS_PUBLIC_BASE_URL: ${SFU_WS_PUBLIC_BASE_URL:-ws://localhost:8080}
     command: ["/app/app-server"]
     ports:
       - "${APP_SERVER_HOST_PORT:-8080}:8080"
@@ -113,13 +118,15 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET:-robot-center}
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
-      SFU_WS_BASE_URL: ${SFU_WS_BASE_URL:-ws://app-server:8080}
-      TURN_URL: ${TURN_URL:-turn:127.0.0.1:3478?transport=udp}
+      SFU_WS_INTERNAL_BASE_URL: ${SFU_WS_INTERNAL_BASE_URL:-ws://app-server:8080}
+      TURN_INTERNAL_URL: ${TURN_INTERNAL_URL:-turn:turn:3478?transport=udp}
       TURN_USERNAME: ${TURN_USERNAME:-robot}
-      TURN_PASSWORD: ${TURN_PASSWORD:-robot-pass}
+      TURN_PASSWORD: ${TURN_PASSWORD:-change-me-turn-pass}
     command: ["/app/recorder-worker"]
     ports:
       - "${RECORDER_WORKER_HOST_PORT:-8082}:8082"
+    volumes:
+      - recorder-runtime:/app/.runtime
     depends_on:
       app-server:
         condition: service_healthy
@@ -127,3 +134,10 @@ services:
 volumes:
   postgres-data:
   minio-data:
+  recorder-runtime:
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${DOCKER_BRIDGE_SUBNET:-172.28.0.0/16}

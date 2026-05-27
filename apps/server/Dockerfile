@@ -9,10 +9,12 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /out/recorder-worker ./cmd/recorder-wor
 
 FROM alpine:3.21
 
+RUN apk add --no-cache ffmpeg
 RUN adduser -D -H -u 10001 appuser
 WORKDIR /app
 COPY --from=builder /out/app-server /app/app-server
 COPY --from=builder /out/recorder-worker /app/recorder-worker
+RUN mkdir -p /app/.runtime && chown -R appuser:appuser /app/.runtime
 USER appuser
 
 EXPOSE 8080 8082

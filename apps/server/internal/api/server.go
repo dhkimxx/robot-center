@@ -25,7 +25,7 @@ func NewServerWithStore(cfg config.AppServerConfig, repository store.Store) *Ser
 		started:  time.Now().UTC(),
 	}
 	server.sfuHub = sfu.NewHub(sfu.Config{
-		TURNURL:      cfg.TURNURL,
+		TURNURL:      cfg.TURNInternalURL,
 		TURNUsername: cfg.TURNUsername,
 		TURNPassword: cfg.TURNPassword,
 		ValidateRobotPublisher: func(roomID string, robotCode string) error {

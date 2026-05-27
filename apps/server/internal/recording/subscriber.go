@@ -88,8 +88,8 @@ type recorderRobotRuntime struct {
 }
 
 func (w *Worker) runSubscriberLoop(ctx context.Context) {
-	if strings.TrimSpace(w.config.SFUWebSocketBaseURL) == "" {
-		log.Println("recorder-worker subscriber disabled: SFU_WS_BASE_URL is empty")
+	if strings.TrimSpace(w.config.SFUWebSocketInternalBaseURL) == "" {
+		log.Println("recorder-worker subscriber disabled: SFU_WS_INTERNAL_BASE_URL is empty")
 		return
 	}
 
@@ -378,7 +378,7 @@ func (w *Worker) createRecorderPeerConnection(ctx context.Context, roomID string
 	peerConnection, err := api.NewPeerConnection(webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{
 			{
-				URLs:       []string{w.config.TURNURL},
+				URLs:       []string{w.config.TURNInternalURL},
 				Username:   w.config.TURNUsername,
 				Credential: w.config.TURNPassword,
 			},

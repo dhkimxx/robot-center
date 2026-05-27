@@ -74,7 +74,7 @@ func (s *Server) handleRobotGatewayMission(w http.ResponseWriter, r *http.Reques
 		},
 		"turnServers": []map[string]any{
 			{
-				"urls":       []string{s.config.TURNURL},
+				"urls":       []string{s.config.TURNPublicURL},
 				"username":   s.config.TURNUsername,
 				"credential": s.config.TURNPassword,
 			},
