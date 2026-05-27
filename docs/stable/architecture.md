@@ -23,6 +23,7 @@ history:
 - '2026-05-26 danya.kim <danya.kim@thundersoft.com>: removed public observed-streams API from current architecture'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: documented recording finalization job flow and recorder-worker scale-out considerations'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: documented finalization worker attempt fencing'
+- '2026-05-27 danya.kim <danya.kim@thundersoft.com>: clarified live connection status source uses robots.device_state plus heartbeat freshness'
 ---
 
 # Architecture
@@ -464,7 +465,7 @@ GET /api/missions/{missionCode}/live-status
 
 | 상태 | 기준 source | 비고 |
 | --- | --- | --- |
-| Connection | robot heartbeat / `robots.status` | 장치 online/offline/fault 상태 |
+| Connection | robot heartbeat / `robots.device_state` | 장치 상태와 heartbeat freshness를 합성한 연결 상태 |
 | Stream | app-server 내부 SFU observed publisher | `lastTrackAt` 또는 `lastDataAt` freshness 기준 |
 | Recording | recorder-worker `/healthz` robot runtime | robot별 track/data 수신 freshness 기준 |
 | Latest chunk | `recording_chunks` | replay/history 참고 정보 |

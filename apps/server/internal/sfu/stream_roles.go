@@ -3,6 +3,8 @@ package sfu
 import (
 	"strings"
 
+	"robot-center/apps/server/internal/utils"
+
 	"github.com/pion/webrtc/v4"
 )
 
@@ -78,7 +80,7 @@ func normalizeTrackRole(track *webrtc.TrackRemote, usedRoles map[string]*publish
 	if track.Kind() == webrtc.RTPCodecTypeVideo {
 		return firstAvailableRole([]string{StreamRoleTrackVideo1, StreamRoleTrackVideo2}, usedRoles)
 	}
-	return safeTrackToken(track.Kind().String())
+	return utils.SafeTrackToken(track.Kind().String())
 }
 
 func normalizeDataChannelRole(label string) string {
@@ -93,7 +95,7 @@ func normalizeDataChannelRole(label string) string {
 	case StreamRoleChannelControl, "control":
 		return StreamRoleChannelControl
 	default:
-		return safeTrackToken(label)
+		return utils.SafeTrackToken(label)
 	}
 }
 
@@ -111,7 +113,7 @@ func trackRoleUsed(role string, usedRoles map[string]*publishedTrack) bool {
 		if publishedTrack != nil && publishedTrack.label == role {
 			return true
 		}
-		if strings.HasSuffix(trackKey, ":"+safeTrackToken(role)) || trackKey == safeTrackToken(role) {
+		if strings.HasSuffix(trackKey, ":"+utils.SafeTrackToken(role)) || trackKey == utils.SafeTrackToken(role) {
 			return true
 		}
 	}

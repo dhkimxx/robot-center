@@ -19,6 +19,7 @@ history:
 - '2026-05-26 danya.kim <danya.kim@thundersoft.com>: updated storage verification to use mission live-status'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: documented recording finalization jobs and scale-out-safe replay storage states'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: documented finalization upload callback fencing'
+- '2026-05-27 danya.kim <danya.kim@thundersoft.com>: renamed robot schema status to device_state and clarified computed API connection status'
 ---
 
 # Data Storage
@@ -138,13 +139,13 @@ erDiagram
 | Domain | Values |
 | --- | --- |
 | mission status | `ready`, `active`, `ended`, `cancelled` |
-| robot status | `offline`, `online`, `fault` |
+| robot device state | `offline`, `online`, `fault` |
 | mission robot status | `assigned`, `active`, `completed`, `removed` |
 | session state | `new`, `connected`, `reconnecting`, `disconnected`, `failed`, `closed` |
 | recording status | `pending`, `recording`, `finalizing`, `uploaded`, `partial`, `failed` |
 | command status | `requested`, `sent`, `accepted`, `rejected`, `executing`, `succeeded`, `failed`, `timeout` |
 
-`robots.status`는 장치 상태만 표현한다. 임무 배정 여부는 `mission_robots`, WebRTC live 송출 여부와 freshness는 app-server 내부 SFU observed stream 상태를 기준으로 판단한다.
+`robots.device_state`는 장치 상태만 표현한다. API의 `robot.status`는 `device_state + last_seen_at`을 합성한 현재 연결 상태다. 임무 배정 여부는 `mission_robots`, WebRTC live 송출 여부와 freshness는 app-server 내부 SFU observed stream 상태를 기준으로 판단한다.
 
 ## 7. 테이블 상세
 
@@ -170,7 +171,7 @@ erDiagram
 | `robot_code` | text | yes | unique, 예: `robot-001` |
 | `display_name` | text | yes | UI 표시명 |
 | `model_name` | text | no | Python Mock, Android, Jetson 등 |
-| `status` | text | yes | default `offline` |
+| `device_state` | text | yes | default `offline`; 장치 상태 `offline`, `online`, `fault` |
 | `last_seen_at` | timestamptz | no | heartbeat 기준 |
 | `archived_at` | timestamptz | no | archive 처리 시각 |
 | `metadata` | jsonb | yes | default `{}` |
@@ -230,7 +231,7 @@ Index:
 
 #### robot_sessions
 
-Robot heartbeat/session 이력용 테이블이다. 현재 핵심 online 상태는 `robots.status`, `robots.last_seen_at`, live 화면의 송출 상태는 SFU observed stream이 담당한다.
+Robot heartbeat/session 이력용 테이블이다. 현재 핵심 online 상태는 `robots.device_state`, `robots.last_seen_at`을 합성한 domain method가 판단하고, live 화면의 송출 상태는 SFU observed stream이 담당한다.
 
 | Column | Type | Required | Note |
 | --- | --- | --- | --- |

@@ -1,0 +1,238 @@
+package postgres
+
+import (
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"sort"
+	"strings"
+	"time"
+
+	"robot-center/apps/server/internal/domain"
+	"robot-center/apps/server/internal/utils"
+)
+
+type scanner interface {
+	Scan(dest ...any) error
+}
+
+func scanRobot(row scanner) (domain.Robot, error) {
+	var robot domain.Robot
+	var deviceState string
+	err := row.Scan(
+		&robot.ID,
+		&robot.RobotCode,
+		&robot.DisplayName,
+		&robot.ModelName,
+		&deviceState,
+		nullableTimeScanner(&robot.LastSeenAt),
+		&robot.CreatedAt,
+		&robot.UpdatedAt,
+	)
+	robot.DeviceState = domain.NormalizeRobotDeviceState(deviceState)
+	return robot, err
+}
+
+func scanMission(row scanner) (domain.Mission, error) {
+	var mission domain.Mission
+	err := row.Scan(
+		&mission.ID,
+		&mission.MissionCode,
+		&mission.Name,
+		&mission.MissionType,
+		&mission.Status,
+		&mission.SiteNote,
+		&mission.RobotCode,
+		nullableTimeScanner(&mission.StartedAt),
+		nullableTimeScanner(&mission.EndedAt),
+		&mission.CreatedAt,
+		&mission.UpdatedAt,
+	)
+	if mission.RobotCode != "" {
+		mission.RobotCodes = []string{mission.RobotCode}
+	}
+	return mission, err
+}
+
+func scanMissionWithRobotCodes(row scanner) (domain.Mission, error) {
+	var mission domain.Mission
+	var robotCodesRaw string
+	err := row.Scan(
+		&mission.ID,
+		&mission.MissionCode,
+		&mission.Name,
+		&mission.MissionType,
+		&mission.Status,
+		&mission.SiteNote,
+		&robotCodesRaw,
+		nullableTimeScanner(&mission.StartedAt),
+		nullableTimeScanner(&mission.EndedAt),
+		&mission.CreatedAt,
+		&mission.UpdatedAt,
+	)
+	if err != nil {
+		return domain.Mission{}, err
+	}
+	mission.RobotCodes = robotCodesFromString(robotCodesRaw)
+	mission.RobotCode = utils.FirstString(mission.RobotCodes)
+	return mission, nil
+}
+
+func scanMissionWithRobotID(row scanner) (domain.Mission, string, error) {
+	var mission domain.Mission
+	var robotID string
+	err := row.Scan(
+		&mission.ID,
+		&mission.MissionCode,
+		&mission.Name,
+		&mission.MissionType,
+		&mission.Status,
+		&mission.SiteNote,
+		&mission.RobotCode,
+		nullableTimeScanner(&mission.StartedAt),
+		nullableTimeScanner(&mission.EndedAt),
+		&mission.CreatedAt,
+		&mission.UpdatedAt,
+		&robotID,
+	)
+	if mission.RobotCode != "" {
+		mission.RobotCodes = []string{mission.RobotCode}
+	}
+	return mission, robotID, err
+}
+
+func scanRecordingChunk(row scanner) (domain.RecordingChunk, error) {
+	var chunk domain.RecordingChunk
+	var metadataRaw []byte
+	var metadata recordingChunkMetadata
+	err := row.Scan(
+		&chunk.ID,
+		&chunk.RecordingSessionID,
+		&chunk.MissionID,
+		&chunk.MissionCode,
+		&chunk.RobotCode,
+		&chunk.ChunkIndex,
+		&chunk.Status,
+		&chunk.StartedAt,
+		&chunk.EndedAt,
+		&chunk.DurationSeconds,
+		&metadataRaw,
+		&chunk.CreatedAt,
+		&chunk.UpdatedAt,
+	)
+	if err != nil {
+		return domain.RecordingChunk{}, err
+	}
+	_ = json.Unmarshal(metadataRaw, &metadata)
+	chunk.ManifestObjectKey = metadata.ManifestObjectKey
+	chunk.MediaObjectKeys = metadata.MediaObjectKeys
+	chunk.AvailableFileTypes = metadata.AvailableFileTypes
+	if chunk.MediaObjectKeys == nil {
+		chunk.MediaObjectKeys = map[string]string{}
+	}
+	if chunk.AvailableFileTypes == nil {
+		chunk.AvailableFileTypes = map[string]bool{}
+	}
+	return chunk, nil
+}
+
+func rollbackUnlessCommitted(tx *sql.Tx) {
+	_ = tx.Rollback()
+}
+
+func nullableTimeScanner(target **time.Time) any {
+	return &nullableTime{target: target}
+}
+
+type nullableTime struct {
+	target **time.Time
+}
+
+func (n *nullableTime) Scan(value any) error {
+	if value == nil {
+		*n.target = nil
+		return nil
+	}
+	switch typedValue := value.(type) {
+	case time.Time:
+		copied := typedValue
+		*n.target = &copied
+		return nil
+	default:
+		return fmt.Errorf("unsupported nullable time type %T", value)
+	}
+}
+
+func timePointer(value sql.NullTime) *time.Time {
+	if !value.Valid {
+		return nil
+	}
+	return &value.Time
+}
+
+func floatPointerFromNull(value sql.NullFloat64) *float64 {
+	if !value.Valid {
+		return nil
+	}
+	return &value.Float64
+}
+
+func nullableFloat(value *float64) any {
+	if value == nil {
+		return nil
+	}
+	return *value
+}
+
+func nullableInt64(value *int64) any {
+	if value == nil {
+		return nil
+	}
+	return *value
+}
+
+func nullString(value string) any {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	return strings.TrimSpace(value)
+}
+
+func stringPointer(value string) *string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
+}
+
+func stringOrNil(value string) any {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+	return trimmed
+}
+
+func stringFromNull(value sql.NullString) string {
+	if !value.Valid {
+		return ""
+	}
+	return value.String
+}
+
+func robotCodesFromString(value string) []string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	return utils.UniqueTrimmedStrings(strings.Split(value, ","))
+}
+
+func sortRecordingChunks(chunks []domain.RecordingChunk) {
+	sort.Slice(chunks, func(i, j int) bool {
+		if chunks[i].StartedAt.Equal(chunks[j].StartedAt) {
+			return chunks[i].MissionCode < chunks[j].MissionCode
+		}
+		return chunks[i].StartedAt.After(chunks[j].StartedAt)
+	})
+}

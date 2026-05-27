@@ -23,7 +23,7 @@ func TestLiveStatusRecordingIdleWhenChunkRecordingWithoutRecorderRuntime(t *test
 		Robots: []domain.Robot{{
 			RobotCode:   "robot-001",
 			DisplayName: "Robot 1",
-			Status:      "online",
+			DeviceState: domain.RobotDeviceStateOnline,
 			LastSeenAt:  &now,
 		}},
 		ObservedRooms: []sfu.ObservedRoomSummary{{
@@ -151,9 +151,9 @@ func TestLiveStatusConnectionUsesHeartbeatFreshness(t *testing.T) {
 			RobotCodes:  []string{"robot-001", "robot-002", "robot-003"},
 		},
 		Robots: []domain.Robot{
-			{RobotCode: "robot-001", Status: "online", LastSeenAt: &freshSeenAt},
-			{RobotCode: "robot-002", Status: "online", LastSeenAt: &staleSeenAt},
-			{RobotCode: "robot-003", Status: "fault", LastSeenAt: &freshSeenAt},
+			{RobotCode: "robot-001", DeviceState: domain.RobotDeviceStateOnline, LastSeenAt: &freshSeenAt},
+			{RobotCode: "robot-002", DeviceState: domain.RobotDeviceStateOnline, LastSeenAt: &staleSeenAt},
+			{RobotCode: "robot-003", DeviceState: domain.RobotDeviceStateFault, LastSeenAt: &freshSeenAt},
 		},
 		Now:             now,
 		FreshnessWindow: 30 * time.Second,

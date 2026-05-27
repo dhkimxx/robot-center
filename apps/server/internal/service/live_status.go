@@ -120,13 +120,13 @@ func displayNameForRobot(robot domain.Robot, robotCode string) string {
 }
 
 func buildLiveConnectionStatus(robot domain.Robot, now time.Time, freshnessWindow time.Duration) domain.LiveConnectionStatus {
-	if robot.Status == "fault" {
+	switch robot.ConnectionState(now, freshnessWindow) {
+	case domain.RobotConnectionStateFault:
 		return domain.LiveConnectionStatus{State: "fault", Source: "robot_status", LastSeenAt: cloneDomainTimePointer(robot.LastSeenAt)}
-	}
-	if robot.LastSeenAt != nil && isFreshTime(*robot.LastSeenAt, now, freshnessWindow) {
+	case domain.RobotConnectionStateOnline:
 		return domain.LiveConnectionStatus{State: "online", Source: "heartbeat", LastSeenAt: cloneDomainTimePointer(robot.LastSeenAt)}
 	}
-	if robot.Status == "offline" {
+	if robot.DeviceState == domain.RobotDeviceStateOffline {
 		return domain.LiveConnectionStatus{State: "disconnected", Source: "robot_status", LastSeenAt: cloneDomainTimePointer(robot.LastSeenAt)}
 	}
 	return domain.LiveConnectionStatus{State: "disconnected", Source: "heartbeat_stale", LastSeenAt: cloneDomainTimePointer(robot.LastSeenAt)}

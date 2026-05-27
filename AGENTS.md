@@ -2,6 +2,44 @@
 
 이 문서는 `robot-center` 프로젝트에서 AI 코딩 에이전트가 따라야 할 작업 규칙이다.
 
+## 0. 프로젝트 역할 구분과 영향 범위
+
+이 프로젝트의 실제 제품 책임은 관제 파트다. 실제 로봇 구현은 로봇팀이 별도 프로젝트/코드베이스에서 작업하며, 이 프로젝트의 역할이 아니다.
+
+- 관제 파트: Go `app-server`, 내부 SFU, `recorder-worker`, PostgreSQL/MinIO 저장, React 관제 UI, 운영/검증 스크립트
+- 관제 검증용 Mock: `apps/android-robot`, `apps/mock-robot-python`
+- 외부 로봇 파트: 실제 Robot Gateway/Publisher, 로봇 장치 쪽 WebRTC 송출, 실제 센서/미디어 송신 구현
+
+현재 사용자는 관제 파트를 담당하며 이 프로젝트를 관리한다. 따라서 별도 지시가 없으면 AI 에이전트는 작업의 기본 범위를 관제 파트로 잡는다.
+
+관제 파트 작업 범위:
+
+- `apps/server`: API, service, store, SFU, recording, config
+- `apps/web`: 관제 UI, live/replay/mission/robot/system 화면
+- `deploy`, `scripts`: 로컬/시연 실행과 검증 자동화
+- `docs`: 관제-로봇 계약, 아키텍처, 저장소, 검증 기준
+- `apps/android-robot`, `apps/mock-robot-python`: 관제팀이 만든 테스트용 Mock Robot client. 실제 로봇 파트 구현으로 간주하지 않는다.
+
+외부 로봇 파트 영향 범위는 사전에 확인한다.
+
+다음 항목을 변경할 때는 구현 전에 영향 범위를 명시하고, 외부 실제 로봇 쪽 수정 또는 로봇팀 확인이 필요한지 먼저 판단한다.
+
+- Robot Gateway REST API: heartbeat, mission 조회, connection-info, token 정책
+- WebRTC signaling 계약: `/sfu/ws` query parameter, signaling message type/payload
+- Room/identity 규칙: `missionId`, `missionCode`, `roomId`, `robotCode`
+- Media/DataChannel 계약: `track.video_1`, `track.video_2`, `track.audio_1`, `channel.telemetry`, `channel.spatial`, `channel.event`, `channel.control`
+- Sensor/telemetry payload schema와 저장/표시 의미
+- TURN/ICE 설정, relay-only 정책, SFU publish/subscribe 방향
+- 녹화 metadata, object key, robotCode별 chunk/file 분리 규칙
+
+외부 로봇 파트에 영향을 주는 변경은 다음 원칙을 따른다.
+
+- `apps/android-robot`, `apps/mock-robot-python`은 관제 검증용 mock/harness로만 수정한다.
+- Mock Robot 수정이 통과하더라도 실제 로봇 호환성이 자동 보장된다고 말하지 않는다.
+- 실제 로봇 구현 변경이 필요해 보이면 이 repo에서 임의로 구현하지 말고, 관제-로봇 계약 변경 사항과 로봇팀 확인 필요 항목을 명시한다.
+- 공유 계약을 바꾸면 `docs/stable/robot-interface.md`, `docs/stable/architecture.md`, 관련 checklist를 함께 확인한다.
+- WebRTC, 센서, 위치, 녹화, 로봇 등록 흐름을 바꾸면 Python Mock Robot으로 실제 관제 흐름까지 검증한다.
+
 ## 1. 백엔드 작업 규칙
 
 백엔드는 계층 방향을 지킨다.

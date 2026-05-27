@@ -1,6 +1,13 @@
 .DS_Store
 __pycache__/
 *.py[cod]
+
+# Local environment files and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+
 .runtime/
 .agents/
 .agents/skills/*/.venv/

@@ -11,7 +11,6 @@ type AppServerConfig struct {
 	PublicURL         string
 	WebStaticDir      string
 	RecorderWorkerURL string
-	StoreDriver       string
 	PostgresDSN       string
 	MinIOEndpoint     string
 	MinIOBucket       string
@@ -45,7 +44,6 @@ func LoadAppServerConfig() AppServerConfig {
 		PublicURL:         getEnv("APP_SERVER_PUBLIC_URL", "http://localhost:8080"),
 		WebStaticDir:      getEnv("WEB_STATIC_DIR", ""),
 		RecorderWorkerURL: getEnv("RECORDER_WORKER_URL", "http://localhost:8082"),
-		StoreDriver:       getEnv("STORE_DRIVER", "memory"),
 		PostgresDSN:       buildPostgresDSN(),
 		MinIOEndpoint:     getEnv("MINIO_ENDPOINT", "http://localhost:9000"),
 		MinIOBucket:       getEnv("MINIO_BUCKET", "robot-center"),

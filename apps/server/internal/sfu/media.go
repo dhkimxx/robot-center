@@ -3,6 +3,8 @@ package sfu
 import (
 	"strings"
 
+	"robot-center/apps/server/internal/utils"
+
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
 )
@@ -25,24 +27,15 @@ func classifyTrack(track *webrtc.TrackRemote) string {
 }
 
 func publishedTrackKey(robotCode string, label string) string {
-	return safeTrackToken(robotCode) + ":" + safeTrackToken(label)
+	return utils.SafeTrackToken(robotCode) + ":" + utils.SafeTrackToken(label)
 }
 
 func localTrackID(robotCode string, label string) string {
-	return safeTrackToken(robotCode) + "-" + safeTrackToken(label)
+	return utils.SafeTrackToken(robotCode) + "-" + utils.SafeTrackToken(label)
 }
 
 func localStreamID(robotCode string) string {
-	return "robot-" + safeTrackToken(robotCode)
-}
-
-func safeTrackToken(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return "unknown"
-	}
-	replacer := strings.NewReplacer("/", "_", "\\", "_", ":", "_", " ", "_")
-	return replacer.Replace(value)
+	return "robot-" + utils.SafeTrackToken(robotCode)
 }
 
 func cloneRTPPacket(packet *rtp.Packet) *rtp.Packet {

@@ -1,0 +1,51 @@
+package model
+
+import (
+	"encoding/json"
+	"time"
+)
+
+type SensorDescriptorModel struct {
+	ID           string          `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	MissionID    string          `gorm:"column:mission_id;type:uuid;not null;uniqueIndex:sensor_descriptors_mission_robot_sensor_unique,priority:1;index"`
+	RobotID      string          `gorm:"column:robot_id;type:uuid;not null;uniqueIndex:sensor_descriptors_mission_robot_sensor_unique,priority:2;index"`
+	SensorID     string          `gorm:"column:sensor_id;not null;uniqueIndex:sensor_descriptors_mission_robot_sensor_unique,priority:3"`
+	ChannelRole  string          `gorm:"column:channel_role;not null"`
+	DisplayName  string          `gorm:"column:display_name;not null"`
+	SensorType   string          `gorm:"column:sensor_type;not null;index"`
+	ValueType    string          `gorm:"column:value_type;not null"`
+	Unit         *string         `gorm:"column:unit"`
+	SampleRateHz *float64        `gorm:"column:sample_rate_hz"`
+	Enabled      bool            `gorm:"column:enabled;not null"`
+	Metadata     json.RawMessage `gorm:"column:metadata;type:jsonb;not null;default:'{}'::jsonb"`
+	FirstSeenAt  time.Time       `gorm:"column:first_seen_at;not null;default:now()"`
+	LastSeenAt   time.Time       `gorm:"column:last_seen_at;not null;default:now();index"`
+}
+
+func (SensorDescriptorModel) TableName() string {
+	return "sensor_descriptors"
+}
+
+type SensorSampleModel struct {
+	ID           string          `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	DescriptorID string          `gorm:"column:descriptor_id;type:uuid;not null;index;index:sensor_samples_descriptor_received_idx,priority:1"`
+	MissionID    string          `gorm:"column:mission_id;type:uuid;not null;index:sensor_samples_latest_idx,priority:1"`
+	RobotID      string          `gorm:"column:robot_id;type:uuid;not null;index:sensor_samples_latest_idx,priority:2"`
+	SensorID     string          `gorm:"column:sensor_id;not null;index:sensor_samples_latest_idx,priority:3"`
+	ChannelRole  string          `gorm:"column:channel_role;not null;index"`
+	MessageID    *string         `gorm:"column:message_id;index"`
+	Sequence     *int64          `gorm:"column:sequence"`
+	SentAt       *time.Time      `gorm:"column:sent_at"`
+	ReceivedAt   time.Time       `gorm:"column:received_at;not null;default:now();index:sensor_samples_latest_idx,sort:desc,priority:4;index:sensor_samples_descriptor_received_idx,sort:desc,priority:2"`
+	NumericValue *float64        `gorm:"column:numeric_value"`
+	TextValue    *string         `gorm:"column:text_value"`
+	BoolValue    *bool           `gorm:"column:bool_value"`
+	VectorValue  json.RawMessage `gorm:"column:vector_value;type:jsonb"`
+	ObjectValue  json.RawMessage `gorm:"column:object_value;type:jsonb"`
+	ObjectKey    *string         `gorm:"column:object_key"`
+	RawPayload   json.RawMessage `gorm:"column:raw_payload;type:jsonb;not null;default:'{}'::jsonb"`
+}
+
+func (SensorSampleModel) TableName() string {
+	return "sensor_samples"
+}

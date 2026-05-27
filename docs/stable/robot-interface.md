@@ -1,7 +1,7 @@
 ---
 title: "robot-interface"
 created: 2026-05-26
-updated: '2026-05-26'
+updated: '2026-05-27'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>"]
 type: "design"
@@ -14,6 +14,9 @@ history:
 - '2026-05-26 danya.kim <danya.kim@thundersoft.com>: simplified robot WebRTC connection by making SFU observed streams the live source of truth'
 - '2026-05-26 danya.kim <danya.kim@thundersoft.com>: removed streaming-status gateway API from robot requirements'
 - '2026-05-26 danya.kim <danya.kim@thundersoft.com>: removed streaming-status gateway API from robot interface'
+- '2026-05-27 danya.kim <danya.kim@thundersoft.com>: clarified robot device_state persistence and computed API status semantics'
+- '2026-05-27 danya.kim <danya.kim@thundersoft.com>: sync robot interface with current app-server gateway and sensor contracts'
+- '2026-05-27 danya.kim <danya.kim@thundersoft.com>: clarify sensor sample quality and recorder data channel storage boundaries'
 ---
 
 # Robot Gateway Interface
@@ -22,7 +25,7 @@ history:
 
 Python Mock Robot, Android Mock Robot, 향후 실제 Robot Gateway가 관제센터에 연결하기 위한 최소 API, WebRTC, DataChannel 계약을 정의한다.
 
-P0에서는 Python Mock Robot을 기본 로컬 검증 샘플로 사용하고, Android Mock Robot은 단말 검증용 샘플로 둔다.
+P0에서는 이 repo의 Python Mock Robot을 기본 로컬 검증 샘플로 사용하고, Android Mock Robot은 단말 검증용 샘플로 둔다. 둘 다 관제팀 테스트용 client이며 실제 로봇 제품 구현은 로봇팀 코드베이스에서 담당한다.
 
 이 문서의 JSON과 track 값은 현재 mock/harness 연동 예시다. 확정되지 않은 DataChannel payload 세부 필드, track metadata, codec 세부 정책은 별도 schema가 생기기 전까지 고정 계약으로 간주하지 않는다.
 
@@ -55,12 +58,12 @@ P0에서는 Python Mock Robot을 기본 로컬 검증 샘플로 사용하고, An
 ## 4. Mock Robot / Robot Gateway에 입력할 값
 
 ```yaml
-serverUrl: http://192.168.20.26:8080
+serverUrl: http://localhost:8080
 robotCode: robot-001
 robotToken: rb_poc_xxxxx
 ```
 
-Mock Robot 또는 실제 Robot Gateway는 `serverUrl`을 기준으로 REST API를 호출하고, mission 응답에 포함된 SFU/TURN 설정으로 WebRTC publish를 시작한다. 같은 mission에 여러 Robot이 배정되더라도 각 Robot Gateway 인스턴스는 자기 `robotCode`와 `robotToken`으로 개별 실행한다.
+`serverUrl`은 app-server의 `APP_SERVER_PUBLIC_URL` 값이다. Mock Robot 또는 실제 Robot Gateway는 `serverUrl`을 기준으로 REST API를 호출하고, mission 응답에 포함된 SFU/TURN 설정으로 WebRTC publish를 시작한다. 같은 mission에 여러 Robot이 배정되더라도 각 Robot Gateway 인스턴스는 자기 `robotCode`와 `robotToken`으로 개별 실행한다.
 
 P0 UI에서는 이 값을 복사하기 쉬운 형태로 표시한다.
 
@@ -76,7 +79,8 @@ P0 token 정책:
 
 - 로봇 생성 시 1회 발급
 - UI에서 token 확인 가능
-- token rotation/revoke는 P1
+- token rotation은 관제 API `POST /api/robots/{robotCode}/connection-token`에서 수행
+- Robot Gateway는 현재 발급된 token만 Bearer token으로 사용
 
 ## 6. REST API
 
@@ -84,13 +88,31 @@ P0 token 정책:
 
 로봇이 online 상태와 기본 상태를 보고한다.
 
-```http
-POST /api/robot-gateway/heartbeat
-Authorization: Bearer {robotToken}
-Content-Type: application/json
+```yaml
+method: POST
+path: /api/robot-gateway/heartbeat
+auth: Bearer token required
+contentType: application/json
 ```
 
-요청:
+Request headers:
+
+| Name | Required | Value |
+| --- | --- | --- |
+| `Authorization` | Yes | `Bearer {robotToken}` |
+| `Content-Type` | Yes | `application/json` |
+
+Request body:
+
+| Field | Type | Required | Values / Example | Description |
+| --- | --- | --- | --- | --- |
+| `robotCode` | string | Yes | `robot-001` | 관제에서 발급한 robot code |
+| `state` | string | No | `online`, `offline`, `fault`, other non-empty value | 빈 값이면 `online`. `offline`, `fault` 외의 값은 현재 코드에서 `online`으로 정규화된다. |
+| `batteryPercent` | integer | No | `0`-`100` | 현재 heartbeat 저장에는 사용하지 않지만 요청 DTO에 포함되어 있다. |
+| `networkQuality` | string | No | `good`, `normal`, `poor`, `unknown` | 현재 heartbeat 저장에는 사용하지 않지만 요청 DTO에 포함되어 있다. |
+| `sentAt` | string(date-time) | No | `2026-05-27T05:00:00.000Z` | 현재 heartbeat 저장에는 사용하지 않지만 요청 DTO에 포함되어 있다. |
+
+Request example:
 
 ```json
 {
@@ -102,7 +124,7 @@ Content-Type: application/json
 }
 ```
 
-응답:
+`200 OK` response:
 
 ```json
 {
@@ -113,13 +135,18 @@ Content-Type: application/json
 }
 ```
 
+`status`는 DB의 `robots.device_state` 값이다. `state`가 빈 값이면 `online`, `offline`이면 `offline`, `fault`이면 `fault`, 그 외 non-empty 값은 `online`으로 저장된다.
+
 ### 6.2 Mission 조회
 
 로봇이 현재 수행할 임무와 WebRTC 연결 정보를 조회한다.
 
-```http
-GET /api/robot-gateway/mission?robotCode=robot-001
-Authorization: Bearer {robotToken}
+```yaml
+method: GET
+path: /api/robot-gateway/mission
+auth: Bearer token required
+query:
+  robotCode: robot-001
 ```
 
 active mission이 있을 때:
@@ -130,24 +157,45 @@ active mission이 있을 때:
   "missionCode": "mission-001",
   "missionStatus": "active",
   "roomId": "mission-001",
+  "legacyRoomId": "mission-001__robot-001",
   "sfu": {
-    "signalingUrl": "ws://192.168.20.26:8081/ws?room=mission-001&role=robot&robotCode=robot-001",
+    "signalingUrl": "ws://localhost:8080/sfu/ws?room=mission-001&role=robot&robotCode=robot-001",
     "iceTransportPolicy": "relay"
   },
   "turnServers": [
     {
-      "urls": ["turn:192.168.20.26:3478?transport=udp"],
+      "urls": ["turn:127.0.0.1:3478?transport=udp"],
       "username": "robot",
       "credential": "robot-pass"
     }
   ],
   "tracks": ["track.video_1", "track.video_2", "track.audio_1", "track.audio_2"],
   "dataChannels": ["channel.telemetry", "channel.spatial", "channel.event", "channel.control"],
+  "legacyTracks": ["rgb", "thermal", "audio"],
+  "legacyDataChannels": ["sensor", "telemetry"],
   "videoPolicy": {
     "mode": "robot_defined"
   }
 }
 ```
+
+Mission response field:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `missionId` | string(uuid) | DB UUID |
+| `missionCode` | string | 사람이 읽는 코드이자 SFU room id |
+| `missionStatus` | string | 현재 active mission 조회에서는 `active` 또는 `none`을 기대한다. mission lifecycle 값은 `ready`, `active`, `ended`다. |
+| `roomId` | string | WebRTC room id. 현재 코드 기준 `missionCode`와 같다. |
+| `legacyRoomId` | string | 이전 room id 호환값. 신규 Robot Gateway는 사용하지 않는다. |
+| `sfu.signalingUrl` | string | `SFU_WS_URL + ?room={missionCode}&role=robot&robotCode={robotCode}` |
+| `sfu.iceTransportPolicy` | string | 현재 `relay` |
+| `turnServers` | array | `TURN_URL`, `TURN_USERNAME`, `TURN_PASSWORD`에서 내려간다. |
+| `tracks` | string[] | canonical media track slot |
+| `dataChannels` | string[] | canonical DataChannel role |
+| `legacyTracks` | string[] | `rgb`, `thermal`, `audio` fallback |
+| `legacyDataChannels` | string[] | `sensor`, `telemetry` fallback |
+| `videoPolicy.mode` | string | 현재 `robot_defined` |
 
 Mission 단위 multi-robot 구조에서 `roomId`는 `missionCode`와 같아야 한다. `robotCode`는 room id에 합치지 않고 payload, status, recording metadata에서 별도로 유지한다. `missionId`는 DB UUID이고, `missionCode`는 사람이 읽는 코드이자 SFU room id다.
 
@@ -168,12 +216,7 @@ Robot Gateway는 별도 streaming-status REST API를 호출하지 않는다. Liv
 
 ### 6.4 Control ACK
 
-P1에서 구현한다. P0에서는 API/DB 모델만 준비할 수 있다.
-
-```http
-POST /api/robot-gateway/control-acks
-Authorization: Bearer {robotToken}
-```
+현재 Robot Gateway용 Control ACK REST API는 구현되어 있지 않다. `channel.control`은 reserved DataChannel role이며, 제어 명령/ACK 계약은 P1에서 별도 확정한다.
 
 ## 7. WebRTC publish
 
@@ -189,13 +232,18 @@ Mock Robot / Robot Gateway
   -> publish 시작
 ```
 
-P0 mock 예시 track:
+WebSocket endpoint는 app-server의 `GET /sfu/ws`다. Robot Gateway는 mission 응답의 `sfu.signalingUrl`을 그대로 사용한다.
 
-| Slot | Codec | Display Metadata Example | Required |
-| --- | --- | --- | --- |
-| track.video_1 | H.264 | RGB / front camera | Yes |
-| track.video_2 | H.264 | Thermal / synthetic thermal | Yes |
-| track.audio_1 | Opus | microphone | Optional |
+P0 media track:
+
+| Slot | Kind | Codec | Required | Description |
+| --- | --- | --- | --- | --- |
+| `track.video_1` | video | H.264 우선 테스트 | Yes | RGB 또는 주 영상 |
+| `track.video_2` | video | H.264 우선 테스트 | Recommended | Thermal 또는 보조 영상. RGB/Thermal 송신 테스트에서는 필요 |
+| `track.audio_1` | audio | Opus 우선 테스트 | Optional | microphone |
+| `track.audio_2` | audio | Opus 우선 테스트 | Optional | reserved secondary audio |
+
+서버는 track ID 또는 stream ID에서 canonical slot을 찾는다. canonical slot이 없으면 legacy keyword(`rgb`, `thermal`, `audio`)와 media kind 순서로 fallback한다.
 
 ## 8. DataChannel
 
@@ -208,26 +256,26 @@ channel.event      alarm/fault/detection/mission event stream
 channel.control    command ack/control side channel
 ```
 
-DataChannel 메시지는 공통 envelope를 사용한다. 세부 payload schema는 아직 확정하지 않는다.
+Canonical DataChannel role:
 
-```json
-{
-  "messageId": "uuid",
-  "schemaVersion": "1.0",
-  "messageType": "telemetry.robotStatus",
-  "robotCode": "robot-001",
-  "missionId": "mission-001",
-  "sequence": 1,
-  "sentAt": "2026-05-18T08:00:00.000Z",
-  "payload": {}
-}
-```
+| Label | Stored / Relayed Behavior |
+| --- | --- |
+| `channel.telemetry` | recorder-worker가 app-server `/api/sensor-samples`로 저장한다. `robotCode`가 필요하다. |
+| `channel.spatial` | recorder-worker가 app-server `/api/sensor-samples`로 저장한다. `robotCode`가 필요하다. |
+| `channel.event` | SFU relay/runtime 역할이다. 현재 recorder-worker 저장 대상은 아니다. |
+| `channel.control` | reserved control/ack side channel이다. 현재 sensor API 저장 대상은 아니다. |
 
-`robotCode`는 같은 mission room 안에서 Robot별 telemetry/event/spatial/control을 구분하는 필수 식별자이므로 유지해야 한다.
+Legacy DataChannel label fallback:
 
-### 8.1 Telemetry
+| Incoming label | Normalized label |
+| --- | --- |
+| `telemetry` | `channel.telemetry` |
+| `sensor` | `channel.telemetry` |
+| `spatial` | `channel.spatial` |
+| `event` | `channel.event` |
+| `control` | `channel.control` |
 
-P0 telemetry는 `SensorDescriptor`와 `SensorSample` 개념을 따른다. 고정 필드만 전제로 하지 않고, UI는 descriptor를 보고 동적으로 렌더링할 수 있어야 한다.
+DataChannel 메시지는 공통 envelope를 사용한다. 현재 코드의 canonical sensor 저장 경로는 `descriptors` / `samples` 구조를 우선 처리하고, 둘 다 없고 `payload`가 있으면 `legacy.payload_1` sensor sample로 저장한다.
 
 ```json
 {
@@ -235,15 +283,36 @@ P0 telemetry는 `SensorDescriptor`와 `SensorSample` 개념을 따른다. 고정
   "messageType": "telemetry",
   "channelRole": "channel.telemetry",
   "robotCode": "robot-001",
-  "missionId": "mission-001",
+  "missionId": "9d3c1e5d-0c41-4e4f-a21f-8b69f7c0a001",
+  "sequence": 1,
+  "sentAt": "2026-05-18T08:00:00.000Z",
+  "descriptors": [],
+  "samples": []
+}
+```
+
+`robotCode`는 같은 mission room 안에서 Robot별 telemetry/event/spatial/control을 구분하는 필수 식별자이므로 유지해야 한다.
+
+### 8.1 Telemetry
+
+P0 telemetry는 `SensorDescriptor`와 `SensorSample` 개념을 따른다. 고정 필드만 전제로 하지 않고, UI는 descriptor를 보고 동적으로 렌더링할 수 있어야 한다. `missionId`는 mission 조회 응답의 DB UUID를 사용한다.
+
+```json
+{
+  "messageId": "uuid",
+  "messageType": "telemetry",
+  "channelRole": "channel.telemetry",
+  "robotCode": "robot-001",
+  "missionId": "9d3c1e5d-0c41-4e4f-a21f-8b69f7c0a001",
   "sequence": 102,
   "sentAt": "2026-05-18T08:00:00.000Z",
   "descriptors": [
     {
       "sensorId": "telemetry.position_1",
-      "kind": "position",
+      "sensorType": "position",
+      "valueType": "object",
       "displayName": "GPS",
-      "samplingRate": 1,
+      "sampleRateHz": 1,
       "enabled": true
     }
   ],
@@ -266,6 +335,57 @@ P0 telemetry는 `SensorDescriptor`와 `SensorSample` 개념을 따른다. 고정
 }
 ```
 
+Sensor envelope:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `messageId` | string | No | 메시지 추적 id |
+| `messageType` | string | No | 예: `telemetry`, `spatial`, `event` |
+| `robotCode` | string | Yes | Robot별 저장/표시 구분자 |
+| `missionId` | string(uuid) | Yes | mission 조회 응답의 `missionId` |
+| `channelRole` | string | No | 없으면 `channel.telemetry` |
+| `sequence` | integer | No | envelope 기본 sequence |
+| `sentAt` | string(date-time) | No | envelope 기본 송신 시각 |
+| `descriptors` | array | No | SensorDescriptor list |
+| `samples` | array | No | SensorSample list |
+| `payload` | object | No | descriptors/samples가 없을 때 legacy sample로 저장 |
+
+SensorDescriptor:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `sensorId` | string | Yes | Robot 내부에서 안정적으로 쓰는 sensor id |
+| `channelRole` | string | No | 없으면 envelope `channelRole` |
+| `displayName` | string | No | 없으면 `sensorId` |
+| `sensorType` | string | No | 없으면 `kind`, 그래도 없으면 sensorId에서 추론 |
+| `kind` | string | No | legacy alias. `sensorType` 없을 때 사용 |
+| `valueType` | string | No | 없으면 `object` |
+| `unit` | string | No | 표시 단위 |
+| `sampleRateHz` | number | No | canonical sampling rate |
+| `samplingRate` | number | No | legacy alias. `sampleRateHz` 없을 때 사용 |
+| `enabled` | boolean | No | descriptor 활성 여부 |
+| `metadata` | object | No | frameId, axes 같은 부가 정보 |
+
+SensorSample:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `sensorId` | string | Yes | descriptor의 `sensorId`와 매칭 |
+| `channelRole` | string | No | 없으면 envelope `channelRole` |
+| `messageId` | string | No | 없으면 envelope `messageId` |
+| `sequence` | integer | No | 없으면 envelope `sequence` |
+| `timestamp` | string(date-time) | No | sample 측정 시각. `sentAt`보다 우선 |
+| `sentAt` | string(date-time) | No | sample 송신 시각. 없으면 envelope `sentAt` |
+| `quality` | string | No | 로봇 측 품질값. 현재 typed sample field로는 저장하지 않음 |
+| `numericValue` | number | No | 단일 숫자 값 |
+| `textValue` | string | No | 단일 문자열 값 |
+| `boolValue` | boolean | No | 단일 boolean 값 |
+| `vectorValue` | object | No | vector 값 |
+| `objectValue` | object | No | object 값 |
+| `values` | any | No | 있으면 `objectValue`로 저장 |
+| `objectKey` | string | No | object storage 참조 |
+| `rawPayload` | object | No | sample 원문 일부 |
+
 송신 주기:
 
 - P0 기본 1Hz
@@ -274,7 +394,7 @@ P0 telemetry는 `SensorDescriptor`와 `SensorSample` 개념을 따른다. 고정
 ### 8.2 Spatial / Event / Control
 
 - `channel.spatial`: 기본 자동 표시 대상이 아니다. `available`, `subscribed`, `paused`, `unsupported` 같은 상태를 먼저 표현한다.
-- `channel.event`: telemetry와 별도 경로다. alarm/fault/detection/mission event처럼 발생 순서가 중요한 메시지를 보낸다.
+- `channel.event`: telemetry와 별도 경로다. alarm/fault/detection/mission event처럼 발생 순서가 중요한 메시지를 보낸다. 현재 recorder-worker 저장 대상은 아니다.
 - `channel.control`: telemetry/event와 섞지 않는다. 향후 권한 체크, command validation, ack, audit log, rate limit이 붙을 자리다.
 
 ### 8.3 Relay
@@ -306,7 +426,7 @@ Browser WebSocket은 실시간 센서 표시의 필수 경로가 아니다.
 | `online` | heartbeat 성공 또는 최근 gateway 통신 성공 |
 | `fault` | 오류 상태 |
 
-`robots.status`는 장치 online/offline/fault 성격의 상태다. 임무 배정 상태는 `mission_robots.status`, WebRTC live 송출 상태는 app-server 내부 SFU의 observed stream 상태에서 판단한다.
+DB의 `robots.device_state`는 장치 online/offline/fault 성격의 상태다. API의 `robot.status`는 `device_state + last_seen_at`을 합성한 현재 연결 상태로 내려간다. 임무 배정 상태는 `mission_robots.status`, WebRTC live 송출 상태는 app-server 내부 SFU의 observed stream 상태에서 판단한다.
 
 ## 10. 재시도 정책
 

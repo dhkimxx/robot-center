@@ -68,7 +68,6 @@ services:
       APP_SERVER_PUBLIC_URL: ${APP_SERVER_PUBLIC_URL:-http://localhost:8080}
       WEB_STATIC_DIR: /app/web
       RECORDER_WORKER_URL: http://recorder-worker:8082
-      STORE_DRIVER: postgres
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_DB: ${POSTGRES_DB:-robot_center}

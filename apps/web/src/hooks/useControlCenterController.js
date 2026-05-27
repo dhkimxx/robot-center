@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getTelemetryPositionState } from "../utils/formatters.js";
 import { createMissionRobotTargets } from "../domains/missions/missionHelpers.js";
+import {
+  createMissionControlPageChrome,
+  createMissionListPageChrome,
+  createMissionReplayPageChrome
+} from "../domains/missions/missionPageChrome.jsx";
 import { useMissionManagementController } from "../domains/missions/useMissionManagementController.js";
 import { useRecordingsController } from "../domains/recordings/useRecordingsController.js";
 import { useRobotManagementController } from "../domains/robots/useRobotManagementController.js";
+import { createRobotPageChrome } from "../domains/robots/robotPageChrome.jsx";
+import { createSystemPageChrome } from "../domains/system/systemPageChrome.js";
 import { useLiveConnectionManager } from "../domains/live/useLiveConnectionManager.js";
 import { resolveStoredLiveTargetKey } from "../domains/live/useLiveTargetSelection.js";
 import { useMissionSamples } from "../domains/live/useMissionSamples.js";
@@ -187,10 +194,68 @@ export function useControlCenterController({
     statusError
   });
 
+  const pageChrome = useMemo(() => {
+    if (routeMissionControlCode) {
+      return createMissionControlPageChrome({
+        controlMission: missionControlMission,
+        missionTargets: missionControlTargets,
+        onBackToMissionList: closeMissionControl,
+        onEndMission: missionController.endMission,
+        onStartMission: missionController.startMission,
+        routeMissionControlCode
+      });
+    }
+
+    if (routeMissionReplayCode) {
+      return createMissionReplayPageChrome({
+        replayMission: missionReplayMission,
+        routeMissionReplayCode
+      });
+    }
+
+    if (activeSection === "robots") {
+      return createRobotPageChrome({
+        liveStatuses: missionLiveStatuses,
+        onOpenCreateRobotModal: robotController.openRobotCreateModal,
+        robots
+      });
+    }
+
+    if (activeSection === "system") {
+      return createSystemPageChrome({
+        liveStatuses: missionLiveStatuses,
+        systemStatus
+      });
+    }
+
+    return createMissionListPageChrome({
+      liveStatuses: missionLiveStatuses,
+      missions,
+      onOpenCreateMissionModal: missionController.openMissionCreateModal
+    });
+  }, [
+    activeSection,
+    closeMissionControl,
+    missionControlMission,
+    missionControlTargets,
+    missionController.endMission,
+    missionController.openMissionCreateModal,
+    missionController.startMission,
+    missionLiveStatuses,
+    missionReplayMission,
+    missions,
+    robotController.openRobotCreateModal,
+    robots,
+    routeMissionControlCode,
+    routeMissionReplayCode,
+    systemStatus
+  ]);
+
   return {
     statusError,
     notifications,
     dismissNotification,
+    pageChrome,
     missionRouteProps: {
       controlMission: missionControlMission,
       latestSensor,
