@@ -25,6 +25,8 @@ const minH264SnapshotBytes int64 = 64 * 1024
 const minOggSnapshotBytes int64 = 4 * 1024
 const minDataChannelSnapshotBytes int64 = 1
 
+var errNoRecordingMedia = errors.New("no recording media available")
+
 type activeAudioWriter struct {
 	chunkID string
 	path    string
@@ -53,8 +55,17 @@ type recordingChunkFinalization struct {
 	chunk    domain.RecordingChunk
 }
 
+type RecordingMediaUploadResult struct {
+	UploadedFileTypes []string
+}
+
+type RecordingUploadContext struct {
+	WorkerID string
+	Attempt  int
+}
+
 type MediaUploader interface {
-	UploadMediaSnapshots(ctx context.Context, roomID string, chunk domain.RecordingChunk) error
+	UploadMediaSnapshots(ctx context.Context, roomID string, chunk domain.RecordingChunk, uploadContext RecordingUploadContext) (RecordingMediaUploadResult, error)
 }
 
 type mediaSnapshotter interface {
@@ -402,33 +413,42 @@ func (w *Worker) closeAudioWriterForChunk(roomID string, chunkID string) {
 	delete(w.audioWriters, roomID)
 }
 
-func (u *recordingMediaUploader) UploadMediaSnapshots(ctx context.Context, roomID string, chunk domain.RecordingChunk) error {
+func (u *recordingMediaUploader) UploadMediaSnapshots(ctx context.Context, roomID string, chunk domain.RecordingChunk, uploadContext RecordingUploadContext) (RecordingMediaUploadResult, error) {
 	var uploadErrors []error
-	if err := u.muxAndUploadH264Snapshot(ctx, roomID, chunk, "rgb", "rgb_audio_mp4", chunk.MediaObjectKeys["rgbMp4"]); err != nil {
+	result := RecordingMediaUploadResult{}
+	if uploaded, err := u.muxAndUploadH264Snapshot(ctx, roomID, chunk, "rgb", "rgb_audio_mp4", chunk.MediaObjectKeys["rgbMp4"], uploadContext); err != nil {
 		uploadErrors = append(uploadErrors, err)
+	} else if uploaded {
+		result.UploadedFileTypes = append(result.UploadedFileTypes, "rgb_audio_mp4")
 	}
-	if err := u.muxAndUploadH264Snapshot(ctx, roomID, chunk, "thermal", "thermal_mp4", chunk.MediaObjectKeys["thermal"]); err != nil {
+	if uploaded, err := u.muxAndUploadH264Snapshot(ctx, roomID, chunk, "thermal", "thermal_mp4", chunk.MediaObjectKeys["thermal"], uploadContext); err != nil {
 		uploadErrors = append(uploadErrors, err)
+	} else if uploaded {
+		result.UploadedFileTypes = append(result.UploadedFileTypes, "thermal_mp4")
 	}
-	if err := u.uploadDataChannelSnapshot(ctx, chunk, "sensor", "sensor_jsonl", chunk.MediaObjectKeys["sensor"]); err != nil {
+	if uploaded, err := u.uploadDataChannelSnapshot(ctx, chunk, "sensor", "sensor_jsonl", chunk.MediaObjectKeys["sensor"], uploadContext); err != nil {
 		uploadErrors = append(uploadErrors, err)
+	} else if uploaded {
+		result.UploadedFileTypes = append(result.UploadedFileTypes, "sensor_jsonl")
 	}
-	if err := u.uploadDataChannelSnapshot(ctx, chunk, "telemetry", "telemetry_jsonl", chunk.MediaObjectKeys["telemetry"]); err != nil {
+	if uploaded, err := u.uploadDataChannelSnapshot(ctx, chunk, "telemetry", "telemetry_jsonl", chunk.MediaObjectKeys["telemetry"], uploadContext); err != nil {
 		uploadErrors = append(uploadErrors, err)
+	} else if uploaded {
+		result.UploadedFileTypes = append(result.UploadedFileTypes, "telemetry_jsonl")
 	}
-	return errors.Join(uploadErrors...)
+	return result, errors.Join(uploadErrors...)
 }
 
-func (u *recordingMediaUploader) muxAndUploadH264Snapshot(ctx context.Context, roomID string, chunk domain.RecordingChunk, label string, fileType string, objectKey string) error {
+func (u *recordingMediaUploader) muxAndUploadH264Snapshot(ctx context.Context, roomID string, chunk domain.RecordingChunk, label string, fileType string, objectKey string, uploadContext RecordingUploadContext) (bool, error) {
 	if strings.TrimSpace(objectKey) == "" {
-		return nil
+		return false, nil
 	}
 	snapshot, err := u.snapshotter.createH264Snapshot(roomID, chunk.ID, label)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if snapshot.path == "" {
-		return nil
+		return false, nil
 	}
 	defer os.Remove(snapshot.path)
 
@@ -444,41 +464,41 @@ func (u *recordingMediaUploader) muxAndUploadH264Snapshot(ctx context.Context, r
 	}
 	outputPath := filepath.Join(recordingChunkDirectory(chunk.ID), label+".mp4")
 	if err := muxH264ToMP4(ctx, snapshot.path, audioSnapshotPath, outputPath, snapshot.fps); err != nil {
-		return fmt.Errorf("%s mp4 mux failed: %w", label, err)
+		return false, fmt.Errorf("%s mp4 mux failed: %w", label, err)
 	}
 	sizeBytes, err := u.objectStorage.UploadFile(ctx, objectKey, outputPath, "video/mp4")
 	if err != nil {
-		return fmt.Errorf("%s mp4 upload failed: %w", label, err)
+		return false, fmt.Errorf("%s mp4 upload failed: %w", label, err)
 	}
-	if err := u.appServerClient.MarkRecordingFileUploaded(ctx, chunk.ID, fileType, sizeBytes); err != nil {
-		return fmt.Errorf("%s file status update failed: %w", label, err)
+	if err := u.appServerClient.MarkRecordingFileUploaded(ctx, chunk.ID, fileType, sizeBytes, uploadContext); err != nil {
+		return false, fmt.Errorf("%s file status update failed: %w", label, err)
 	}
 	log.Printf("recorder-worker mp4 uploaded chunk=%s label=%s key=%s", chunk.ID, label, objectKey)
-	return nil
+	return true, nil
 }
 
-func (u *recordingMediaUploader) uploadDataChannelSnapshot(ctx context.Context, chunk domain.RecordingChunk, label string, fileType string, objectKey string) error {
+func (u *recordingMediaUploader) uploadDataChannelSnapshot(ctx context.Context, chunk domain.RecordingChunk, label string, fileType string, objectKey string, uploadContext RecordingUploadContext) (bool, error) {
 	if strings.TrimSpace(objectKey) == "" {
-		return nil
+		return false, nil
 	}
 	snapshotPath, err := u.snapshotter.createDataChannelSnapshot(chunk.ID, label)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if snapshotPath == "" {
-		return nil
+		return false, nil
 	}
 	defer os.Remove(snapshotPath)
 
 	sizeBytes, err := u.objectStorage.UploadFile(ctx, objectKey, snapshotPath, "application/x-ndjson")
 	if err != nil {
-		return fmt.Errorf("%s jsonl upload failed: %w", label, err)
+		return false, fmt.Errorf("%s jsonl upload failed: %w", label, err)
 	}
-	if err := u.appServerClient.MarkRecordingFileUploaded(ctx, chunk.ID, fileType, sizeBytes); err != nil {
-		return fmt.Errorf("%s file status update failed: %w", label, err)
+	if err := u.appServerClient.MarkRecordingFileUploaded(ctx, chunk.ID, fileType, sizeBytes, uploadContext); err != nil {
+		return false, fmt.Errorf("%s file status update failed: %w", label, err)
 	}
 	log.Printf("recorder-worker jsonl uploaded chunk=%s label=%s key=%s", chunk.ID, label, objectKey)
-	return nil
+	return true, nil
 }
 
 func (w *Worker) createH264Snapshot(roomID string, chunkID string, label string) (h264Snapshot, error) {

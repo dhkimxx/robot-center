@@ -80,7 +80,10 @@ export function makeFileStatusLabel(status) {
   const labels = {
     available: "저장됨",
     recording: "녹화 중",
+    finalizing: "저장 마무리",
     planned: "예정",
+    partial: "부분 저장",
+    stopped: "부분 저장",
     failed: "실패"
   };
   return labels[status] ?? "대기";
@@ -140,6 +143,14 @@ export function makeRecordingStateForTarget(recordings, missionCode, robotCode) 
       tone: "recording"
     };
   }
+  if (status === "finalizing") {
+    return {
+      isActive: false,
+      label: "저장 마무리",
+      recording,
+      tone: "recording"
+    };
+  }
   if (status === "uploaded") {
     return {
       isActive: false,
@@ -154,6 +165,14 @@ export function makeRecordingStateForTarget(recordings, missionCode, robotCode) 
       label: "녹화 오류",
       recording,
       tone: "danger"
+    };
+  }
+  if (status === "partial" || status === "stopped") {
+    return {
+      isActive: false,
+      label: "부분 저장",
+      recording,
+      tone: "idle"
     };
   }
   return {

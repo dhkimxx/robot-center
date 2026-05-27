@@ -14,7 +14,7 @@ export function makeRecordingStatusTone(status) {
   if (["failed", "error"].includes(status)) {
     return "danger";
   }
-  if (["recording", "pending", "uploading"].includes(status)) {
+  if (["recording", "pending", "uploading", "finalizing"].includes(status)) {
     return "warning";
   }
   return "neutral";

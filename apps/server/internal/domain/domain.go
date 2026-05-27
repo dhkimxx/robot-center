@@ -112,6 +112,24 @@ type RecordingChunk struct {
 	UpdatedAt          time.Time         `json:"updatedAt"`
 }
 
+type RecordingFinalizationJob struct {
+	ID                 string         `json:"id"`
+	RecordingChunkID   string         `json:"recordingChunkId"`
+	RecordingSessionID string         `json:"recordingSessionId"`
+	MissionID          string         `json:"missionId"`
+	RobotID            string         `json:"robotId"`
+	Status             string         `json:"status"`
+	Reason             string         `json:"reason,omitempty"`
+	Attempts           int            `json:"attempts"`
+	LockedBy           string         `json:"lockedBy,omitempty"`
+	LockedUntil        *time.Time     `json:"lockedUntil,omitempty"`
+	LastError          string         `json:"lastError,omitempty"`
+	CreatedAt          time.Time      `json:"createdAt"`
+	UpdatedAt          time.Time      `json:"updatedAt"`
+	CompletedAt        *time.Time     `json:"completedAt,omitempty"`
+	Chunk              RecordingChunk `json:"chunk"`
+}
+
 type RecordingTickResult struct {
 	Chunk    RecordingChunk `json:"chunk"`
 	Manifest map[string]any `json:"manifest"`

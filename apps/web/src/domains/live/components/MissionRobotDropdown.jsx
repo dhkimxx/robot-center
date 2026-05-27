@@ -112,14 +112,16 @@ function SelectedRobotContent({ selectedSummary, selectedTarget }) {
   }
 
   return (
-    <span className="grid min-w-0 gap-1">
-      <span className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+    <span className="grid min-w-0 flex-1 gap-0.5 overflow-hidden">
+      <span className="flex min-w-0 items-baseline gap-2 overflow-hidden">
         <strong className="truncate text-sm font-extrabold text-slate-50">
           {selectedTarget.robot?.displayName ?? selectedTarget.robotCode}
         </strong>
-        <span className="truncate text-xs font-bold text-slate-500">{selectedTarget.robotCode}</span>
+        <span className="shrink-0 text-xs font-bold text-slate-500">{selectedTarget.robotCode}</span>
       </span>
-      <RobotLiveStatusChips className="[&>span]:h-5 [&>span]:px-1.5 [&>span]:text-[10px]" summary={selectedSummary} target={selectedTarget} />
+      <span className="truncate text-xs font-bold text-slate-500">
+        {selectedSummary.streamLabel} · {selectedSummary.recordingLabel} · {selectedSummary.connectionLabel}
+      </span>
     </span>
   );
 }

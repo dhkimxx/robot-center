@@ -109,4 +109,6 @@ type CreateRecordingChunkInput struct {
 type RecordingUploadMetadata struct {
 	SizeBytes *int64
 	Checksum  string
+	WorkerID  string
+	Attempt   int
 }

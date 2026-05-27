@@ -2,7 +2,9 @@ package recording
 
 import (
 	"context"
+	"errors"
 	"log"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -16,6 +18,12 @@ type Worker struct {
 	appServerClient      AppServerClient
 	objectStorage        ObjectStorage
 	mediaUploader        MediaUploader
+	workerID             string
+	dataQueueStartOnce   sync.Once
+	dataAppendQueue      chan recorderDataAppendJob
+	dataPostQueue        chan recorderDataPostJob
+	dataQueueMu          sync.RWMutex
+	dataQueueRuntime     recorderDataQueueRuntime
 	subscriberMu         sync.RWMutex
 	subscriberCancels    map[string]context.CancelFunc
 	subscriberStatuses   map[string]recorderSessionStatus
@@ -44,10 +52,17 @@ func newWorkerWithCollaborators(cfg config.RecorderWorkerConfig, appServerClient
 	if objectStorage == nil {
 		objectStorage = NewMinIOObjectStorage(cfg.MinIOEndpoint, cfg.MinIOAccessKey, cfg.MinIOSecretKey, cfg.MinIOBucket)
 	}
+	hostname, _ := os.Hostname()
+	if strings.TrimSpace(hostname) == "" {
+		hostname = "local"
+	}
 	worker := &Worker{
 		config:               cfg,
 		appServerClient:      appServerClient,
 		objectStorage:        objectStorage,
+		workerID:             "recorder-" + hostname,
+		dataAppendQueue:      make(chan recorderDataAppendJob, recorderDataAppendQueueCapacity),
+		dataPostQueue:        make(chan recorderDataPostJob, recorderDataPostQueueCapacity),
 		subscriberCancels:    map[string]context.CancelFunc{},
 		subscriberStatuses:   map[string]recorderSessionStatus{},
 		activeTargets:        map[string]domain.Mission{},
@@ -66,6 +81,7 @@ func (w *Worker) Run(ctx context.Context) {
 	defer ticker.Stop()
 
 	log.Printf("recorder-worker polling app-server=%s interval=%s chunk=%s", w.config.AppServerURL, w.config.PollInterval, w.config.RecordingChunkDuration)
+	w.startRecorderDataQueueWorkers(ctx)
 	go w.runSubscriberLoop(ctx)
 	w.tick(ctx)
 	for {
@@ -90,6 +106,7 @@ func (w *Worker) tick(ctx context.Context) {
 		w.updateActiveRecordingTargets(nil)
 		w.finalizeInactiveRecordingChunks(activeTargetKeys)
 		w.processPendingRecordingChunkFinalizations(ctx)
+		w.processClaimedRecordingFinalizationJobs(ctx)
 		log.Println("recorder-worker tick: no active recording targets")
 		return
 	}
@@ -97,6 +114,7 @@ func (w *Worker) tick(ctx context.Context) {
 	activeTargetKeys = w.updateActiveRecordingTargets(targets)
 	w.finalizeInactiveRecordingChunks(activeTargetKeys)
 	w.processPendingRecordingChunkFinalizations(ctx)
+	w.processClaimedRecordingFinalizationJobs(ctx)
 }
 
 func (w *Worker) updateActiveRecordingTargets(targets []domain.Mission) map[string]struct{} {
@@ -121,7 +139,7 @@ func (w *Worker) finalizeInactiveRecordingChunks(activeTargetKeys map[string]str
 func (w *Worker) processPendingRecordingChunkFinalizations(ctx context.Context) {
 	pendingFinalizations := w.pendingRecordingChunkFinalizations()
 	for _, pendingFinalization := range pendingFinalizations {
-		if err := w.finalizeRecordingChunk(ctx, pendingFinalization.mediaKey, pendingFinalization.chunk); err != nil {
+		if err := w.finalizeRecordingChunk(ctx, pendingFinalization.mediaKey, pendingFinalization.chunk, RecordingUploadContext{}); err != nil {
 			log.Printf("recorder-worker chunk finalize failed chunk=%s: %v", pendingFinalization.chunk.ID, err)
 			continue
 		}
@@ -129,13 +147,53 @@ func (w *Worker) processPendingRecordingChunkFinalizations(ctx context.Context) 
 	}
 }
 
-func (w *Worker) finalizeRecordingChunk(ctx context.Context, mediaKey string, chunk domain.RecordingChunk) error {
+func (w *Worker) processClaimedRecordingFinalizationJobs(ctx context.Context) {
+	jobs, err := w.appServerClient.ClaimRecordingFinalizationJobs(ctx, w.workerID, 8, 2*time.Minute)
+	if err != nil {
+		log.Printf("recorder-worker finalization job claim failed: %v", err)
+		return
+	}
+	for _, job := range jobs {
+		mediaKey := recorderMediaKey(job.Chunk.MissionCode, job.Chunk.RobotCode)
+		uploadContext := RecordingUploadContext{WorkerID: w.workerID, Attempt: job.Attempts}
+		err := w.finalizeRecordingChunk(ctx, mediaKey, job.Chunk, uploadContext)
+		switch {
+		case err == nil:
+			if markErr := w.appServerClient.MarkRecordingFinalizationJobCompleted(ctx, job.ID, uploadContext); markErr != nil {
+				log.Printf("recorder-worker finalization job complete callback failed job=%s: %v", job.ID, markErr)
+			}
+		case errors.Is(err, errNoRecordingMedia):
+			if markErr := w.appServerClient.MarkRecordingFinalizationJobPartial(ctx, job.ID, uploadContext, truncateRecordingFinalizationReason(err.Error())); markErr != nil {
+				log.Printf("recorder-worker finalization job partial callback failed job=%s: %v", job.ID, markErr)
+			}
+		default:
+			if markErr := w.appServerClient.MarkRecordingFinalizationJobFailed(ctx, job.ID, uploadContext, truncateRecordingFinalizationReason(err.Error())); markErr != nil {
+				log.Printf("recorder-worker finalization job failed callback failed job=%s: %v", job.ID, markErr)
+			}
+		}
+	}
+}
+
+func truncateRecordingFinalizationReason(reason string) string {
+	reason = strings.TrimSpace(reason)
+	const maxReasonLength = 800
+	if len(reason) <= maxReasonLength {
+		return reason
+	}
+	return reason[:maxReasonLength] + "..."
+}
+
+func (w *Worker) finalizeRecordingChunk(ctx context.Context, mediaKey string, chunk domain.RecordingChunk, uploadContext RecordingUploadContext) error {
 	if strings.TrimSpace(chunk.ID) == "" {
 		return nil
 	}
 	w.closeAudioWriterForChunk(mediaKey, chunk.ID)
-	if err := w.mediaUploader.UploadMediaSnapshots(ctx, mediaKey, chunk); err != nil {
+	uploadResult, err := w.mediaUploader.UploadMediaSnapshots(ctx, mediaKey, chunk, uploadContext)
+	if err != nil {
 		return err
+	}
+	if len(uploadResult.UploadedFileTypes) == 0 {
+		return errNoRecordingMedia
 	}
 	finalizedChunk := chunk
 	finalizedChunk.Status = "uploaded"
@@ -143,7 +201,7 @@ func (w *Worker) finalizeRecordingChunk(ctx context.Context, mediaKey string, ch
 	if err != nil {
 		return err
 	}
-	if err := w.appServerClient.MarkRecordingChunkUploaded(ctx, finalizedChunk.ID, manifestSizeBytes); err != nil {
+	if err := w.appServerClient.MarkRecordingChunkUploaded(ctx, finalizedChunk.ID, manifestSizeBytes, uploadContext); err != nil {
 		return err
 	}
 	log.Printf("recorder-worker chunk finalized mission=%s robot=%s chunk=%s key=%s", finalizedChunk.MissionCode, finalizedChunk.RobotCode, finalizedChunk.ID, finalizedChunk.ManifestObjectKey)

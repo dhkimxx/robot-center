@@ -94,6 +94,9 @@ func (s *PostgresStore) CreateRecordingChunk(ctx context.Context, input CreateRe
 
 func (s *PostgresStore) MarkRecordingChunkUploaded(ctx context.Context, chunkID string, uploadMetadata RecordingUploadMetadata) (domain.RecordingChunk, error) {
 	runner := s.sqlRunner()
+	if err := s.validateRecordingFinalizationUploadClaim(ctx, runner, chunkID, uploadMetadata); err != nil {
+		return domain.RecordingChunk{}, err
+	}
 	chunk, err := s.getRecordingChunkByID(ctx, runner, chunkID)
 	if err != nil {
 		return domain.RecordingChunk{}, err
@@ -122,6 +125,24 @@ func (s *PostgresStore) MarkRecordingChunkUploaded(ctx context.Context, chunkID 
 	`, strings.TrimSpace(chunkID), string(metadataJSON), manifestObjectID); err != nil {
 		return domain.RecordingChunk{}, err
 	}
+	if _, err := runner.ExecContext(ctx, `
+		UPDATE recording_finalization_jobs
+		SET status = 'completed', completed_at = COALESCE(completed_at, now()), locked_until = NULL, updated_at = now()
+		WHERE recording_chunk_id = $1::uuid
+			AND (
+				status = 'queued'
+				OR (
+					status = 'processing'
+					AND locked_by = NULLIF($2, '')
+					AND attempts = $3
+				)
+			)
+	`, strings.TrimSpace(chunkID), strings.TrimSpace(uploadMetadata.WorkerID), uploadMetadata.Attempt); err != nil {
+		return domain.RecordingChunk{}, err
+	}
+	if err := s.refreshRecordingSessionStatusForChunk(ctx, runner, chunkID); err != nil {
+		return domain.RecordingChunk{}, err
+	}
 	chunk, err = s.getRecordingChunkByID(ctx, runner, chunkID)
 	if err != nil {
 		return domain.RecordingChunk{}, err
@@ -131,6 +152,9 @@ func (s *PostgresStore) MarkRecordingChunkUploaded(ctx context.Context, chunkID 
 
 func (s *PostgresStore) MarkRecordingFileUploaded(ctx context.Context, chunkID string, fileType string, uploadMetadata RecordingUploadMetadata) (domain.RecordingChunk, error) {
 	runner := s.sqlRunner()
+	if err := s.validateRecordingFinalizationUploadClaim(ctx, runner, chunkID, uploadMetadata); err != nil {
+		return domain.RecordingChunk{}, err
+	}
 	chunk, err := s.getRecordingChunkByID(ctx, runner, chunkID)
 	if err != nil {
 		return domain.RecordingChunk{}, err

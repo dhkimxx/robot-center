@@ -30,6 +30,7 @@ type MemoryStore struct {
 	recordingSessionsByKey   map[string]RecordingSession
 	recordingChunksByID      map[string]domain.RecordingChunk
 	recordingChunkKeyToID    map[string]string
+	finalizationJobsByID     map[string]domain.RecordingFinalizationJob
 }
 
 func NewMemoryStore(serverURL string) *MemoryStore {
@@ -44,6 +45,7 @@ func NewMemoryStore(serverURL string) *MemoryStore {
 		recordingSessionsByKey:   map[string]RecordingSession{},
 		recordingChunksByID:      map[string]domain.RecordingChunk{},
 		recordingChunkKeyToID:    map[string]string{},
+		finalizationJobsByID:     map[string]domain.RecordingFinalizationJob{},
 	}
 }
 
@@ -647,7 +649,7 @@ func (s *MemoryStore) CreateRecordingChunk(_ context.Context, input CreateRecord
 	return chunk, nil
 }
 
-func (s *MemoryStore) MarkRecordingChunkUploaded(_ context.Context, chunkID string, _ RecordingUploadMetadata) (domain.RecordingChunk, error) {
+func (s *MemoryStore) MarkRecordingChunkUploaded(_ context.Context, chunkID string, uploadMetadata RecordingUploadMetadata) (domain.RecordingChunk, error) {
 	now := time.Now().UTC()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -655,6 +657,9 @@ func (s *MemoryStore) MarkRecordingChunkUploaded(_ context.Context, chunkID stri
 	chunk, ok := s.recordingChunksByID[chunkID]
 	if !ok {
 		return domain.RecordingChunk{}, ErrNotFound
+	}
+	if err := s.validateRecordingFinalizationUploadClaimLocked(chunk.ID, uploadMetadata); err != nil {
+		return domain.RecordingChunk{}, err
 	}
 	chunk.Status = "uploaded"
 	if chunk.AvailableFileTypes == nil {
@@ -663,10 +668,24 @@ func (s *MemoryStore) MarkRecordingChunkUploaded(_ context.Context, chunkID stri
 	chunk.AvailableFileTypes["manifest"] = true
 	chunk.UpdatedAt = now
 	s.recordingChunksByID[chunk.ID] = chunk
+	for jobID, job := range s.finalizationJobsByID {
+		if job.RecordingChunkID != chunk.ID || (job.Status != "queued" && job.Status != "processing") {
+			continue
+		}
+		if job.Status == "processing" && !finalizationClaimMatches(job, uploadMetadata.WorkerID, uploadMetadata.Attempt, false) {
+			continue
+		}
+		job.Status = "completed"
+		job.CompletedAt = &now
+		job.LockedUntil = nil
+		job.UpdatedAt = now
+		job.Chunk = chunk
+		s.finalizationJobsByID[jobID] = job
+	}
 	return chunk, nil
 }
 
-func (s *MemoryStore) MarkRecordingFileUploaded(_ context.Context, chunkID string, fileType string, _ RecordingUploadMetadata) (domain.RecordingChunk, error) {
+func (s *MemoryStore) MarkRecordingFileUploaded(_ context.Context, chunkID string, fileType string, uploadMetadata RecordingUploadMetadata) (domain.RecordingChunk, error) {
 	now := time.Now().UTC()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -675,6 +694,9 @@ func (s *MemoryStore) MarkRecordingFileUploaded(_ context.Context, chunkID strin
 	if !ok {
 		return domain.RecordingChunk{}, ErrNotFound
 	}
+	if err := s.validateRecordingFinalizationUploadClaimLocked(chunk.ID, uploadMetadata); err != nil {
+		return domain.RecordingChunk{}, err
+	}
 	if chunk.AvailableFileTypes == nil {
 		chunk.AvailableFileTypes = map[string]bool{}
 	}
@@ -682,6 +704,171 @@ func (s *MemoryStore) MarkRecordingFileUploaded(_ context.Context, chunkID strin
 	chunk.UpdatedAt = now
 	s.recordingChunksByID[chunk.ID] = chunk
 	return chunk, nil
+}
+
+func (s *MemoryStore) validateRecordingFinalizationUploadClaimLocked(chunkID string, uploadMetadata RecordingUploadMetadata) error {
+	for _, job := range s.finalizationJobsByID {
+		if job.RecordingChunkID != chunkID {
+			continue
+		}
+		switch job.Status {
+		case "queued":
+			return nil
+		case "processing":
+			if finalizationClaimMatches(job, uploadMetadata.WorkerID, uploadMetadata.Attempt, false) {
+				return nil
+			}
+			return ErrInvalidState
+		default:
+			return ErrInvalidState
+		}
+	}
+	return nil
+}
+
+func (s *MemoryStore) QueueRecordingFinalizationJobsForInactiveMissions(_ context.Context) (int64, error) {
+	now := time.Now().UTC()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var queued int64
+	for chunkID, chunk := range s.recordingChunksByID {
+		mission, ok := s.missionsByCode[chunk.MissionCode]
+		if !ok || mission.Status == "active" {
+			continue
+		}
+		if chunk.Status != "recording" && chunk.Status != "pending" && chunk.Status != "stopped" {
+			continue
+		}
+		if s.hasFinalizationJobForChunkLocked(chunk.ID) {
+			continue
+		}
+		chunk.Status = "finalizing"
+		chunk.UpdatedAt = now
+		s.recordingChunksByID[chunkID] = chunk
+		jobID := "rfj_" + randomHex(12)
+		s.finalizationJobsByID[jobID] = domain.RecordingFinalizationJob{
+			ID:                 jobID,
+			RecordingChunkID:   chunk.ID,
+			RecordingSessionID: chunk.RecordingSessionID,
+			MissionID:          chunk.MissionID,
+			Status:             "queued",
+			Reason:             "mission_inactive",
+			CreatedAt:          now,
+			UpdatedAt:          now,
+			Chunk:              chunk,
+		}
+		queued++
+	}
+	return queued, nil
+}
+
+func (s *MemoryStore) ClaimRecordingFinalizationJobs(_ context.Context, workerID string, limit int, lockDuration time.Duration) ([]domain.RecordingFinalizationJob, error) {
+	if limit <= 0 || limit > 50 {
+		limit = 10
+	}
+	if lockDuration <= 0 {
+		lockDuration = 2 * time.Minute
+	}
+	now := time.Now().UTC()
+	lockedUntil := now.Add(lockDuration)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	jobs := make([]domain.RecordingFinalizationJob, 0, limit)
+	for jobID, job := range s.finalizationJobsByID {
+		if len(jobs) >= limit {
+			break
+		}
+		if job.Status != "queued" && !(job.Status == "processing" && job.LockedUntil != nil && job.LockedUntil.Before(now)) {
+			continue
+		}
+		chunk, ok := s.recordingChunksByID[job.RecordingChunkID]
+		if !ok {
+			continue
+		}
+		if chunk.Status != "recording" && chunk.Status != "pending" && chunk.Status != "finalizing" {
+			continue
+		}
+		job.Status = "processing"
+		job.Attempts++
+		job.LockedBy = workerID
+		job.LockedUntil = &lockedUntil
+		job.UpdatedAt = now
+		job.Chunk = chunk
+		s.finalizationJobsByID[jobID] = job
+		jobs = append(jobs, job)
+	}
+	sort.Slice(jobs, func(i, j int) bool {
+		return jobs[i].CreatedAt.Before(jobs[j].CreatedAt)
+	})
+	return jobs, nil
+}
+
+func (s *MemoryStore) MarkRecordingFinalizationJobCompleted(_ context.Context, jobID string, workerID string, attempt int) error {
+	return s.markRecordingFinalizationJob(jobID, "completed", workerID, attempt, "")
+}
+
+func (s *MemoryStore) MarkRecordingFinalizationJobPartial(_ context.Context, jobID string, workerID string, attempt int, reason string) error {
+	return s.markRecordingFinalizationJob(jobID, "partial", workerID, attempt, reason)
+}
+
+func (s *MemoryStore) MarkRecordingFinalizationJobFailed(_ context.Context, jobID string, workerID string, attempt int, reason string) error {
+	return s.markRecordingFinalizationJob(jobID, "failed", workerID, attempt, reason)
+}
+
+func (s *MemoryStore) markRecordingFinalizationJob(jobID string, status string, workerID string, attempt int, reason string) error {
+	now := time.Now().UTC()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	job, ok := s.finalizationJobsByID[jobID]
+	if !ok {
+		return ErrNotFound
+	}
+	if !finalizationClaimMatches(job, workerID, attempt, status == "completed") {
+		return ErrInvalidState
+	}
+	job.Status = status
+	job.Reason = reason
+	job.LastError = reason
+	job.LockedUntil = nil
+	job.UpdatedAt = now
+	if status == "completed" || status == "partial" {
+		job.CompletedAt = &now
+	}
+	if chunk, ok := s.recordingChunksByID[job.RecordingChunkID]; ok {
+		if status == "completed" {
+			chunk.Status = "uploaded"
+		} else {
+			chunk.Status = status
+		}
+		chunk.UpdatedAt = now
+		s.recordingChunksByID[chunk.ID] = chunk
+		job.Chunk = chunk
+	}
+	s.finalizationJobsByID[jobID] = job
+	return nil
+}
+
+func finalizationClaimMatches(job domain.RecordingFinalizationJob, workerID string, attempt int, allowAlreadyCompleted bool) bool {
+	workerID = strings.TrimSpace(workerID)
+	if workerID == "" || attempt <= 0 {
+		return false
+	}
+	if job.Status == "processing" && job.LockedBy == workerID && job.Attempts == attempt {
+		return true
+	}
+	return allowAlreadyCompleted && job.Status == "completed" && job.LockedBy == workerID && job.Attempts == attempt
+}
+
+func (s *MemoryStore) hasFinalizationJobForChunkLocked(chunkID string) bool {
+	for _, job := range s.finalizationJobsByID {
+		if job.RecordingChunkID == chunkID {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *MemoryStore) ListRecordingChunks(_ context.Context) ([]domain.RecordingChunk, error) {

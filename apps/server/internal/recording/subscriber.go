@@ -15,8 +15,9 @@ import (
 )
 
 type SubscriberStatus struct {
-	Rooms     []SubscriberRoomStatus `json:"rooms"`
-	UpdatedAt time.Time              `json:"updatedAt"`
+	Rooms     []SubscriberRoomStatus  `json:"rooms"`
+	Queues    RecorderDataQueueStatus `json:"queues"`
+	UpdatedAt time.Time               `json:"updatedAt"`
 }
 
 type SubscriberRoomStatus struct {
@@ -190,6 +191,7 @@ func (w *Worker) SubscriberStatus() SubscriberStatus {
 
 	status := SubscriberStatus{
 		Rooms:     make([]SubscriberRoomStatus, 0, len(w.subscriberStatuses)),
+		Queues:    w.RecorderDataQueueStatus(),
 		UpdatedAt: time.Now().UTC(),
 	}
 	for roomID, roomStatus := range w.subscriberStatuses {
@@ -452,7 +454,7 @@ func (w *Worker) createRecorderPeerConnection(ctx context.Context, roomID string
 				status.lastDataLabel = label
 				status.lastDataMessageAt = time.Now().UTC()
 			})
-			go w.persistRecorderDataChannelMessage(ctx, roomID, label, payload)
+			w.enqueueRecorderDataChannelMessage(ctx, roomID, label, payload)
 		})
 	})
 
@@ -463,77 +465,6 @@ func (w *Worker) createRecorderPeerConnection(ctx context.Context, roomID string
 	})
 
 	return peerConnection, nil
-}
-
-func (w *Worker) persistRecorderDataChannelMessage(ctx context.Context, roomID string, label string, payload []byte) {
-	storageLabel := recorderStorageDataChannelLabel(label)
-	if storageLabel == "" {
-		return
-	}
-	if storageLabel == "channel.telemetry" || storageLabel == "channel.spatial" {
-		robotCode := robotCodeFromDataPayload(payload)
-		if robotCode == "" {
-			robotCode = w.singleSubscriberRobotCode(roomID)
-		}
-		if robotCode == "" {
-			w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
-				status.lastError = fmt.Sprintf("%s payload missing robotCode", storageLabel)
-			})
-			return
-		}
-		payload = recorderDataChannelPayloadWithRobotCode(robotCode, payload)
-		if !json.Valid(payload) {
-			w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
-				status.lastError = fmt.Sprintf("invalid %s JSON payload", storageLabel)
-			})
-			return
-		}
-		fileLabel := recorderDataChannelFileLabel(storageLabel)
-		if fileLabel != "" {
-			if err := w.appendDataChannelPayload(recorderMediaKey(roomID, robotCode), fileLabel, payload); err != nil {
-				w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
-					status.lastError = err.Error()
-				})
-				log.Printf("recorder-worker datachannel append failed room=%s label=%s: %v", roomID, fileLabel, err)
-				return
-			}
-		}
-		w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
-			status.robotCodes[robotCode] = struct{}{}
-			if status.robotCode == "" {
-				status.robotCode = robotCode
-			}
-			observedAt := time.Now().UTC()
-			robotStatus := ensureRecorderRobotRuntime(status, robotCode)
-			robotStatus.dataChannelLabels[storageLabel] = struct{}{}
-			robotStatus.lastDataAt = observedAt
-			robotStatus.updatedAt = observedAt
-			status.robotStatuses[robotCode] = robotStatus
-		})
-	}
-	if err := w.appServerClient.PostDataChannelPayload(ctx, storageLabel, payload); err != nil {
-		w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
-			status.lastError = err.Error()
-		})
-		log.Printf("recorder-worker datachannel persist failed room=%s label=%s: %v", roomID, storageLabel, err)
-		return
-	}
-	w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
-		switch storageLabel {
-		case "channel.telemetry", "channel.spatial":
-			status.telemetryStoredCount++
-		}
-		if robotCode := robotCodeFromDataPayload(payload); robotCode != "" {
-			persistedAt := time.Now().UTC()
-			robotStatus := ensureRecorderRobotRuntime(status, robotCode)
-			robotStatus.lastPersistedAt = persistedAt
-			robotStatus.updatedAt = persistedAt
-			status.robotStatuses[robotCode] = robotStatus
-		}
-		status.lastPersistedLabel = storageLabel
-		status.lastPersistedAt = time.Now().UTC()
-		status.lastError = ""
-	})
 }
 
 func (w *Worker) answerRecorderOffer(ctx context.Context, peerConnection *webrtc.PeerConnection, connection *websocket.Conn, payload map[string]any, targetPeerID string) error {

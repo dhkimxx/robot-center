@@ -74,7 +74,7 @@ type missionRecord struct {
 	Name        string     `gorm:"column:name;not null"`
 	MissionType string     `gorm:"column:mission_type;not null"`
 	Status      string     `gorm:"column:status;not null;default:ready"`
-	CreatedBy   *string    `gorm:"column:created_by;type:uuid"`
+	CreatedBy   *string    `gorm:"column:created_by;type:uuid;index"`
 	SiteNote    *string    `gorm:"column:site_note"`
 	StartedAt   *time.Time `gorm:"column:started_at"`
 	EndedAt     *time.Time `gorm:"column:ended_at"`
@@ -143,7 +143,7 @@ func (sensorDescriptorRecord) TableName() string {
 
 type sensorSampleRecord struct {
 	ID           string          `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	DescriptorID *string         `gorm:"column:descriptor_id;type:uuid;index"`
+	DescriptorID string          `gorm:"column:descriptor_id;type:uuid;not null;index;index:sensor_samples_descriptor_received_idx,priority:1"`
 	MissionID    string          `gorm:"column:mission_id;type:uuid;not null;index:sensor_samples_latest_idx,priority:1"`
 	RobotID      string          `gorm:"column:robot_id;type:uuid;not null;index:sensor_samples_latest_idx,priority:2"`
 	SensorID     string          `gorm:"column:sensor_id;not null;index:sensor_samples_latest_idx,priority:3"`
@@ -151,7 +151,7 @@ type sensorSampleRecord struct {
 	MessageID    *string         `gorm:"column:message_id;index"`
 	Sequence     *int64          `gorm:"column:sequence"`
 	SentAt       *time.Time      `gorm:"column:sent_at"`
-	ReceivedAt   time.Time       `gorm:"column:received_at;not null;default:now();index:sensor_samples_latest_idx,sort:desc,priority:4"`
+	ReceivedAt   time.Time       `gorm:"column:received_at;not null;default:now();index:sensor_samples_latest_idx,sort:desc,priority:4;index:sensor_samples_descriptor_received_idx,sort:desc,priority:2"`
 	NumericValue *float64        `gorm:"column:numeric_value"`
 	TextValue    *string         `gorm:"column:text_value"`
 	BoolValue    *bool           `gorm:"column:bool_value"`
@@ -169,7 +169,7 @@ type recordingSessionRecord struct {
 	ID                   string          `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	MissionID            string          `gorm:"column:mission_id;type:uuid;not null;index"`
 	RobotID              string          `gorm:"column:robot_id;type:uuid;not null;index"`
-	RecorderSessionID    *string         `gorm:"column:recorder_session_id;type:uuid"`
+	RecorderSessionID    *string         `gorm:"column:recorder_session_id;type:uuid;index"`
 	Status               string          `gorm:"column:status;not null;default:pending"`
 	ChunkDurationSeconds int             `gorm:"column:chunk_duration_seconds;not null;default:600"`
 	StartedAt            time.Time       `gorm:"column:started_at;not null;default:now()"`
@@ -192,7 +192,7 @@ type recordingChunkRecord struct {
 	StartedAt          time.Time       `gorm:"column:started_at;not null"`
 	EndedAt            *time.Time      `gorm:"column:ended_at"`
 	DurationSeconds    *float64        `gorm:"column:duration_seconds"`
-	ManifestObjectID   *string         `gorm:"column:manifest_object_id;type:uuid"`
+	ManifestObjectID   *string         `gorm:"column:manifest_object_id;type:uuid;index"`
 	Metadata           json.RawMessage `gorm:"column:metadata;type:jsonb;not null;default:'{}'::jsonb"`
 	CreatedAt          time.Time       `gorm:"column:created_at;not null;default:now()"`
 	UpdatedAt          time.Time       `gorm:"column:updated_at;not null;default:now()"`
@@ -202,11 +202,33 @@ func (recordingChunkRecord) TableName() string {
 	return "recording_chunks"
 }
 
+type recordingFinalizationJobRecord struct {
+	ID                 string          `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	RecordingChunkID   string          `gorm:"column:recording_chunk_id;type:uuid;not null;uniqueIndex"`
+	RecordingSessionID string          `gorm:"column:recording_session_id;type:uuid;not null;index"`
+	MissionID          string          `gorm:"column:mission_id;type:uuid;not null;index"`
+	RobotID            string          `gorm:"column:robot_id;type:uuid;not null;index"`
+	Status             string          `gorm:"column:status;not null;default:queued;index"`
+	Reason             *string         `gorm:"column:reason"`
+	Attempts           int             `gorm:"column:attempts;not null;default:0"`
+	LockedBy           *string         `gorm:"column:locked_by"`
+	LockedUntil        *time.Time      `gorm:"column:locked_until;index"`
+	LastError          *string         `gorm:"column:last_error"`
+	Metadata           json.RawMessage `gorm:"column:metadata;type:jsonb;not null;default:'{}'::jsonb"`
+	CompletedAt        *time.Time      `gorm:"column:completed_at"`
+	CreatedAt          time.Time       `gorm:"column:created_at;not null;default:now()"`
+	UpdatedAt          time.Time       `gorm:"column:updated_at;not null;default:now()"`
+}
+
+func (recordingFinalizationJobRecord) TableName() string {
+	return "recording_finalization_jobs"
+}
+
 type storageObjectRecord struct {
 	ID               string          `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	MissionID        string          `gorm:"column:mission_id;type:uuid;not null;index"`
-	RobotID          *string         `gorm:"column:robot_id;type:uuid"`
-	RecordingChunkID *string         `gorm:"column:recording_chunk_id;type:uuid"`
+	RobotID          *string         `gorm:"column:robot_id;type:uuid;index"`
+	RecordingChunkID *string         `gorm:"column:recording_chunk_id;type:uuid;index"`
 	ObjectType       string          `gorm:"column:object_type;not null"`
 	Bucket           string          `gorm:"column:bucket;not null"`
 	ObjectKey        string          `gorm:"column:object_key;not null;uniqueIndex"`
@@ -226,7 +248,7 @@ func (storageObjectRecord) TableName() string {
 type robotSessionRecord struct {
 	ID              string          `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	RobotID         string          `gorm:"column:robot_id;type:uuid;not null;index"`
-	MissionID       *string         `gorm:"column:mission_id;type:uuid"`
+	MissionID       *string         `gorm:"column:mission_id;type:uuid;index"`
 	State           string          `gorm:"column:state;not null"`
 	ClientIP        *string         `gorm:"column:client_ip;type:inet"`
 	UserAgent       *string         `gorm:"column:user_agent"`
@@ -243,7 +265,7 @@ func (robotSessionRecord) TableName() string {
 type browserSessionRecord struct {
 	ID             string          `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	MissionID      string          `gorm:"column:mission_id;type:uuid;not null;index"`
-	UserID         *string         `gorm:"column:user_id;type:uuid"`
+	UserID         *string         `gorm:"column:user_id;type:uuid;index"`
 	State          string          `gorm:"column:state;not null"`
 	ConnectedAt    time.Time       `gorm:"column:connected_at;not null;default:now()"`
 	DisconnectedAt *time.Time      `gorm:"column:disconnected_at"`
@@ -271,14 +293,14 @@ func (recorderSessionRecord) TableName() string {
 type eventRecord struct {
 	ID                     string          `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	MissionID              string          `gorm:"column:mission_id;type:uuid;not null;index:events_mission_occurred_idx,sort:desc,priority:1"`
-	RobotID                *string         `gorm:"column:robot_id;type:uuid"`
+	RobotID                *string         `gorm:"column:robot_id;type:uuid;index"`
 	EventType              string          `gorm:"column:event_type;not null"`
 	Severity               string          `gorm:"column:severity;not null"`
 	Title                  string          `gorm:"column:title;not null"`
 	Description            *string         `gorm:"column:description"`
 	OccurredAt             time.Time       `gorm:"column:occurred_at;not null;index:events_mission_occurred_idx,sort:desc,priority:2"`
 	Geom                   []byte          `gorm:"column:geom;type:geometry(Point,4326)"`
-	RelatedStorageObjectID *string         `gorm:"column:related_storage_object_id;type:uuid"`
+	RelatedStorageObjectID *string         `gorm:"column:related_storage_object_id;type:uuid;index"`
 	RawPayload             json.RawMessage `gorm:"column:raw_payload;type:jsonb;not null;default:'{}'::jsonb"`
 	CreatedAt              time.Time       `gorm:"column:created_at;not null;default:now()"`
 }
@@ -291,7 +313,7 @@ type controlCommandRecord struct {
 	ID            string          `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	MissionID     string          `gorm:"column:mission_id;type:uuid;not null;index"`
 	RobotID       string          `gorm:"column:robot_id;type:uuid;not null;index"`
-	RequestedBy   *string         `gorm:"column:requested_by;type:uuid"`
+	RequestedBy   *string         `gorm:"column:requested_by;type:uuid;index"`
 	CommandType   string          `gorm:"column:command_type;not null"`
 	Status        string          `gorm:"column:status;not null;default:requested"`
 	Payload       json.RawMessage `gorm:"column:payload;type:jsonb;not null;default:'{}'::jsonb"`

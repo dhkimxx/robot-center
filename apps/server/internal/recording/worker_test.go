@@ -2,7 +2,9 @@ package recording
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -11,15 +13,28 @@ import (
 )
 
 type fakeAppServerClient struct {
-	targets         []domain.Mission
-	tickTarget      domain.Mission
-	tickTargets     []domain.Mission
-	tickDuration    time.Duration
-	tickAt          time.Time
-	tickResult      domain.RecordingTickResult
-	tickResults     []domain.RecordingTickResult
-	markedChunkID   string
-	markedChunkSize int64
+	mu                  sync.Mutex
+	targets             []domain.Mission
+	tickTarget          domain.Mission
+	tickTargets         []domain.Mission
+	tickDuration        time.Duration
+	tickAt              time.Time
+	tickResult          domain.RecordingTickResult
+	tickResults         []domain.RecordingTickResult
+	markedChunkID       string
+	markedChunkSize     int64
+	markedChunkContext  RecordingUploadContext
+	claimedJobs         []domain.RecordingFinalizationJob
+	completedJobID      string
+	completedJobContext RecordingUploadContext
+	partialJobID        string
+	partialJobContext   RecordingUploadContext
+	failedJobID         string
+	failedJobContext    RecordingUploadContext
+	postErr             error
+	postedLabels        []string
+	postedPayloads      [][]byte
+	postedPayloadCh     chan []byte
 }
 
 func (c *fakeAppServerClient) FetchRecordingTargets(_ context.Context) ([]domain.Mission, error) {
@@ -39,17 +54,56 @@ func (c *fakeAppServerClient) CreateRecordingTick(_ context.Context, target doma
 	return c.tickResult, nil
 }
 
-func (c *fakeAppServerClient) MarkRecordingFileUploaded(_ context.Context, _ string, _ string, _ int64) error {
+func (c *fakeAppServerClient) MarkRecordingFileUploaded(_ context.Context, _ string, _ string, _ int64, _ RecordingUploadContext) error {
 	return nil
 }
 
-func (c *fakeAppServerClient) MarkRecordingChunkUploaded(_ context.Context, chunkID string, sizeBytes int64) error {
+func (c *fakeAppServerClient) ClaimRecordingFinalizationJobs(_ context.Context, _ string, _ int, _ time.Duration) ([]domain.RecordingFinalizationJob, error) {
+	jobs := c.claimedJobs
+	c.claimedJobs = nil
+	return jobs, nil
+}
+
+func (c *fakeAppServerClient) MarkRecordingFinalizationJobCompleted(_ context.Context, jobID string, uploadContext RecordingUploadContext) error {
+	c.completedJobID = jobID
+	c.completedJobContext = uploadContext
+	return nil
+}
+
+func (c *fakeAppServerClient) MarkRecordingFinalizationJobPartial(_ context.Context, jobID string, uploadContext RecordingUploadContext, _ string) error {
+	c.partialJobID = jobID
+	c.partialJobContext = uploadContext
+	return nil
+}
+
+func (c *fakeAppServerClient) MarkRecordingFinalizationJobFailed(_ context.Context, jobID string, uploadContext RecordingUploadContext, _ string) error {
+	c.failedJobID = jobID
+	c.failedJobContext = uploadContext
+	return nil
+}
+
+func (c *fakeAppServerClient) MarkRecordingChunkUploaded(_ context.Context, chunkID string, sizeBytes int64, uploadContext RecordingUploadContext) error {
 	c.markedChunkID = chunkID
 	c.markedChunkSize = sizeBytes
+	c.markedChunkContext = uploadContext
 	return nil
 }
 
-func (c *fakeAppServerClient) PostDataChannelPayload(_ context.Context, _ string, _ []byte) error {
+func (c *fakeAppServerClient) PostDataChannelPayload(_ context.Context, label string, payload []byte) error {
+	if c.postErr != nil {
+		return c.postErr
+	}
+	payloadCopy := append([]byte(nil), payload...)
+	c.mu.Lock()
+	c.postedLabels = append(c.postedLabels, label)
+	c.postedPayloads = append(c.postedPayloads, payloadCopy)
+	c.mu.Unlock()
+	if c.postedPayloadCh != nil {
+		select {
+		case c.postedPayloadCh <- payloadCopy:
+		default:
+		}
+	}
 	return nil
 }
 
@@ -75,15 +129,24 @@ type fakeMediaUploader struct {
 	finalizedChunks []domain.RecordingChunk
 	finalizedKeys   []string
 	err             error
+	uploadedTypes   []string
+	noMedia         bool
 }
 
-func (u *fakeMediaUploader) UploadMediaSnapshots(_ context.Context, mediaKey string, chunk domain.RecordingChunk) error {
+func (u *fakeMediaUploader) UploadMediaSnapshots(_ context.Context, mediaKey string, chunk domain.RecordingChunk, _ RecordingUploadContext) (RecordingMediaUploadResult, error) {
 	u.finalizedKeys = append(u.finalizedKeys, mediaKey)
 	u.finalizedChunks = append(u.finalizedChunks, chunk)
 	if u.err != nil {
-		return u.err
+		return RecordingMediaUploadResult{}, u.err
 	}
-	return nil
+	if u.noMedia {
+		return RecordingMediaUploadResult{}, nil
+	}
+	uploadedTypes := u.uploadedTypes
+	if len(uploadedTypes) == 0 {
+		uploadedTypes = []string{"rgb_audio_mp4"}
+	}
+	return RecordingMediaUploadResult{UploadedFileTypes: uploadedTypes}, nil
 }
 
 func TestWorkerTickCachesTargetsWithoutOpeningChunk(t *testing.T) {
@@ -206,6 +269,67 @@ func TestWorkerMarksRecorderRobotTrackActivityOnMediaPacket(t *testing.T) {
 	}
 }
 
+func TestWorkerQueuesRecorderDataChannelMessageForAppServerPost(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	appServerClient := &fakeAppServerClient{postedPayloadCh: make(chan []byte, 1)}
+	worker := newWorkerWithCollaborators(config.RecorderWorkerConfig{}, appServerClient, &fakeObjectStorage{})
+	worker.updateSubscriberStatus("mission-001", func(status *recorderSessionStatus) {
+		status.robotCode = "robot-001"
+		status.robotCodes = map[string]struct{}{"robot-001": {}}
+	})
+	worker.startRecorderDataQueueWorkers(ctx)
+
+	worker.enqueueRecorderDataChannelMessage(ctx, "mission-001", "channel.telemetry", []byte(`{"missionId":"mission-001","samples":[]}`))
+
+	var payload []byte
+	select {
+	case payload = <-appServerClient.postedPayloadCh:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for queued datachannel post")
+	}
+	var body map[string]any
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatalf("posted payload is not JSON: %v", err)
+	}
+	if body["robotCode"] != "robot-001" {
+		t.Fatalf("posted robotCode = %#v, want robot-001", body["robotCode"])
+	}
+	waitForCondition(t, time.Second, func() bool {
+		status := worker.SubscriberStatus()
+		return len(status.Rooms) == 1 && status.Rooms[0].TelemetryStoredCount == 1
+	})
+	queueStatus := worker.RecorderDataQueueStatus()
+	if queueStatus.PostDroppedCount != 0 || queueStatus.PostFailedCount != 0 {
+		t.Fatalf("queue status = %#v, want no drops or failures", queueStatus)
+	}
+}
+
+func TestWorkerDropsRecorderDataChannelPostWhenQueueIsFull(t *testing.T) {
+	ctx := context.Background()
+	worker := newWorkerWithCollaborators(config.RecorderWorkerConfig{}, &fakeAppServerClient{}, &fakeObjectStorage{})
+	worker.dataPostQueue = make(chan recorderDataPostJob, 1)
+	worker.dataPostQueue <- recorderDataPostJob{roomID: "mission-001", robotCode: "robot-001", storageLabel: "channel.spatial"}
+	worker.updateSubscriberStatus("mission-001", func(status *recorderSessionStatus) {
+		status.robotCode = "robot-001"
+		status.robotCodes = map[string]struct{}{"robot-001": {}}
+	})
+
+	worker.enqueueRecorderDataChannelMessage(ctx, "mission-001", "channel.spatial", []byte(`{"missionId":"mission-001","robotCode":"robot-001","samples":[]}`))
+
+	queueStatus := worker.RecorderDataQueueStatus()
+	if queueStatus.PostDroppedCount != 1 {
+		t.Fatalf("post dropped count = %d, want 1", queueStatus.PostDroppedCount)
+	}
+	if queueStatus.PostQueueDepth != 1 {
+		t.Fatalf("post queue depth = %d, want 1", queueStatus.PostQueueDepth)
+	}
+	if queueStatus.LastPostError == "" {
+		t.Fatal("last post error is empty, want queue full error")
+	}
+}
+
 func TestWorkerFinalizesPreviousChunkOnRollover(t *testing.T) {
 	target := domain.Mission{
 		MissionCode: "mission-001",
@@ -322,6 +446,117 @@ func TestWorkerTickFinalizesActiveChunkWhenTargetDisappears(t *testing.T) {
 	}
 }
 
+func TestWorkerTickFinalizesClaimedJobWhenMissionAlreadyEnded(t *testing.T) {
+	chunk := domain.RecordingChunk{
+		ID:                "chunk-001",
+		MissionCode:       "mission-001",
+		RobotCode:         "robot-001",
+		ManifestObjectKey: "missions/mission-001/robots/robot-001/chunk-001_manifest.json",
+		MediaObjectKeys:   map[string]string{},
+	}
+	appServerClient := &fakeAppServerClient{
+		claimedJobs: []domain.RecordingFinalizationJob{
+			{ID: "job-001", RecordingChunkID: chunk.ID, Attempts: 2, Chunk: chunk},
+		},
+	}
+	objectStorage := &fakeObjectStorage{manifestSize: 42}
+	mediaUploader := &fakeMediaUploader{}
+	worker := newWorkerWithCollaborators(
+		config.RecorderWorkerConfig{RecordingChunkDuration: 10 * time.Minute},
+		appServerClient,
+		objectStorage,
+	)
+	worker.mediaUploader = mediaUploader
+
+	worker.tick(context.Background())
+
+	if len(mediaUploader.finalizedChunks) != 1 {
+		t.Fatalf("finalized chunks = %d, want 1", len(mediaUploader.finalizedChunks))
+	}
+	if appServerClient.completedJobID != "job-001" {
+		t.Fatalf("completed job id = %q, want job-001", appServerClient.completedJobID)
+	}
+	if appServerClient.markedChunkID != chunk.ID {
+		t.Fatalf("marked chunk id = %q, want %q", appServerClient.markedChunkID, chunk.ID)
+	}
+	if appServerClient.markedChunkContext.WorkerID != worker.workerID || appServerClient.markedChunkContext.Attempt != 2 {
+		t.Fatalf("marked chunk context = %#v, want worker=%q attempt=2", appServerClient.markedChunkContext, worker.workerID)
+	}
+	if appServerClient.completedJobContext.WorkerID != worker.workerID || appServerClient.completedJobContext.Attempt != 2 {
+		t.Fatalf("completed job context = %#v, want worker=%q attempt=2", appServerClient.completedJobContext, worker.workerID)
+	}
+}
+
+func TestWorkerMarksClaimedJobPartialWhenNoMediaExists(t *testing.T) {
+	chunk := domain.RecordingChunk{
+		ID:                "chunk-001",
+		MissionCode:       "mission-001",
+		RobotCode:         "robot-001",
+		ManifestObjectKey: "missions/mission-001/robots/robot-001/chunk-001_manifest.json",
+		MediaObjectKeys:   map[string]string{},
+	}
+	appServerClient := &fakeAppServerClient{
+		claimedJobs: []domain.RecordingFinalizationJob{
+			{ID: "job-001", RecordingChunkID: chunk.ID, Attempts: 3, Chunk: chunk},
+		},
+	}
+	objectStorage := &fakeObjectStorage{manifestSize: 42}
+	mediaUploader := &fakeMediaUploader{noMedia: true}
+	worker := newWorkerWithCollaborators(
+		config.RecorderWorkerConfig{RecordingChunkDuration: 10 * time.Minute},
+		appServerClient,
+		objectStorage,
+	)
+	worker.mediaUploader = mediaUploader
+
+	worker.tick(context.Background())
+
+	if appServerClient.partialJobID != "job-001" {
+		t.Fatalf("partial job id = %q, want job-001", appServerClient.partialJobID)
+	}
+	if appServerClient.partialJobContext.WorkerID != worker.workerID || appServerClient.partialJobContext.Attempt != 3 {
+		t.Fatalf("partial job context = %#v, want worker=%q attempt=3", appServerClient.partialJobContext, worker.workerID)
+	}
+	if appServerClient.markedChunkID != "" {
+		t.Fatalf("marked chunk id = %q, want empty when no media exists", appServerClient.markedChunkID)
+	}
+}
+
+func TestWorkerMarksClaimedJobFailedWithClaimContext(t *testing.T) {
+	chunk := domain.RecordingChunk{
+		ID:                "chunk-001",
+		MissionCode:       "mission-001",
+		RobotCode:         "robot-001",
+		ManifestObjectKey: "missions/mission-001/robots/robot-001/chunk-001_manifest.json",
+		MediaObjectKeys:   map[string]string{},
+	}
+	appServerClient := &fakeAppServerClient{
+		claimedJobs: []domain.RecordingFinalizationJob{
+			{ID: "job-001", RecordingChunkID: chunk.ID, Attempts: 4, Chunk: chunk},
+		},
+	}
+	objectStorage := &fakeObjectStorage{manifestSize: 42}
+	mediaUploader := &fakeMediaUploader{err: errors.New("mux failed")}
+	worker := newWorkerWithCollaborators(
+		config.RecorderWorkerConfig{RecordingChunkDuration: 10 * time.Minute},
+		appServerClient,
+		objectStorage,
+	)
+	worker.mediaUploader = mediaUploader
+
+	worker.tick(context.Background())
+
+	if appServerClient.failedJobID != "job-001" {
+		t.Fatalf("failed job id = %q, want job-001", appServerClient.failedJobID)
+	}
+	if appServerClient.failedJobContext.WorkerID != worker.workerID || appServerClient.failedJobContext.Attempt != 4 {
+		t.Fatalf("failed job context = %#v, want worker=%q attempt=4", appServerClient.failedJobContext, worker.workerID)
+	}
+	if appServerClient.markedChunkID != "" {
+		t.Fatalf("marked chunk id = %q, want empty after upload failure", appServerClient.markedChunkID)
+	}
+}
+
 func TestWorkerTickRetriesFailedChunkFinalization(t *testing.T) {
 	target := domain.Mission{
 		MissionCode: "mission-001",
@@ -389,4 +624,16 @@ func TestWorkerTickRetriesFailedChunkFinalization(t *testing.T) {
 	if len(worker.pendingFinalizations) != 0 {
 		t.Fatalf("pending finalizations = %d, want 0 after retry", len(worker.pendingFinalizations))
 	}
+}
+
+func waitForCondition(t *testing.T, timeout time.Duration, condition func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if condition() {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("condition was not met before timeout")
 }

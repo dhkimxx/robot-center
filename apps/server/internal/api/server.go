@@ -85,6 +85,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/sensor-latest", s.handleListSensorLatest)
 	mux.HandleFunc("GET /api/recordings", s.handleListRecordings)
 	mux.HandleFunc("POST /api/recorder/tick", s.handleRecorderTick)
+	mux.HandleFunc("POST /api/recorder/finalization-jobs/claim", s.handleRecorderFinalizationJobsClaim)
+	mux.HandleFunc("POST /api/recorder/finalization-jobs/{jobID}/completed", s.handleRecorderFinalizationJobCompleted)
+	mux.HandleFunc("POST /api/recorder/finalization-jobs/{jobID}/partial", s.handleRecorderFinalizationJobPartial)
+	mux.HandleFunc("POST /api/recorder/finalization-jobs/{jobID}/failed", s.handleRecorderFinalizationJobFailed)
 	mux.HandleFunc("POST /api/recorder/chunks/{chunkID}/uploaded", s.handleRecorderChunkUploaded)
 	mux.HandleFunc("POST /api/recorder/chunks/{chunkID}/files/{fileType}/uploaded", s.handleRecorderFileUploaded)
 	mux.HandleFunc("GET /api/robots", s.handleListRobots)
@@ -313,8 +317,14 @@ func (s *Server) createRecordingFileResponse(recording domain.RecordingChunk, fi
 	if available {
 		status = "available"
 		fileURL = s.createStorageObjectURL(objectKey)
-	} else if recording.Status == "recording" {
+	} else if recording.Status == "recording" || recording.Status == "pending" {
 		status = "recording"
+	} else if recording.Status == "finalizing" {
+		status = "finalizing"
+	} else if recording.Status == "partial" || recording.Status == "stopped" {
+		status = "partial"
+	} else if recording.Status == "failed" {
+		status = "failed"
 	}
 	return dto.RecordingFileResponse{
 		Type:        fileType,
@@ -640,6 +650,20 @@ type recorderTickRequest struct {
 type recorderUploadRequest struct {
 	SizeBytes *int64 `json:"sizeBytes"`
 	Checksum  string `json:"checksum"`
+	WorkerID  string `json:"workerId"`
+	Attempt   int    `json:"attempt"`
+}
+
+type recorderFinalizationClaimRequest struct {
+	WorkerID            string `json:"workerId"`
+	Limit               int    `json:"limit"`
+	LockDurationSeconds int    `json:"lockDurationSeconds"`
+}
+
+type recorderFinalizationStatusRequest struct {
+	WorkerID string `json:"workerId"`
+	Attempt  int    `json:"attempt"`
+	Reason   string `json:"reason"`
 }
 
 func (s *Server) handleRecorderTick(w http.ResponseWriter, r *http.Request) {
@@ -661,6 +685,64 @@ func (s *Server) handleRecorderTick(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, dto.RecordingTick(result))
+}
+
+func (s *Server) handleRecorderFinalizationJobsClaim(w http.ResponseWriter, r *http.Request) {
+	var request recorderFinalizationClaimRequest
+	if err := decodeJSON(r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	jobs, err := s.services.Recording.ClaimFinalizationJobs(
+		r.Context(),
+		request.WorkerID,
+		request.Limit,
+		time.Duration(request.LockDurationSeconds)*time.Second,
+	)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"jobs": jobs})
+}
+
+func (s *Server) handleRecorderFinalizationJobCompleted(w http.ResponseWriter, r *http.Request) {
+	request, err := decodeRecorderFinalizationStatus(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.services.Recording.MarkFinalizationJobCompleted(r.Context(), r.PathValue("jobID"), request.WorkerID, request.Attempt); err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) handleRecorderFinalizationJobPartial(w http.ResponseWriter, r *http.Request) {
+	request, err := decodeRecorderFinalizationStatus(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.services.Recording.MarkFinalizationJobPartial(r.Context(), r.PathValue("jobID"), request.WorkerID, request.Attempt, request.Reason); err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) handleRecorderFinalizationJobFailed(w http.ResponseWriter, r *http.Request) {
+	request, err := decodeRecorderFinalizationStatus(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.services.Recording.MarkFinalizationJobFailed(r.Context(), r.PathValue("jobID"), request.WorkerID, request.Attempt, request.Reason); err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 func (s *Server) handleRecorderChunkUploaded(w http.ResponseWriter, r *http.Request) {
@@ -716,7 +798,28 @@ func decodeRecorderUploadMetadata(r *http.Request) (store.RecordingUploadMetadat
 	return store.RecordingUploadMetadata{
 		SizeBytes: request.SizeBytes,
 		Checksum:  strings.TrimSpace(request.Checksum),
+		WorkerID:  strings.TrimSpace(request.WorkerID),
+		Attempt:   request.Attempt,
 	}, nil
+}
+
+func decodeRecorderFinalizationStatus(r *http.Request) (recorderFinalizationStatusRequest, error) {
+	defer r.Body.Close()
+	rawPayload, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		return recorderFinalizationStatusRequest{}, err
+	}
+	if len(strings.TrimSpace(string(rawPayload))) == 0 {
+		return recorderFinalizationStatusRequest{}, nil
+	}
+
+	var request recorderFinalizationStatusRequest
+	if err := json.Unmarshal(rawPayload, &request); err != nil {
+		return recorderFinalizationStatusRequest{}, err
+	}
+	request.WorkerID = strings.TrimSpace(request.WorkerID)
+	request.Reason = strings.TrimSpace(request.Reason)
+	return request, nil
 }
 
 func (s *Server) staticHandler() http.Handler {

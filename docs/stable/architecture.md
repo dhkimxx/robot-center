@@ -1,7 +1,7 @@
 ---
 title: "architecture"
 created: 2026-05-26
-updated: '2026-05-26'
+updated: '2026-05-27'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>"]
 type: "design"
@@ -21,6 +21,8 @@ history:
 - '2026-05-26 danya.kim <danya.kim@thundersoft.com>: removed streaming-status API from live state architecture'
 - '2026-05-26 danya.kim <danya.kim@thundersoft.com>: documented live-status without streaming-status API dependency'
 - '2026-05-26 danya.kim <danya.kim@thundersoft.com>: removed public observed-streams API from current architecture'
+- '2026-05-27 danya.kim <danya.kim@thundersoft.com>: documented recording finalization job flow and recorder-worker scale-out considerations'
+- '2026-05-27 danya.kim <danya.kim@thundersoft.com>: documented finalization worker attempt fencing'
 ---
 
 # Architecture
@@ -378,6 +380,8 @@ SFU module은 `app-server` 내부의 Pion 기반 media/data router다.
 - manifest 생성
 - MinIO upload
 - app-server API를 통한 recording metadata 갱신
+- 종료된 mission의 미완료 chunk finalization job claim
+- finalization job 기준 MP4 muxing / JSONL upload / manifest upload 완료 처리
 
 분리 이유:
 
@@ -385,6 +389,15 @@ SFU module은 `app-server` 내부의 Pion 기반 media/data router다.
 - 저장 실패가 API와 실시간 관제에 영향을 주면 안 된다.
 - Browser를 닫아도 녹화는 계속되어야 한다.
 - 이후 저장 worker만 별도로 확장할 수 있다.
+
+종료 처리 원칙:
+
+- mission 종료 시 app-server는 미완료 `recording_chunks`를 즉시 `stopped`로 닫지 않는다.
+- app-server는 `recording_finalization_jobs`를 생성하고 chunk 상태를 `finalizing`으로 둔다.
+- recorder-worker는 job을 claim한 뒤 local media spool을 기준으로 MP4 muxing, JSONL upload, manifest upload를 수행한다.
+- 업로드 가능한 media가 하나도 없으면 chunk는 `partial`로 마무리한다.
+- mux/upload 오류가 발생하면 chunk/job은 `failed`로 남긴다.
+- 이미 upload 완료 callback이 들어온 chunk의 job은 completed로 정리되어 중복 finalization이 replay 상태를 되돌리지 않는다.
 
 ### 7.5 React Operator UI
 
@@ -568,6 +581,52 @@ Browser
 -> app-server: file URL 제공
 -> Browser: replay
 ```
+
+### 9.1 Mission 종료와 finalization job
+
+Mission 종료 시 녹화는 다음 순서로 끝난다.
+
+```mermaid
+sequenceDiagram
+  participant UI as Operator UI
+  participant App as app-server
+  participant DB as PostgreSQL
+  participant Rec as recorder-worker
+  participant Minio as MinIO
+
+  UI->>App: POST /api/missions/{missionCode}/end
+  App->>DB: mission ended / mission_robots completed
+  App->>DB: 미완료 recording_chunks -> finalizing
+  App->>DB: recording_finalization_jobs queued
+  Rec->>App: POST /api/recorder/finalization-jobs/claim
+  App->>DB: job processing lock 획득
+  App-->>Rec: chunk + object key
+  Rec->>Rec: local media spool close / muxing
+  Rec->>Minio: MP4 / JSONL / manifest upload
+  Rec->>App: file upload callbacks
+  Rec->>App: finalization job completed | partial | failed
+  App->>DB: chunk/session/job 상태 갱신
+```
+
+이 방식의 목적은 “mission 종료 버튼을 누르면 DB 상태만 바꾸는 것”이 아니라, recorder-worker가 실제 muxing과 upload를 완료할 기회를 보장하는 것이다.
+
+### 9.2 recorder-worker scale-out 고려사항
+
+P0 로컬 검증은 recorder-worker 1개를 기준으로 한다. recorder-worker를 여러 개로 늘릴 때는 다음 조건이 필요하다.
+
+| 항목 | 고려사항 |
+| --- | --- |
+| Job claim | `recording_finalization_jobs`는 DB row lock과 `SKIP LOCKED`로 한 worker만 claim해야 한다. |
+| Lock TTL | worker crash를 대비해 `locked_until`이 지나면 다른 worker가 재claim할 수 있어야 한다. |
+| Fencing | upload/file/chunk/job status callback은 claim 시점의 `workerId + attempt`가 현재 DB lock owner와 일치할 때만 반영해야 한다. |
+| Idempotency | MinIO object key와 app-server upload callback은 재시도되어도 같은 결과가 되도록 object key/upsert 기준이어야 한다. |
+| Room ownership | 같은 mission room을 여러 recorder가 동시에 subscribe하면 중복 녹화가 생길 수 있으므로 room/mission 단위 lease 또는 shard가 필요하다. |
+| Local spool | 현재 media spool은 recorder-worker local filesystem에 있다. Scale-out failover까지 하려면 shared spool, object staging, 또는 room ownership sticky 정책이 필요하다. |
+| Partial result | job을 claim한 worker가 raw media를 찾지 못하면 `partial`로 끝날 수 있다. 운영 scale-out에서는 해당 chunk를 실제로 녹화한 worker가 finalization하도록 소유권을 유지해야 한다. |
+| Backpressure | muxing/upload가 밀릴 때 claim limit, retry interval, lock duration, worker concurrency를 분리해서 조절해야 한다. |
+| Monitoring | job 상태별 count(`queued`, `processing`, `partial`, `failed`)와 locked job age를 지표로 노출해야 한다. |
+
+따라서 단순히 worker replica 수만 늘리는 것은 충분하지 않다. 먼저 “mission room recording owner”와 “finalization job owner”를 명확히 둔 뒤 scale-out해야 한다.
 
 ## 10. 위치 데이터
 

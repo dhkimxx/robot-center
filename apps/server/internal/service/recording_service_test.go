@@ -42,6 +42,9 @@ type recordingRepositorySpy struct {
 
 	markChunkUploadedErr error
 	markFileUploadedErr  error
+
+	queuedFinalizationJobs int64
+	queueFinalizationErr   error
 }
 
 func (r *recordingRepositorySpy) FindRecordingTarget(_ context.Context, missionCode string, robotCode string) (store.RecordingTarget, error) {
@@ -122,8 +125,34 @@ func (r *recordingRepositorySpy) ListRecordingChunks(_ context.Context) ([]domai
 	return nil, nil
 }
 
+func (r *recordingRepositorySpy) QueueRecordingFinalizationJobsForInactiveMissions(_ context.Context) (int64, error) {
+	if r.queueFinalizationErr != nil {
+		return 0, r.queueFinalizationErr
+	}
+	r.queuedFinalizationJobs++
+	return r.queuedFinalizationJobs, nil
+}
+
+func (r *recordingRepositorySpy) ClaimRecordingFinalizationJobs(_ context.Context, _ string, _ int, _ time.Duration) ([]domain.RecordingFinalizationJob, error) {
+	return nil, nil
+}
+
+func (r *recordingRepositorySpy) MarkRecordingFinalizationJobCompleted(_ context.Context, _ string, _ string, _ int) error {
+	return nil
+}
+
+func (r *recordingRepositorySpy) MarkRecordingFinalizationJobPartial(_ context.Context, _ string, _ string, _ int, _ string) error {
+	return nil
+}
+
+func (r *recordingRepositorySpy) MarkRecordingFinalizationJobFailed(_ context.Context, _ string, _ string, _ int, _ string) error {
+	return nil
+}
+
 type recordingStoreSpy struct {
 	recordingRepositorySpy
+	endMissionInput  string
+	endMissionResult domain.Mission
 }
 
 func (s *recordingStoreSpy) CreateRobot(_ context.Context, _ store.CreateRobotInput) (domain.Robot, domain.RobotConnectionInfo, error) {
@@ -166,8 +195,12 @@ func (s *recordingStoreSpy) StartMission(_ context.Context, _ string) (domain.Mi
 	return domain.Mission{}, nil
 }
 
-func (s *recordingStoreSpy) EndMission(_ context.Context, _ string) (domain.Mission, error) {
-	return domain.Mission{}, nil
+func (s *recordingStoreSpy) EndMission(_ context.Context, missionCode string) (domain.Mission, error) {
+	s.endMissionInput = missionCode
+	if s.endMissionResult.MissionCode != "" {
+		return s.endMissionResult, nil
+	}
+	return domain.Mission{MissionCode: missionCode, Status: "ended"}, nil
 }
 
 func (s *recordingStoreSpy) FindActiveMissionForRobot(_ context.Context, _ string, _ string) (domain.Mission, bool, error) {
@@ -211,6 +244,39 @@ func (r *recordingTransactionRunnerSpy) WithTransaction(ctx context.Context, run
 	}
 	r.committed = true
 	return nil
+}
+
+func TestMissionServiceEndMissionQueuesRecordingFinalizationJobsInTransaction(t *testing.T) {
+	outsideRepository := &recordingStoreSpy{}
+	transactionRepository := &recordingStoreSpy{
+		endMissionResult: domain.Mission{MissionCode: "mission-001", Status: "ended"},
+	}
+	transactionRunner := &recordingTransactionRunnerSpy{repository: transactionRepository}
+	service := &MissionService{
+		repository:          outsideRepository,
+		recordingRepository: outsideRepository,
+		transactionRunner:   transactionRunner,
+	}
+
+	mission, err := service.EndMission(context.Background(), "mission-001")
+	if err != nil {
+		t.Fatalf("EndMission returned error: %v", err)
+	}
+	if mission.MissionCode != "mission-001" || mission.Status != "ended" {
+		t.Fatalf("mission = %#v", mission)
+	}
+	if !transactionRunner.called || !transactionRunner.committed {
+		t.Fatalf("transaction runner called=%v committed=%v", transactionRunner.called, transactionRunner.committed)
+	}
+	if transactionRepository.endMissionInput != "mission-001" {
+		t.Fatalf("transaction EndMission input = %q", transactionRepository.endMissionInput)
+	}
+	if transactionRepository.queuedFinalizationJobs != 1 {
+		t.Fatalf("transaction queued finalization jobs = %d, want 1", transactionRepository.queuedFinalizationJobs)
+	}
+	if outsideRepository.endMissionInput != "" || outsideRepository.queuedFinalizationJobs != 0 {
+		t.Fatalf("outside repository was used: end=%q queued=%d", outsideRepository.endMissionInput, outsideRepository.queuedFinalizationJobs)
+	}
 }
 
 func TestRecordingServiceApplyRecordingTickNormalizesInput(t *testing.T) {

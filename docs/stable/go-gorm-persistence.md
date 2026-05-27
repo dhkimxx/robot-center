@@ -1,7 +1,7 @@
 ---
 title: "go-gorm-persistence"
 created: 2026-05-22
-updated: '2026-05-26'
+updated: '2026-05-27'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>", "dhkimxx <dhkimxx@naver.com>"]
 type: "guide"
@@ -16,6 +16,7 @@ history:
 - "2026-05-26 danya.kim <danya.kim@thundersoft.com>: moved into docs/stable lifecycle structure"
 - "2026-05-26 danya.kim <danya.kim@thundersoft.com>: flattened from harness directory into stable docs"
 - '2026-05-26 danya.kim <danya.kim@thundersoft.com>: flattened persistence guide from harness directory into stable docs'
+- '2026-05-27 danya.kim <danya.kim@thundersoft.com>: documented robot-center FK and AutoMigrate post-DDL persistence rules'
 ---
 # Go GORM Persistence
 
@@ -82,6 +83,25 @@ PostgreSQL에서 특히 주의할 기능:
 - 관계는 `foreignKey`, `references`를 명시한다.
 - 삭제 정책이 중요한 관계는 `OnDelete:CASCADE` 또는 `OnDelete:SET NULL`을 tag에 드러낸다.
 - 단순 JSON/list 저장은 GORM serializer나 `gorm.io/datatypes`를 먼저 검토한다.
+
+robot-center 적용 기준:
+
+- GORM `AutoMigrate`가 테이블/컬럼/기본 인덱스를 만든 뒤, PostgreSQL 전용 FK, partial unique index, PostGIS index는 post auto-migrate DDL에서 재실행 가능하게 보강한다.
+- `*_id` 컬럼이 실제 도메인 관계라면 DB FK로 강제한다. 코드 JOIN만으로 관계를 유지하지 않는다.
+- FK가 붙는 컬럼에는 조회/삭제 성능을 위해 index를 둔다.
+- 운영 soft-delete 대상인 `robots`는 직접 삭제하지 않는 전제로 두되, hard delete가 필요한 owned child는 `CASCADE`, 이력 보존 또는 선택 참조는 `SET NULL`을 우선한다.
+- partial unique index는 상태 기반 단일성에 사용한다. 예: robot별 active token 1개, mission+robot별 open recording session 1개.
+
+현재 핵심 관계:
+
+- `mission_robots`는 mission과 robot의 assignment join table이다.
+- `sensor_descriptors`는 mission+robot+sensor_id별 센서 정의의 source of truth다.
+- `sensor_samples.descriptor_id`는 sample이 어떤 descriptor에 속하는지 나타내는 기준 FK다.
+- `sensor_samples`의 `mission_id`, `robot_id`, `sensor_id`는 조회 성능과 필터링을 위한 denormalized key이며, composite FK로 descriptor와 불일치하지 않게 막는다.
+- `recording_sessions`는 mission+robot의 녹화 실행 단위다.
+- `recording_chunks`는 recording session의 시간 구간 결과물이다.
+- `storage_objects`는 MinIO object metadata의 DB source of truth이며 recording chunk와 선택적으로 연결된다.
+- `recording_finalization_jobs`는 chunk 후처리 작업 큐이며 chunk/session/mission/robot과 FK로 연결된다.
 
 주의:
 
@@ -287,6 +307,15 @@ robot-center 기준:
 - duplicate index
 - FK 존재 여부
 - 이미 migrate된 row 처리
+
+robot-center 적용 기준:
+
+- 사용자는 개발 단계에서 `AutoMigrate` 기반 변경을 선호한다.
+- 따라서 현재 서버는 app-server 시작 시 `AutoMigrate` 후 post DDL을 실행한다.
+- post DDL은 `CREATE INDEX IF NOT EXISTS`, `pg_constraint` 존재 확인, null backfill처럼 재실행 가능한 형태로 작성한다.
+- 기존 raw SQL repository가 남아 있으므로 GORM association만 믿지 않고 실제 PostgreSQL constraint를 확인한다.
+- 오래된 빈 테이블은 post DDL에서 비어 있을 때만 제거할 수 있다.
+- 비어 있지 않은 legacy table은 런타임에서 자동 drop하지 말고 별도 정리 판단을 남긴다.
 
 ## 테스트 전략
 

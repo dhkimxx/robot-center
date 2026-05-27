@@ -118,7 +118,10 @@ func (s *PostgresStore) SaveSensorEnvelope(ctx context.Context, envelope domain.
 		if sample.SensorID == "" {
 			continue
 		}
-		descriptorID := optionalString(descriptorIDs[sample.SensorID])
+		descriptorID := descriptorIDs[sample.SensorID]
+		if descriptorID == "" {
+			return nil, ErrInvalidState
+		}
 		receivedAt := sample.ReceivedAt
 		if receivedAt.IsZero() {
 			receivedAt = envelope.ReceivedAt
@@ -282,9 +285,7 @@ func (s *PostgresStore) ListLatestSensorSamples(ctx context.Context, missionID s
 			ss.raw_payload
 		FROM sensor_descriptors sd
 		JOIN robots r ON r.id = sd.robot_id
-		LEFT JOIN sensor_samples ss ON ss.mission_id = sd.mission_id
-			AND ss.robot_id = sd.robot_id
-			AND ss.sensor_id = sd.sensor_id
+		LEFT JOIN sensor_samples ss ON ss.descriptor_id = sd.id
 		WHERE sd.mission_id = ?
 			AND (? = '' OR r.robot_code = ?)
 		ORDER BY r.robot_code, sd.sensor_id, ss.received_at DESC NULLS LAST

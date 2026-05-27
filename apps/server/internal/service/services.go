@@ -23,7 +23,7 @@ func NewServices(repository store.Store) *Services {
 	transactionRunner, _ := repository.(store.TransactionRunner)
 	return &Services{
 		Robots:            &RobotService{repository: repository},
-		Missions:          &MissionService{repository: repository},
+		Missions:          &MissionService{repository: repository, recordingRepository: repository, transactionRunner: transactionRunner},
 		Sensors:           &SensorService{repository: repository},
 		Recording:         &RecordingService{repository: repository, transactionRunner: transactionRunner},
 		Live:              &LiveStatusService{},
@@ -73,7 +73,9 @@ func (s *RobotService) ApplyHeartbeat(ctx context.Context, input store.Heartbeat
 }
 
 type MissionService struct {
-	repository store.MissionRepository
+	repository          store.MissionRepository
+	recordingRepository store.RecordingRepository
+	transactionRunner   store.TransactionRunner
 }
 
 func (s *MissionService) CreateMission(ctx context.Context, input store.CreateMissionInput) (domain.Mission, error) {
@@ -89,7 +91,30 @@ func (s *MissionService) StartMission(ctx context.Context, missionCode string) (
 }
 
 func (s *MissionService) EndMission(ctx context.Context, missionCode string) (domain.Mission, error) {
-	return s.repository.EndMission(ctx, missionCode)
+	if s.transactionRunner == nil {
+		mission, err := s.repository.EndMission(ctx, missionCode)
+		if err != nil {
+			return domain.Mission{}, err
+		}
+		if s.recordingRepository != nil {
+			if _, err := s.recordingRepository.QueueRecordingFinalizationJobsForInactiveMissions(ctx); err != nil {
+				return domain.Mission{}, err
+			}
+		}
+		return mission, nil
+	}
+
+	var mission domain.Mission
+	err := s.transactionRunner.WithTransaction(ctx, func(ctx context.Context, repository store.Store) error {
+		var endErr error
+		mission, endErr = repository.EndMission(ctx, missionCode)
+		if endErr != nil {
+			return endErr
+		}
+		_, queueErr := repository.QueueRecordingFinalizationJobsForInactiveMissions(ctx)
+		return queueErr
+	})
+	return mission, err
 }
 
 func (s *MissionService) FindActiveMissionForRobot(ctx context.Context, robotCode string, bearerToken string) (domain.Mission, bool, error) {
@@ -225,7 +250,26 @@ func (s *RecordingService) MarkRecordingFileUploaded(ctx context.Context, chunkI
 }
 
 func (s *RecordingService) ListRecordingChunks(ctx context.Context) ([]domain.RecordingChunk, error) {
+	if _, err := s.repository.QueueRecordingFinalizationJobsForInactiveMissions(ctx); err != nil {
+		return nil, err
+	}
 	return s.repository.ListRecordingChunks(ctx)
+}
+
+func (s *RecordingService) ClaimFinalizationJobs(ctx context.Context, workerID string, limit int, lockDuration time.Duration) ([]domain.RecordingFinalizationJob, error) {
+	return s.repository.ClaimRecordingFinalizationJobs(ctx, workerID, limit, lockDuration)
+}
+
+func (s *RecordingService) MarkFinalizationJobCompleted(ctx context.Context, jobID string, workerID string, attempt int) error {
+	return s.repository.MarkRecordingFinalizationJobCompleted(ctx, jobID, workerID, attempt)
+}
+
+func (s *RecordingService) MarkFinalizationJobPartial(ctx context.Context, jobID string, workerID string, attempt int, reason string) error {
+	return s.repository.MarkRecordingFinalizationJobPartial(ctx, jobID, workerID, attempt, reason)
+}
+
+func (s *RecordingService) MarkFinalizationJobFailed(ctx context.Context, jobID string, workerID string, attempt int, reason string) error {
+	return s.repository.MarkRecordingFinalizationJobFailed(ctx, jobID, workerID, attempt, reason)
 }
 
 func (s *RecordingService) withRecordingTransaction(ctx context.Context, run func(ctx context.Context, repository store.RecordingRepository) (domain.RecordingChunk, error)) (domain.RecordingChunk, error) {

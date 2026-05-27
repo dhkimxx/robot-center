@@ -1,7 +1,7 @@
 ---
 title: "data-storage"
 created: 2026-05-26
-updated: '2026-05-26'
+updated: '2026-05-27'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>"]
 type: "design"
@@ -17,6 +17,8 @@ history:
 - '2026-05-26 danya.kim <danya.kim@thundersoft.com>: removed streaming_statuses from active schema and live state model'
 - '2026-05-26 danya.kim <danya.kim@thundersoft.com>: removed streaming_statuses from current schema documentation'
 - '2026-05-26 danya.kim <danya.kim@thundersoft.com>: updated storage verification to use mission live-status'
+- '2026-05-27 danya.kim <danya.kim@thundersoft.com>: documented recording finalization jobs and scale-out-safe replay storage states'
+- '2026-05-27 danya.kim <danya.kim@thundersoft.com>: documented finalization upload callback fencing'
 ---
 
 # Data Storage
@@ -66,6 +68,7 @@ sensor_descriptors
 sensor_samples
 recording_sessions
 recording_chunks
+recording_finalization_jobs
 storage_objects
 events
 control_commands
@@ -76,6 +79,7 @@ control_acks
 
 - `mission_robots_active_unique`: `mission_id + robot_id` active assignment 중복 방지
 - `events_geom_idx`: `events.geom` GIST index
+- recording finalization job FK/index: chunk/session/mission/robot 관계와 claim 조회를 위한 index
 - `recording_chunks_manifest_object_fk`: `recording_chunks.manifest_object_id -> storage_objects.id`
 
 초기 seed:
@@ -91,7 +95,7 @@ control_acks
 | Robot / Mission | `robots`, `robot_tokens`, `missions`, `mission_robots` | 로봇 등록, token, 다중 로봇 mission assignment |
 | Runtime Session | `robot_sessions`, `browser_sessions`, `recorder_sessions` | heartbeat/session 이력. live 송출 판정은 SFU observed stream 상태를 기준으로 함 |
 | Realtime Sensor | `sensor_descriptors`, `sensor_samples` | telemetry/spatial DataChannel 저장과 최신값 조회 |
-| Recording / Storage | `recording_sessions`, `recording_chunks`, `storage_objects` | recorder-worker chunk, upload 상태, MinIO object metadata |
+| Recording / Storage | `recording_sessions`, `recording_chunks`, `recording_finalization_jobs`, `storage_objects` | recorder-worker chunk, finalization job, upload 상태, MinIO object metadata |
 | Event / Control | `events`, `control_commands`, `control_acks` | P0/P1 event/control 감사 기록 기반. control 정책은 아직 TODO |
 
 ## 5. ERD 개요
@@ -115,6 +119,7 @@ erDiagram
   missions ||--o{ recording_sessions : records
   robots ||--o{ recording_sessions : recorded
   recording_sessions ||--o{ recording_chunks : chunks
+  recording_chunks ||--o{ recording_finalization_jobs : finalizes
   recording_chunks ||--o{ storage_objects : stores
 
   missions ||--o{ events : has
@@ -136,7 +141,7 @@ erDiagram
 | robot status | `offline`, `online`, `fault` |
 | mission robot status | `assigned`, `active`, `completed`, `removed` |
 | session state | `new`, `connected`, `reconnecting`, `disconnected`, `failed`, `closed` |
-| recording status | `pending`, `recording`, `finalizing`, `uploaded`, `failed` |
+| recording status | `pending`, `recording`, `finalizing`, `uploaded`, `partial`, `failed` |
 | command status | `requested`, `sent`, `accepted`, `rejected`, `executing`, `succeeded`, `failed`, `timeout` |
 
 `robots.status`는 장치 상태만 표현한다. 임무 배정 여부는 `mission_robots`, WebRTC live 송출 여부와 freshness는 app-server 내부 SFU observed stream 상태를 기준으로 판단한다.
@@ -395,7 +400,7 @@ Python mock은 `channel.control`을 열지만 payload를 자동 송신하지 않
 | `mission_id` | uuid | yes | FK missions.id |
 | `robot_id` | uuid | yes | FK robots.id |
 | `chunk_index` | integer | yes | 0부터 시작 |
-| `status` | text | yes | create 시 `recording`, manifest upload 후 `uploaded` |
+| `status` | text | yes | create 시 `recording`, mission 종료 후 `finalizing`, manifest upload 후 `uploaded` |
 | `started_at` | timestamptz | yes | chunk start |
 | `ended_at` | timestamptz | no | chunk end |
 | `duration_seconds` | numeric | no | 현재 domain에서는 int로 노출 |
@@ -470,7 +475,53 @@ Upload 상태 갱신:
 - file upload 완료 시 `recording_chunks.metadata.availableFileTypes[fileType] = true`로 갱신한다.
 - manifest upload 완료 시 chunk `status = uploaded`, `manifest_object_id`를 설정한다.
 
-### 9.4 Live recording state와 replay/history 분리
+### 9.4 recording_finalization_jobs
+
+`recording_finalization_jobs`는 mission 종료 또는 recorder-worker 재시작 이후 미완료 chunk를 실제 저장 결과로 마무리하기 위한 durable queue다.
+
+| Column | Type | Required | Note |
+| --- | --- | --- | --- |
+| `id` | uuid | yes | PK |
+| `recording_chunk_id` | uuid | yes | FK recording_chunks.id, unique |
+| `recording_session_id` | uuid | yes | FK recording_sessions.id |
+| `mission_id` | uuid | yes | FK missions.id |
+| `robot_id` | uuid | yes | FK robots.id |
+| `status` | text | yes | `queued`, `processing`, `completed`, `partial`, `failed` |
+| `reason` | text | no | 생성/종료 사유 |
+| `attempts` | integer | yes | claim 시 증가 |
+| `locked_by` | text | no | worker id |
+| `locked_until` | timestamptz | no | lock TTL |
+| `last_error` | text | no | 마지막 실패 원인 |
+| `metadata` | jsonb | yes | default `{}` |
+| `completed_at` | timestamptz | no | terminal 상태 도달 시각 |
+| `created_at` / `updated_at` | timestamptz | yes |  |
+
+생성 규칙:
+
+- mission 종료 또는 recording 조회 시 app-server가 inactive mission의 미완료 chunk를 찾는다.
+- 대상 chunk 상태가 `recording` 또는 `pending`이면 `recording_finalization_jobs`를 `queued`로 만든다.
+- 같은 chunk에는 job을 하나만 만든다.
+- 대상 chunk는 `finalizing`으로 바꾼다.
+
+처리 규칙:
+
+- recorder-worker는 `POST /api/recorder/finalization-jobs/claim`으로 job을 claim한다.
+- DB claim은 row lock과 `SKIP LOCKED`를 사용해 여러 worker가 동시에 같은 job을 처리하지 않게 한다.
+- worker는 local spool에서 H264/Opus/DataChannel snapshot을 만들고 MP4/JSONL/manifest를 MinIO에 업로드한다.
+- 하나 이상의 media/data artifact가 업로드되고 manifest가 업로드되면 chunk는 `uploaded`, job은 `completed`가 된다.
+- 업로드 가능한 artifact가 하나도 없으면 chunk/job은 `partial`이 된다.
+- mux/upload 오류가 있으면 chunk/job은 `failed`가 된다.
+
+Scale-out 주의:
+
+- 현재 raw media spool은 recorder-worker local filesystem이다.
+- 여러 worker로 scale-out하면 job을 claim한 worker가 해당 chunk의 raw media를 갖고 있지 않을 수 있다.
+- 운영 scale-out에서는 mission room recorder ownership lease, shared spool, 또는 object staging이 필요하다.
+- MinIO object key와 upload callback은 idempotent해야 한다.
+- upload/file/chunk/job status callback은 `workerId + attempt`가 DB lock owner와 일치할 때만 반영한다. Lock TTL 이후 다른 worker가 재claim한 job을 이전 worker의 늦은 callback이 덮으면 안 된다.
+- `locked_until`이 지난 job은 다른 worker가 재claim할 수 있지만, raw media 소유권이 없으면 `partial`이 늘어날 수 있다.
+
+### 9.5 Live recording state와 replay/history 분리
 
 `recording_chunks`는 녹화 파일의 chunk lifecycle, upload 결과, replay metadata를 저장한다. Live 관제 화면에서 현재 `녹화 중`인지 판단하는 source of truth는 아니다.
 

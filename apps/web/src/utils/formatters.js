@@ -85,7 +85,10 @@ export function makeStatusLabel(status) {
     ended: "종료",
     cancelled: "취소",
     recording: "녹화 중",
-    uploaded: "업로드 완료"
+    finalizing: "저장 마무리",
+    uploaded: "업로드 완료",
+    partial: "부분 저장",
+    stopped: "부분 저장"
   };
   return labels[status] ?? status;
 }
