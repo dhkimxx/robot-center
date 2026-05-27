@@ -19,21 +19,22 @@ type Server struct {
 
 func NewServerWithStore(cfg config.AppServerConfig, repository store.Store) *Server {
 	services := service.NewServices(repository)
-	return &Server{
+	server := &Server{
 		config:   cfg,
 		services: services,
-		sfuHub: sfu.NewHub(sfu.Config{
-			TURNURL:      cfg.TURNURL,
-			TURNUsername: cfg.TURNUsername,
-			TURNPassword: cfg.TURNPassword,
-			ValidateRobotPublisher: func(roomID string, robotCode string) error {
-				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-				defer cancel()
-				return services.Missions.ValidateActiveMissionRobot(ctx, roomID, robotCode)
-			},
-		}),
-		started: time.Now().UTC(),
+		started:  time.Now().UTC(),
 	}
+	server.sfuHub = sfu.NewHub(sfu.Config{
+		TURNURL:      cfg.TURNURL,
+		TURNUsername: cfg.TURNUsername,
+		TURNPassword: cfg.TURNPassword,
+		ValidateRobotPublisher: func(roomID string, robotCode string) error {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			return services.Missions.ValidateActiveMissionRobot(ctx, roomID, robotCode)
+		},
+	})
+	return server
 }
 
 func NewServerFromConfig(ctx context.Context, cfg config.AppServerConfig) (*Server, error) {
@@ -80,7 +81,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/missions/{missionCode}/end", s.handleEndMission)
 	mux.HandleFunc("POST /api/robot-gateway/heartbeat", s.handleRobotGatewayHeartbeat)
 	mux.HandleFunc("GET /api/robot-gateway/mission", s.handleRobotGatewayMission)
-	mux.HandleFunc("GET /sfu/ws", s.handleSFUWebSocket)
+	mux.HandleFunc("GET /sfu/robot/ws", s.handleRobotSFUWebSocket)
+	mux.HandleFunc("GET /sfu/operator/ws", s.handleOperatorSFUWebSocket)
+	mux.HandleFunc("GET /sfu/recorder/ws", s.handleRecorderSFUWebSocket)
 
 	if s.config.WebStaticDir != "" {
 		mux.Handle("/", s.staticHandler())

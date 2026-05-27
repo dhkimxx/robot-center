@@ -18,7 +18,6 @@ APP_SERVER_URL="${APP_SERVER_URL:-}"
 MOCK_ROBOT_COUNT="${MOCK_ROBOT_COUNT:-2}"
 MOCK_SHARED_MISSION="${MOCK_SHARED_MISSION:-1}"
 MOCK_MISSION_CODE="${MOCK_MISSION_CODE:-}"
-MOCK_ROOM_ID="${MOCK_ROOM_ID:-}"
 MOCK_RGB_WIDTH="${MOCK_RGB_WIDTH:-1280}"
 MOCK_RGB_HEIGHT="${MOCK_RGB_HEIGHT:-720}"
 MOCK_THERMAL_WIDTH="${MOCK_THERMAL_WIDTH:-640}"
@@ -233,32 +232,6 @@ ensure_shared_active_mission() {
   esac
 }
 
-rtc_field() {
-  local field="$1"
-  json_get '
-import json,sys
-payload = json.load(sys.stdin)
-field = sys.argv[1]
-if field == "signalingUrl":
-    print(payload.get("signalingUrl", ""))
-    raise SystemExit
-servers = payload.get("iceServers", [])
-server = servers[0] if servers else {}
-if field == "turnUrl":
-    urls = server.get("urls", [])
-    if isinstance(urls, str):
-        print(urls)
-    elif urls:
-        print(urls[0])
-    else:
-        print("")
-elif field == "turnUsername":
-    print(server.get("username", ""))
-elif field == "turnPassword":
-    print(server.get("credential", ""))
-' "$field"
-}
-
 ensure_active_mission_for_robot() {
   local robot_code="$1"
   local active_mission_code
@@ -284,18 +257,7 @@ start_mock_robot() {
   local index="$1"
   local robot_code="$2"
   local robot_token="$3"
-  local mission_id="${4:-}"
-  local mission_code="${5:-}"
-  local room_id="${6:-}"
-  local signaling_url="${7:-}"
-  local turn_url="${8:-}"
-  local turn_username="${9:-}"
-  local turn_password="${10:-}"
   local session_name
-  local mission_args=""
-  if [[ -n "$mission_id" ]]; then
-    mission_args="--mission-id '$mission_id' --mission-code '$mission_code' --room-id '$room_id' --signaling-url '$signaling_url' --turn-url '$turn_url' --turn-username '$turn_username' --turn-password '$turn_password'"
-  fi
   session_name="$(printf '%s-%03d' "$MOCK_SESSION_PREFIX" "$((index + 1))")"
   start_screen_session "$session_name" "cd '$PYTHON_MOCK_DIR' && \
 '$PYTHON_VENV_DIR/bin/python' mock_robot.py \
@@ -306,8 +268,7 @@ start_mock_robot() {
   --rgb-height '$MOCK_RGB_HEIGHT' \
   --thermal-width '$MOCK_THERMAL_WIDTH' \
   --thermal-height '$MOCK_THERMAL_HEIGHT' \
-  --fps '$MOCK_FPS' \
-  $mission_args"
+  --fps '$MOCK_FPS'"
 }
 
 require_app_server_url
@@ -316,13 +277,7 @@ ensure_python_venv
 ensure_robot_count
 
 printf 'starting python mock robots against %s\n' "$APP_SERVER_URL"
-shared_mission_id=""
 shared_mission_code=""
-shared_room_id=""
-shared_signaling_url=""
-shared_turn_url=""
-shared_turn_username=""
-shared_turn_password=""
 if [[ "$MOCK_SHARED_MISSION" == "1" ]]; then
   shared_robot_codes=()
   for index in $(seq 0 "$((MOCK_ROBOT_COUNT - 1))"); do
@@ -330,18 +285,8 @@ if [[ "$MOCK_SHARED_MISSION" == "1" ]]; then
   done
   end_conflicting_active_missions "${shared_robot_codes[@]}"
   shared_mission_payload="$(ensure_shared_active_mission "${shared_robot_codes[@]}")"
-  shared_mission_id="$(printf '%s' "$shared_mission_payload" | mission_field id)"
-  if [[ -z "$shared_mission_id" ]]; then
-    shared_mission_id="$(printf '%s' "$shared_mission_payload" | mission_field missionId)"
-  fi
   shared_mission_code="$(printf '%s' "$shared_mission_payload" | mission_field missionCode)"
-  shared_room_id="${MOCK_ROOM_ID:-$shared_mission_code}"
-  rtc_payload="$(curl -fsS "$APP_SERVER_URL/api/rtc-config")"
-  shared_signaling_url="$(printf '%s' "$rtc_payload" | rtc_field signalingUrl)"
-  shared_turn_url="$(printf '%s' "$rtc_payload" | rtc_field turnUrl)"
-  shared_turn_username="$(printf '%s' "$rtc_payload" | rtc_field turnUsername)"
-  shared_turn_password="$(printf '%s' "$rtc_payload" | rtc_field turnPassword)"
-  printf 'shared mission: %s / room %s\n' "$shared_mission_code" "$shared_room_id"
+  printf 'shared mission: %s / room %s\n' "$shared_mission_code" "$shared_mission_code"
 fi
 
 for index in $(seq 0 "$((MOCK_ROBOT_COUNT - 1))"); do
@@ -349,7 +294,7 @@ for index in $(seq 0 "$((MOCK_ROBOT_COUNT - 1))"); do
   robot_token="$(connection_token_for "$robot_code")"
   if [[ "$MOCK_SHARED_MISSION" == "1" ]]; then
     mission_code="$shared_mission_code"
-    start_mock_robot "$index" "$robot_code" "$robot_token" "$shared_mission_id" "$shared_mission_code" "$shared_room_id" "$shared_signaling_url" "$shared_turn_url" "$shared_turn_username" "$shared_turn_password"
+    start_mock_robot "$index" "$robot_code" "$robot_token"
   else
     mission_code="$(ensure_active_mission_for_robot "$robot_code")"
     start_mock_robot "$index" "$robot_code" "$robot_token"

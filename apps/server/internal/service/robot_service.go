@@ -38,3 +38,7 @@ func (s *RobotService) RotateRobotConnectionToken(ctx context.Context, robotCode
 func (s *RobotService) ApplyHeartbeat(ctx context.Context, input store.HeartbeatInput, bearerToken string) (domain.Robot, error) {
 	return s.repository.ApplyHeartbeat(ctx, input, bearerToken)
 }
+
+func (s *RobotService) ResolveRobotByBearerToken(ctx context.Context, bearerToken string) (domain.Robot, error) {
+	return s.repository.ResolveRobotByBearerToken(ctx, bearerToken)
+}

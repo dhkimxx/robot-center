@@ -15,6 +15,12 @@ type Config struct {
 	ValidateRobotPublisher func(roomID string, robotCode string) error
 }
 
+type PeerJoinRequest struct {
+	RoomID    string
+	Role      string
+	RobotCode string
+}
+
 type Hub struct {
 	mu       sync.RWMutex
 	config   Config

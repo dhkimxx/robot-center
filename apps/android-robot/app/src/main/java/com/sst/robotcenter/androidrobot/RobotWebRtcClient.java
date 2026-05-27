@@ -262,6 +262,7 @@ public final class RobotWebRtcClient {
         httpClient = new OkHttpClient.Builder().build();
         Request request = new Request.Builder()
             .url(config.signalingUrl)
+            .header("Authorization", "Bearer " + config.robotToken)
             .build();
         webSocket = httpClient.newWebSocket(request, new WebSocketListener() {
             @Override
@@ -647,8 +648,7 @@ public final class RobotWebRtcClient {
             String payload = SensorPayloadFactory.createSensorPayload(
                 sensorSequence++,
                 sensorStartedAtMs,
-                config.robotCode,
-                config.missionId
+                config.robotCode
             );
             byte[] bytes = payload.getBytes(StandardCharsets.UTF_8);
             for (PeerSession session : peerSessions.values()) {
@@ -681,7 +681,6 @@ public final class RobotWebRtcClient {
                 telemetrySequence++,
                 telemetryStartedAtMs,
                 config.robotCode,
-                config.missionId,
                 locationProvider == null ? null : locationProvider.getLatestLocation()
             );
             byte[] bytes = payload.getBytes(StandardCharsets.UTF_8);

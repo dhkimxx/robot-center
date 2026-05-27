@@ -78,7 +78,7 @@ services:
       TURN_URL: ${TURN_URL:-turn:127.0.0.1:3478?transport=udp}
       TURN_USERNAME: ${TURN_USERNAME:-robot}
       TURN_PASSWORD: ${TURN_PASSWORD:-robot-pass}
-      SFU_WS_URL: ${SFU_WS_URL:-ws://localhost:8080/sfu/ws}
+      SFU_WS_BASE_URL: ${SFU_WS_BASE_URL:-ws://localhost:8080}
     command: ["/app/app-server"]
     ports:
       - "${APP_SERVER_HOST_PORT:-8080}:8080"
@@ -113,7 +113,7 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET:-robot-center}
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
-      SFU_WS_URL: ${SFU_WS_URL:-ws://app-server:8080/sfu/ws}
+      SFU_WS_BASE_URL: ${SFU_WS_BASE_URL:-ws://app-server:8080}
       TURN_URL: ${TURN_URL:-turn:127.0.0.1:3478?transport=udp}
       TURN_USERNAME: ${TURN_USERNAME:-robot}
       TURN_PASSWORD: ${TURN_PASSWORD:-robot-pass}

@@ -1,14 +1,10 @@
 package com.sst.robotcenter.androidrobot;
 
-import android.net.Uri;
-
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.IOException;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 
 import okhttp3.MediaType;
@@ -33,15 +29,13 @@ public final class RobotCenterApiClient {
 
     public void sendHeartbeat(String state) throws IOException, JSONException {
         JSONObject body = new JSONObject()
-            .put("robotCode", robotCode)
             .put("state", state)
             .put("sentAt", Instant.now().toString());
         post("/api/robot-gateway/heartbeat", body);
     }
 
     public RobotMissionConfig fetchMission() throws IOException, JSONException {
-        String encodedRobotCode = URLEncoder.encode(robotCode, StandardCharsets.UTF_8.name());
-        JSONObject response = get("/api/robot-gateway/mission?robotCode=" + encodedRobotCode);
+        JSONObject response = get("/api/robot-gateway/mission");
         String missionStatus = response.optString("missionStatus", "none");
         if (!"active".equals(missionStatus)) {
             return new RobotMissionConfig(
@@ -72,7 +66,7 @@ public final class RobotCenterApiClient {
             missionCode,
             missionStatus,
             roomId,
-            signalingUrlForRoom(sfu.getString("signalingUrl"), roomId),
+            sfu.getString("signalingUrl"),
             urls.getString(0),
             firstTurnServer.getString("username"),
             firstTurnServer.getString("credential")
@@ -125,23 +119,4 @@ public final class RobotCenterApiClient {
         return trimmed;
     }
 
-    private static String signalingUrlForRoom(String signalingUrl, String roomId) {
-        if (roomId == null || roomId.isEmpty()) {
-            return signalingUrl;
-        }
-        Uri uri = Uri.parse(signalingUrl);
-        Uri.Builder builder = uri.buildUpon();
-        builder.clearQuery();
-        for (String parameterName : uri.getQueryParameterNames()) {
-            if ("room".equals(parameterName) || "role".equals(parameterName)) {
-                continue;
-            }
-            for (String parameterValue : uri.getQueryParameters(parameterName)) {
-                builder.appendQueryParameter(parameterName, parameterValue);
-            }
-        }
-        builder.appendQueryParameter("room", roomId);
-        builder.appendQueryParameter("role", "robot");
-        return builder.build().toString();
-    }
 }

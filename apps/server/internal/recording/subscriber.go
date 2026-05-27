@@ -88,15 +88,15 @@ type recorderRobotRuntime struct {
 }
 
 func (w *Worker) runSubscriberLoop(ctx context.Context) {
-	if strings.TrimSpace(w.config.SFUWebSocketURL) == "" {
-		log.Println("recorder-worker subscriber disabled: SFU_WS_URL is empty")
+	if strings.TrimSpace(w.config.SFUWebSocketBaseURL) == "" {
+		log.Println("recorder-worker subscriber disabled: SFU_WS_BASE_URL is empty")
 		return
 	}
 
 	ticker := time.NewTicker(w.config.PollInterval)
 	defer ticker.Stop()
 
-	log.Printf("recorder-worker subscriber watching app-server=%s signaling=%s", w.config.AppServerURL, w.config.SFUWebSocketURL)
+	log.Printf("recorder-worker subscriber watching app-server=%s signaling=%s", w.config.AppServerURL, w.config.SFURecorderWebSocketURL())
 	w.syncSubscriberTargets(ctx)
 	for {
 		select {
@@ -261,7 +261,7 @@ func (w *Worker) resolveSubscriberStatusKeyLocked(roomID string) string {
 
 func (w *Worker) runRecorderSession(ctx context.Context, target domain.Mission) {
 	roomID := recorderSignalingRoomID(target.MissionCode)
-	signalingURL := buildSignalingURL(w.config.SFUWebSocketURL, roomID, "recorder")
+	signalingURL := buildSignalingURL(w.config.SFURecorderWebSocketURL(), roomID)
 
 	connection, _, err := websocket.DefaultDialer.DialContext(ctx, signalingURL, nil)
 	if err != nil {

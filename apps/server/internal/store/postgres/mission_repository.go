@@ -103,7 +103,8 @@ func (s *Store) FindActiveMissionForRobot(ctx context.Context, robotCode string,
 	}
 	defer rollbackUnlessCommitted(tx)
 
-	if _, err := s.authorizeRobot(ctx, tx, robotCode, bearerToken); err != nil {
+	robot, err := s.authorizeRobot(ctx, tx, robotCode, bearerToken)
+	if err != nil {
 		return domain.Mission{}, false, err
 	}
 
@@ -129,7 +130,7 @@ func (s *Store) FindActiveMissionForRobot(ctx context.Context, robotCode string,
 		GROUP BY m.id, m.mission_code, m.name, m.mission_type, m.status, m.site_note, m.started_at, m.ended_at, m.created_at, m.updated_at
 		ORDER BY m.started_at DESC NULLS LAST
 		LIMIT 1
-	`, strings.TrimSpace(robotCode))
+	`, robot.RobotCode)
 	mission, err := scanMissionWithRobotCodes(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		if err := tx.Commit(); err != nil {
@@ -143,6 +144,7 @@ func (s *Store) FindActiveMissionForRobot(ctx context.Context, robotCode string,
 	if err := tx.Commit(); err != nil {
 		return domain.Mission{}, false, err
 	}
+	mission.RobotCode = robot.RobotCode
 	return mission, true, nil
 }
 

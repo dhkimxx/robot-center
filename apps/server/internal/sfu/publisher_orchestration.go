@@ -178,7 +178,7 @@ func (h *Hub) forwardDataChannelMessage(roomID string, robotCode string, label s
 	}
 	h.mu.RUnlock()
 
-	message := string(dataChannelPayloadWithRobotCode(robotCode, payload))
+	message := string(dataChannelPayloadWithContext(roomID, robotCode, label, payload))
 	for _, channel := range channels {
 		if err := channel.SendText(message); err != nil {
 			log.Printf("sfu datachannel send failed room=%s robot=%s label=%s: %v", roomID, robotCode, label, err)

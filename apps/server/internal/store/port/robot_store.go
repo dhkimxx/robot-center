@@ -14,4 +14,5 @@ type RobotStore interface {
 	GetRobotConnectionInfo(ctx context.Context, robotCode string) (domain.RobotConnectionInfo, error)
 	RotateRobotConnectionToken(ctx context.Context, robotCode string) (domain.RobotConnectionInfo, error)
 	ApplyHeartbeat(ctx context.Context, input HeartbeatInput, bearerToken string) (domain.Robot, error)
+	ResolveRobotByBearerToken(ctx context.Context, bearerToken string) (domain.Robot, error)
 }

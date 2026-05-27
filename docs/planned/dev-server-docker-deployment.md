@@ -1,14 +1,15 @@
 ---
 title: "dev-server-docker-deployment"
 created: 2026-05-27
-updated: 2026-05-27
+updated: '2026-05-27'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>"]
 type: "runbook"
 status: "planned"
 tags: ["dev-server", "docker", "deployment", "ops", "runbook"]
 history:
-  - "2026-05-27 danya.kim <danya.kim@thundersoft.com>: split deployment procedure from robot team WebRTC send guide"
+- "2026-05-27 danya.kim <danya.kim@thundersoft.com>: split deployment procedure from robot team WebRTC send guide"
+- '2026-05-27 danya.kim <danya.kim@thundersoft.com>: rename SFU WebSocket env to base URL and document operator endpoint'
 ---
 
 # Dev Server Docker Deployment
@@ -82,7 +83,7 @@ APP_ENV=development
 
 APP_SERVER_HOST_PORT=18080
 APP_SERVER_PUBLIC_URL=http://192.168.20.12:18080
-SFU_WS_URL=ws://192.168.20.12:18080/sfu/ws
+SFU_WS_BASE_URL=ws://192.168.20.12:18080
 
 RECORDER_WORKER_HOST_PORT=18082
 RECORDER_WORKER_POLL_INTERVAL=5s
@@ -155,7 +156,7 @@ curl -fsS http://192.168.20.12:18080/api/rtc-config
 `/api/rtc-config`는 다음 public address를 반환해야 한다.
 
 ```text
-signalingUrl: ws://192.168.20.12:18080/sfu/ws
+signalingUrl: ws://192.168.20.12:18080/sfu/operator/ws
 TURN URL: turn:192.168.20.12:3478?transport=udp
 iceTransportPolicy: relay
 ```

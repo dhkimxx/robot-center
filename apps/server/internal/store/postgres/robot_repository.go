@@ -256,6 +256,23 @@ func (s *Store) ApplyHeartbeat(ctx context.Context, input repo.HeartbeatInput, b
 	return robot, nil
 }
 
+func (s *Store) ResolveRobotByBearerToken(ctx context.Context, bearerToken string) (domain.Robot, error) {
+	tx, err := s.sqlDB.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.Robot{}, err
+	}
+	defer rollbackUnlessCommitted(tx)
+
+	robot, err := s.authorizeRobot(ctx, tx, "", bearerToken)
+	if err != nil {
+		return domain.Robot{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return domain.Robot{}, err
+	}
+	return robot, nil
+}
+
 func (s *Store) findRobotRecordByCodeWithGorm(tx *gorm.DB, robotCode string) (model.RobotModel, error) {
 	var record model.RobotModel
 	err := tx.Where("robot_code = ? AND archived_at IS NULL", strings.TrimSpace(robotCode)).Take(&record).Error
@@ -322,7 +339,9 @@ func (s *Store) authorizeRobotWithGorm(tx *gorm.DB, robotCode string, bearerToke
 }
 
 func (s *Store) authorizeRobot(ctx context.Context, tx *sql.Tx, robotCode string, bearerToken string) (domain.Robot, error) {
-	if strings.TrimSpace(robotCode) == "" || strings.TrimSpace(bearerToken) == "" {
+	trimmedRobotCode := strings.TrimSpace(robotCode)
+	trimmedToken := strings.TrimSpace(bearerToken)
+	if trimmedToken == "" {
 		return domain.Robot{}, repo.ErrUnauthorized
 	}
 	row := tx.QueryRowContext(ctx, `
@@ -330,9 +349,9 @@ func (s *Store) authorizeRobot(ctx context.Context, tx *sql.Tx, robotCode string
 		       r.last_seen_at, r.created_at, r.updated_at
 			FROM robots r
 			JOIN robot_tokens rt ON rt.robot_id = r.id
-			WHERE r.robot_code = $1 AND r.archived_at IS NULL AND rt.token_hash = $2 AND rt.is_active = true
+			WHERE ($1 = '' OR r.robot_code = $1) AND r.archived_at IS NULL AND rt.token_hash = $2 AND rt.is_active = true
 			LIMIT 1
-	`, strings.TrimSpace(robotCode), utils.HashToken(strings.TrimSpace(bearerToken)))
+	`, trimmedRobotCode, utils.HashToken(trimmedToken))
 	robot, err := scanRobot(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.Robot{}, repo.ErrUnauthorized
@@ -343,7 +362,7 @@ func (s *Store) authorizeRobot(ctx context.Context, tx *sql.Tx, robotCode string
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE robot_tokens SET last_used_at = now()
 		WHERE robot_id = $1::uuid AND token_hash = $2
-	`, robot.ID, utils.HashToken(strings.TrimSpace(bearerToken))); err != nil {
+	`, robot.ID, utils.HashToken(trimmedToken)); err != nil {
 		return domain.Robot{}, err
 	}
 	return robot, nil

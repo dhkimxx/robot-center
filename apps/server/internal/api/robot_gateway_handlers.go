@@ -3,7 +3,6 @@ package api
 import (
 	"net/http"
 	"net/url"
-	"robot-center/apps/server/internal/domain"
 	"robot-center/apps/server/internal/sfu"
 	"robot-center/apps/server/internal/store"
 	"robot-center/apps/server/internal/utils"
@@ -47,8 +46,8 @@ func (s *Server) handleRobotGatewayHeartbeat(w http.ResponseWriter, r *http.Requ
 }
 
 func (s *Server) handleRobotGatewayMission(w http.ResponseWriter, r *http.Request) {
-	robotCode := strings.TrimSpace(r.URL.Query().Get("robotCode"))
-	mission, found, err := s.services.Missions.FindActiveMissionForRobot(r.Context(), robotCode, bearerToken(r))
+	requestedRobotCode := strings.TrimSpace(r.URL.Query().Get("robotCode"))
+	mission, found, err := s.services.Missions.FindActiveMissionForRobot(r.Context(), requestedRobotCode, bearerToken(r))
 	if err != nil {
 		writeStoreError(w, err)
 		return
@@ -62,15 +61,15 @@ func (s *Server) handleRobotGatewayMission(w http.ResponseWriter, r *http.Reques
 	}
 
 	roomID := mission.MissionCode
-	legacyRoomID := domain.StreamRoomID(mission.MissionCode, robotCode)
+	robotCode := mission.RobotCode
 	writeJSON(w, http.StatusOK, map[string]any{
 		"missionId":     mission.ID,
 		"missionCode":   mission.MissionCode,
 		"missionStatus": mission.Status,
+		"robotCode":     robotCode,
 		"roomId":        roomID,
-		"legacyRoomId":  legacyRoomID,
 		"sfu": map[string]any{
-			"signalingUrl":       s.config.SFUWebSocketURL + "?room=" + url.QueryEscape(roomID) + "&role=robot&robotCode=" + url.QueryEscape(robotCode),
+			"signalingUrl":       s.config.SFURobotWebSocketURL() + "?room=" + url.QueryEscape(roomID),
 			"iceTransportPolicy": "relay",
 		},
 		"turnServers": []map[string]any{
@@ -92,8 +91,6 @@ func (s *Server) handleRobotGatewayMission(w http.ResponseWriter, r *http.Reques
 			sfu.StreamRoleChannelEvent,
 			sfu.StreamRoleChannelControl,
 		},
-		"legacyTracks":       []string{"rgb", "thermal", "audio"},
-		"legacyDataChannels": []string{"sensor", "telemetry"},
 		"videoPolicy": map[string]string{
 			"mode": "robot_defined",
 		},

@@ -14,8 +14,7 @@ export function createLiveConnectionClient({
   rtcConfig
 }) {
   const websocket = new WebSocket(websocketUrlWithQuery(rtcConfig.signalingUrl, {
-    room: missionRoomId,
-    role: "operator"
+    room: missionRoomId
   }));
   const peerConnection = new RTCPeerConnection({
     iceServers: rtcConfig.iceServers ?? [],

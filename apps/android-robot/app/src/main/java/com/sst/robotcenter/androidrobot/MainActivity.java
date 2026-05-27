@@ -221,6 +221,10 @@ public class MainActivity extends Activity {
         try {
             RobotMissionConfig mission = apiClient.fetchMission();
             if (!mission.active) {
+                if (robotClient != null) {
+                    robotClient.stop();
+                    robotClient = null;
+                }
                 activeMissionCode = null;
                 appendLog("mission polling: " + mission.missionStatus);
                 setStatus("online / waiting mission");
@@ -247,6 +251,7 @@ public class MainActivity extends Activity {
                 mission.turnUrl,
                 mission.turnUsername,
                 mission.turnPassword,
+                robotTokenInput.getText().toString().trim(),
                 robotCodeInput.getText().toString().trim(),
                 mission.missionId,
                 mission.missionCode,

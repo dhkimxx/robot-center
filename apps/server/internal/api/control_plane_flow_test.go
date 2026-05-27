@@ -23,15 +23,15 @@ func TestControlPlaneFlow(t *testing.T) {
 	defer recorderHealth.Close()
 
 	appServer, err := NewServerFromConfig(context.Background(), config.AppServerConfig{
-		PostgresDSN:       postgresDSN,
-		PublicURL:         "http://center.local",
-		RecorderWorkerURL: recorderHealth.URL,
-		SFUWebSocketURL:   "ws://center.local/sfu/ws",
-		TURNURL:           "turn:127.0.0.1:3478?transport=udp",
-		TURNUsername:      "robot",
-		TURNPassword:      "robot-pass",
-		MinIOEndpoint:     "http://127.0.0.1:9000",
-		MinIOBucket:       "robot-center-poc",
+		PostgresDSN:         postgresDSN,
+		PublicURL:           "http://center.local",
+		RecorderWorkerURL:   recorderHealth.URL,
+		SFUWebSocketBaseURL: "ws://center.local",
+		TURNURL:             "turn:127.0.0.1:3478?transport=udp",
+		TURNUsername:        "robot",
+		TURNPassword:        "robot-pass",
+		MinIOEndpoint:       "http://127.0.0.1:9000",
+		MinIOBucket:         "robot-center-poc",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -143,15 +143,25 @@ func TestControlPlaneFlow(t *testing.T) {
 		t.Fatalf("expected conflict robot %s active in %s, got %#v", robotCode, missionCode, conflict)
 	}
 
-	missionPayload := requestJSON[map[string]any](t, server.URL, http.MethodGet, "/api/robot-gateway/mission?robotCode="+robotCode, robotToken, nil)
+	missionPayload := requestJSON[map[string]any](t, server.URL, http.MethodGet, "/api/robot-gateway/mission", robotToken, nil)
 	if missionPayload["missionStatus"] != "active" {
 		t.Fatalf("expected active robot mission, got %#v", missionPayload)
+	}
+	if missionPayload["robotCode"] != robotCode {
+		t.Fatalf("expected token-authenticated robotCode, got %#v", missionPayload)
 	}
 	if missionPayload["roomId"] != missionCode {
 		t.Fatalf("expected gateway roomId to be missionCode, got %#v", missionPayload)
 	}
-	if missionPayload["legacyRoomId"] != missionCode+"__"+robotCode {
-		t.Fatalf("expected legacy room id for compatibility, got %#v", missionPayload)
+	if _, ok := missionPayload["legacyRoomId"]; ok {
+		t.Fatalf("legacyRoomId should not be exposed, got %#v", missionPayload)
+	}
+	sfuPayload := missionPayload["sfu"].(map[string]any)
+	if _, ok := sfuPayload["publisherToken"]; ok {
+		t.Fatalf("publisherToken should not be exposed in the P0 robot contract, got %#v", missionPayload)
+	}
+	if sfuPayload["signalingUrl"] != "ws://center.local/sfu/robot/ws?room="+missionCode {
+		t.Fatalf("expected role-specific robot signaling URL, got %#v", sfuPayload)
 	}
 	assertStringListEqual(t, missionPayload["tracks"], []string{
 		sfu.StreamRoleTrackVideo1,
@@ -165,7 +175,11 @@ func TestControlPlaneFlow(t *testing.T) {
 		sfu.StreamRoleChannelEvent,
 		sfu.StreamRoleChannelControl,
 	})
-	supportMissionPayload := requestJSON[map[string]any](t, server.URL, http.MethodGet, "/api/robot-gateway/mission?robotCode="+supportRobotCode, supportRobotToken, nil)
+	mismatchStatus, _ := requestRawJSON(t, server.URL, http.MethodGet, "/api/robot-gateway/mission?robotCode="+supportRobotCode, robotToken, nil)
+	if mismatchStatus != http.StatusUnauthorized {
+		t.Fatalf("expected robotCode/token mismatch to be unauthorized, got %d", mismatchStatus)
+	}
+	supportMissionPayload := requestJSON[map[string]any](t, server.URL, http.MethodGet, "/api/robot-gateway/mission", supportRobotToken, nil)
 	if supportMissionPayload["missionStatus"] != "active" || supportMissionPayload["roomId"] != missionCode {
 		t.Fatalf("expected active support robot mission in shared room, got %#v", supportMissionPayload)
 	}
@@ -283,7 +297,7 @@ func TestControlPlaneFlow(t *testing.T) {
 		t.Fatalf("expected ended mission, got %#v", endedMission)
 	}
 	assertStringListEqual(t, endedMission["robotCodes"], []string{robotCode, supportRobotCode})
-	endedGatewayPayload := requestJSON[map[string]any](t, server.URL, http.MethodGet, "/api/robot-gateway/mission?robotCode="+supportRobotCode, supportRobotToken, nil)
+	endedGatewayPayload := requestJSON[map[string]any](t, server.URL, http.MethodGet, "/api/robot-gateway/mission", supportRobotToken, nil)
 	if endedGatewayPayload["missionStatus"] != "none" {
 		t.Fatalf("expected no active support robot mission after end, got %#v", endedGatewayPayload)
 	}

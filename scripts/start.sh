@@ -5,13 +5,13 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 HOST_IP="$(detect_host_ip)"
 PUBLIC_URL="${PUBLIC_URL:-http://$HOST_IP:$APP_PORT}"
-SFU_WS_PUBLIC_URL="${SFU_WS_URL:-ws://$HOST_IP:$APP_PORT/sfu/ws}"
+SFU_WS_BASE_PUBLIC_URL="${SFU_WS_BASE_URL:-ws://$HOST_IP:$APP_PORT}"
 TURN_PUBLIC_IP_VALUE="${TURN_PUBLIC_IP:-$HOST_IP}"
 TURN_URL_VALUE="${TURN_URL:-turn:$HOST_IP:$TURN_PORT?transport=udp}"
 
 printf 'host ip: %s\n' "$HOST_IP"
 printf 'public url: %s\n' "$PUBLIC_URL"
-printf 'sfu ws url: %s\n' "$SFU_WS_PUBLIC_URL"
+printf 'sfu ws base url: %s\n' "$SFU_WS_BASE_PUBLIC_URL"
 printf 'turn url: %s\n' "$TURN_URL_VALUE"
 printf 'starting postgres/minio...\n'
 docker compose -f "$COMPOSE_FILE" up -d postgres minio
@@ -71,7 +71,7 @@ POSTGRES_USER='$POSTGRES_USER' \
 POSTGRES_PASSWORD='$POSTGRES_PASSWORD' \
 MINIO_ENDPOINT='$MINIO_ENDPOINT' \
 MINIO_BUCKET='$MINIO_BUCKET' \
-SFU_WS_URL='$SFU_WS_PUBLIC_URL' \
+SFU_WS_BASE_URL='$SFU_WS_BASE_PUBLIC_URL' \
 TURN_URL='$TURN_URL_VALUE' \
 TURN_USERNAME='robot' \
 TURN_PASSWORD='robot-pass' \
@@ -93,7 +93,7 @@ MINIO_ENDPOINT='$MINIO_ENDPOINT' \
 MINIO_BUCKET='$MINIO_BUCKET' \
 MINIO_ROOT_USER='$MINIO_ROOT_USER' \
 MINIO_ROOT_PASSWORD='$MINIO_ROOT_PASSWORD' \
-SFU_WS_URL='$SFU_WS_PUBLIC_URL' \
+SFU_WS_BASE_URL='$SFU_WS_BASE_PUBLIC_URL' \
 TURN_URL='$TURN_URL_VALUE' \
 TURN_USERNAME='robot' \
 TURN_PASSWORD='robot-pass' \

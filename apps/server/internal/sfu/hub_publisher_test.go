@@ -2,7 +2,6 @@ package sfu
 
 import (
 	"errors"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -50,17 +49,17 @@ func TestHubRejectsRobotOfferWhenPublisherGuardFails(t *testing.T) {
 
 func TestHubSummarizesMultiPublisherMissionRoom(t *testing.T) {
 	hub := NewHub()
-	server := httptest.NewServer(hub)
+	server := newTestSFUServer(hub)
 	defer server.Close()
 
 	websocketURL := "ws" + strings.TrimPrefix(server.URL, "http")
-	robotA := dialPeer(t, websocketURL+"?room=mission-001&role=robot&robotCode=robot-001")
+	robotA := dialPeer(t, websocketURL+"/sfu/robot/ws?room=mission-001&robotCode=robot-001")
 	defer robotA.Close()
-	robotB := dialPeer(t, websocketURL+"?room=mission-001&role=robot&robotCode=robot-002")
+	robotB := dialPeer(t, websocketURL+"/sfu/robot/ws?room=mission-001&robotCode=robot-002")
 	defer robotB.Close()
-	operator := dialPeer(t, websocketURL+"?room=mission-001&role=operator")
+	operator := dialPeer(t, websocketURL+"/sfu/operator/ws?room=mission-001")
 	defer operator.Close()
-	recorder := dialPeer(t, websocketURL+"?room=mission-001&role=recorder")
+	recorder := dialPeer(t, websocketURL+"/sfu/recorder/ws?room=mission-001")
 	defer recorder.Close()
 
 	summary := waitForRoomSummary(t, hub, "mission-001")

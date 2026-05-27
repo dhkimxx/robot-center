@@ -27,15 +27,19 @@ func NewHub(configs ...Config) *Hub {
 }
 
 func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	roomID := strings.TrimSpace(r.URL.Query().Get("room"))
-	role := strings.TrimSpace(r.URL.Query().Get("role"))
-	robotCode := strings.TrimSpace(r.URL.Query().Get("robotCode"))
+	http.NotFound(w, r)
+}
+
+func (h *Hub) ServePeer(w http.ResponseWriter, r *http.Request, request PeerJoinRequest) {
+	roomID := strings.TrimSpace(request.RoomID)
+	role := strings.TrimSpace(request.Role)
+	robotCode := strings.TrimSpace(request.RobotCode)
 	if roomID == "" || role == "" {
-		http.Error(w, "room and role query parameters are required", http.StatusBadRequest)
+		http.Error(w, "room and role are required", http.StatusBadRequest)
 		return
 	}
 	if role == "robot" && robotCode == "" {
-		http.Error(w, "robotCode query parameter is required for robot peers", http.StatusBadRequest)
+		http.Error(w, "robotCode is required for robot peers", http.StatusInternalServerError)
 		return
 	}
 	if role != "robot" {

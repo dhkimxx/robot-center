@@ -1,19 +1,33 @@
 package sfu
 
 import (
-	"net/http/httptest"
+	"net/http"
 	"strings"
 	"testing"
 )
 
+func TestLegacySFUWebSocketEndpointIsDisabled(t *testing.T) {
+	server := newTestSFUServer(NewHub())
+	defer server.Close()
+
+	response, err := http.Get(server.URL + "/sfu/ws?room=mission-001&role=operator")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected legacy /sfu/ws endpoint to be disabled, got %d", response.StatusCode)
+	}
+}
+
 func TestHubAnnouncesServerPeerAndRoomPeers(t *testing.T) {
-	server := httptest.NewServer(NewHub())
+	server := newTestSFUServer(NewHub())
 	defer server.Close()
 
 	websocketURL := "ws" + strings.TrimPrefix(server.URL, "http")
-	robot := dialPeer(t, websocketURL+"?room=mission-001&role=robot&robotCode=robot-001")
+	robot := dialPeer(t, websocketURL+"/sfu/robot/ws?room=mission-001&robotCode=robot-001")
 	defer robot.Close()
-	operator := dialPeer(t, websocketURL+"?room=mission-001&role=operator")
+	operator := dialPeer(t, websocketURL+"/sfu/operator/ws?room=mission-001")
 	defer operator.Close()
 
 	if message := readMessage(t, robot); message.Type != "joined" {
@@ -36,33 +50,20 @@ func TestHubAnnouncesServerPeerAndRoomPeers(t *testing.T) {
 	}
 }
 
-func TestOperatorQueryRobotCodeDoesNotPreselectRobot(t *testing.T) {
+func TestOperatorEndpointRejectsRobotCodeQuery(t *testing.T) {
 	hub := NewHub()
-	server := httptest.NewServer(hub)
+	server := newTestSFUServer(hub)
 	defer server.Close()
 
 	websocketURL := "ws" + strings.TrimPrefix(server.URL, "http")
-	operator := dialPeer(t, websocketURL+"?room=mission-001&role=operator&robotCode=robot-001")
-	defer operator.Close()
-
-	if message := readMessage(t, operator); message.Type != "joined" {
-		t.Fatalf("expected operator joined message, got %#v", message)
+	conn, response, err := dialPeerResponse(t, websocketURL+"/sfu/operator/ws?room=mission-001&robotCode=robot-001")
+	if conn != nil {
+		conn.Close()
 	}
-	if message := readMessage(t, operator); message.Type != "peer-present" || message.Payload["role"] != "sfu" {
-		t.Fatalf("expected operator peer-present sfu, got %#v", message)
+	if err == nil {
+		t.Fatal("expected operator websocket with robotCode query to be rejected")
 	}
-
-	summary := waitForRoomSummary(t, hub, "mission-001")
-	if len(summary.Peers) != 1 || summary.Peers[0].RobotCode != "" || summary.Peers[0].SelectedRobotCode != "" {
-		t.Fatalf("expected operator query robotCode to be ignored, got %#v", summary.Peers)
+	if response == nil || response.StatusCode != 400 {
+		t.Fatalf("expected 400 response, got response=%v err=%v", response, err)
 	}
-
-	hub.mu.RLock()
-	currentRoom := hub.rooms["mission-001"]
-	if currentRoom == nil ||
-		currentRoom.peers[summary.Peers[0].PeerID].robotCode != "" ||
-		currentRoom.peers[summary.Peers[0].PeerID].selectedRobotCode != "" {
-		t.Fatalf("expected operator peer robotCode and selectedRobotCode to stay empty")
-	}
-	hub.mu.RUnlock()
 }

@@ -176,6 +176,10 @@ func (s *recordingStoreSpy) RotateRobotConnectionToken(_ context.Context, _ stri
 	return domain.RobotConnectionInfo{}, nil
 }
 
+func (s *recordingStoreSpy) ResolveRobotByBearerToken(_ context.Context, _ string) (domain.Robot, error) {
+	return domain.Robot{}, nil
+}
+
 func (s *recordingStoreSpy) ApplyHeartbeat(_ context.Context, _ store.HeartbeatInput, _ string) (domain.Robot, error) {
 	return domain.Robot{}, nil
 }

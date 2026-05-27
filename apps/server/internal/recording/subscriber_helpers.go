@@ -12,14 +12,13 @@ import (
 	"robot-center/apps/server/internal/domain"
 )
 
-func buildSignalingURL(baseURL string, roomID string, role string) string {
+func buildSignalingURL(baseURL string, roomID string) string {
 	parsed, err := url.Parse(baseURL)
 	if err != nil {
 		return baseURL
 	}
 	query := parsed.Query()
 	query.Set("room", roomID)
-	query.Set("role", role)
 	parsed.RawQuery = query.Encode()
 	return parsed.String()
 }
@@ -243,18 +242,24 @@ func robotCodeFromDataPayload(payload []byte) string {
 	return strings.TrimSpace(robotCode)
 }
 
-func recorderDataChannelPayloadWithRobotCode(robotCode string, payload []byte) []byte {
-	if strings.TrimSpace(robotCode) == "" || !json.Valid(payload) {
+func recorderDataChannelPayloadWithContext(roomID string, robotCode string, channelRole string, payload []byte) []byte {
+	if !json.Valid(payload) {
 		return payload
 	}
 	var object map[string]any
 	if err := json.Unmarshal(payload, &object); err != nil || object == nil {
 		return payload
 	}
-	if _, ok := object["robotCode"]; ok {
-		return payload
+	if strings.TrimSpace(robotCode) != "" {
+		object["robotCode"] = strings.TrimSpace(robotCode)
 	}
-	object["robotCode"] = strings.TrimSpace(robotCode)
+	if strings.TrimSpace(roomID) != "" {
+		object["missionId"] = strings.TrimSpace(roomID)
+		object["missionCode"] = strings.TrimSpace(roomID)
+	}
+	if strings.TrimSpace(channelRole) != "" {
+		object["channelRole"] = strings.TrimSpace(channelRole)
+	}
 	encoded, err := json.Marshal(object)
 	if err != nil {
 		return payload

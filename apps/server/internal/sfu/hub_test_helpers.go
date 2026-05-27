@@ -1,10 +1,45 @@
 package sfu
 
 import (
-	"github.com/gorilla/websocket"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
+
+func newTestSFUServer(hub *Hub) *httptest.Server {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /sfu/robot/ws", func(w http.ResponseWriter, r *http.Request) {
+		hub.ServePeer(w, r, PeerJoinRequest{
+			RoomID:    r.URL.Query().Get("room"),
+			Role:      "robot",
+			RobotCode: r.URL.Query().Get("robotCode"),
+		})
+	})
+	mux.HandleFunc("GET /sfu/operator/ws", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("robotCode") != "" {
+			http.Error(w, "robotCode query is not allowed for operator websocket", http.StatusBadRequest)
+			return
+		}
+		hub.ServePeer(w, r, PeerJoinRequest{
+			RoomID: r.URL.Query().Get("room"),
+			Role:   "operator",
+		})
+	})
+	mux.HandleFunc("GET /sfu/recorder/ws", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("robotCode") != "" {
+			http.Error(w, "robotCode query is not allowed for recorder websocket", http.StatusBadRequest)
+			return
+		}
+		hub.ServePeer(w, r, PeerJoinRequest{
+			RoomID: r.URL.Query().Get("room"),
+			Role:   "recorder",
+		})
+	})
+	return httptest.NewServer(mux)
+}
 
 func dialPeer(t *testing.T, url string) *websocket.Conn {
 	t.Helper()
@@ -14,6 +49,12 @@ func dialPeer(t *testing.T, url string) *websocket.Conn {
 		t.Fatalf("dial %s: %v", url, err)
 	}
 	return conn
+}
+
+func dialPeerResponse(t *testing.T, url string) (*websocket.Conn, *http.Response, error) {
+	t.Helper()
+
+	return websocket.DefaultDialer.Dial(url, nil)
 }
 
 func readMessage(t *testing.T, conn *websocket.Conn) signalMessage {

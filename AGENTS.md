@@ -25,7 +25,7 @@
 다음 항목을 변경할 때는 구현 전에 영향 범위를 명시하고, 외부 실제 로봇 쪽 수정 또는 로봇팀 확인이 필요한지 먼저 판단한다.
 
 - Robot Gateway REST API: heartbeat, mission 조회, connection-info, token 정책
-- WebRTC signaling 계약: `/sfu/ws` query parameter, signaling message type/payload
+- WebRTC signaling 계약: role별 `/sfu/robot/ws`, `/sfu/operator/ws`, `/sfu/recorder/ws` endpoint와 signaling message type/payload
 - Room/identity 규칙: `missionId`, `missionCode`, `roomId`, `robotCode`
 - Media/DataChannel 계약: `track.video_1`, `track.video_2`, `track.audio_1`, `channel.telemetry`, `channel.spatial`, `channel.event`, `channel.control`
 - Sensor/telemetry payload schema와 저장/표시 의미

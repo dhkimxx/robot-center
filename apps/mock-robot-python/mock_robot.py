@@ -31,16 +31,14 @@ def trim_trailing_slash(value: str) -> str:
     return value.rstrip("/")
 
 
-def websocket_url_with_room(base_url: str, room_id: str, role: str, robot_code: str = "") -> str:
+def websocket_url_with_room(base_url: str, room_id: str) -> str:
     split_url = urlsplit(base_url)
     query_items = [
         (key, value)
         for key, value in parse_qsl(split_url.query, keep_blank_values=True)
-        if key not in ("room", "role", "robotCode")
+        if key != "room"
     ]
-    query_items.extend([("room", room_id), ("role", role)])
-    if robot_code:
-        query_items.append(("robotCode", robot_code))
+    query_items.append(("room", room_id))
     return urlunsplit(
         (
             split_url.scheme,
@@ -50,6 +48,12 @@ def websocket_url_with_room(base_url: str, room_id: str, role: str, robot_code: 
             split_url.fragment,
         )
     )
+
+
+def robot_signaling_url_from_server_url(server_url: str) -> str:
+    split_url = urlsplit(server_url)
+    scheme = "wss" if split_url.scheme == "https" else "ws"
+    return urlunsplit((scheme, split_url.netloc, "/sfu/robot/ws", "", ""))
 
 
 def strip_non_relay_candidates(sdp: str) -> str:
@@ -364,12 +368,12 @@ class MockRobot:
         if not mission_id or not mission_code:
             raise ValueError("--mission-id and --mission-code are required for mission override")
 
-        rtc_config = await self.get_json("/api/rtc-config")
         room_id = self.override_room_id or mission_code
-        signaling_url = self.override_signaling_url or rtc_config.get("signalingUrl")
+        signaling_url = self.override_signaling_url or robot_signaling_url_from_server_url(self.server_url)
         if not signaling_url:
             raise ValueError("signalingUrl is required for mission override")
 
+        rtc_config = await self.get_json("/api/rtc-config")
         turn_servers = self.create_turn_servers(rtc_config)
         mission = {
             "missionId": mission_id,
@@ -377,7 +381,7 @@ class MockRobot:
             "missionStatus": "active",
             "roomId": room_id,
             "sfu": {
-                "signalingUrl": websocket_url_with_room(signaling_url, room_id, "robot", self.robot_code),
+                "signalingUrl": websocket_url_with_room(signaling_url, room_id),
                 "iceTransportPolicy": rtc_config.get("iceTransportPolicy", "relay"),
             },
             "turnServers": turn_servers,
@@ -410,16 +414,13 @@ class MockRobot:
         raise asyncio.CancelledError
 
     async def fetch_active_mission(self) -> dict[str, Any]:
-        mission = await self.get_json(
-            f"/api/robot-gateway/mission?robotCode={self.robot_code}"
-        )
+        mission = await self.get_json("/api/robot-gateway/mission")
         if mission.get("missionStatus") == "active":
             return mission
         return {}
 
     async def send_heartbeat(self, state: str) -> None:
         payload = {
-            "robotCode": self.robot_code,
             "state": state,
             "batteryPercent": self.current_battery_percent(),
             "networkQuality": "mock-local",
@@ -431,7 +432,8 @@ class MockRobot:
         signaling_url = self.mission["sfu"]["signalingUrl"]
         self.log(f"signaling connecting: {signaling_url}")
         assert self.session is not None
-        async with self.session.ws_connect(signaling_url, heartbeat=20) as websocket:
+        headers = {"Authorization": f"Bearer {self.robot_token}"}
+        async with self.session.ws_connect(signaling_url, heartbeat=20, headers=headers) as websocket:
             self.websocket = websocket
             self.log("signaling connected")
             heartbeat_task = asyncio.create_task(self.heartbeat_loop())
@@ -631,9 +633,6 @@ class MockRobot:
         return {
             "messageId": f"{self.robot_code}-telemetry-{self.sequence}",
             "messageType": "telemetry",
-            "channelRole": "channel.telemetry",
-            "robotCode": self.robot_code,
-            "missionId": self.mission["missionId"],
             "sequence": self.sequence,
             "sentAt": utc_now_iso(),
             "descriptors": [
@@ -720,9 +719,6 @@ class MockRobot:
         return {
             "messageId": f"{self.robot_code}-event-{self.sequence}",
             "messageType": "event.robot_heartbeat",
-            "channelRole": "channel.event",
-            "robotCode": self.robot_code,
-            "missionId": self.mission["missionId"],
             "sequence": self.sequence,
             "sentAt": utc_now_iso(),
             "event": {
@@ -736,9 +732,6 @@ class MockRobot:
         return {
             "messageId": f"{self.robot_code}-spatial-{self.sequence}",
             "messageType": "spatial.status",
-            "channelRole": "channel.spatial",
-            "robotCode": self.robot_code,
-            "missionId": self.mission["missionId"],
             "sequence": self.sequence,
             "sentAt": utc_now_iso(),
             "descriptors": [

@@ -146,7 +146,7 @@ func (w *Worker) normalizeRecorderDataChannelMessage(roomID string, label string
 		return recorderDataChannelMessage{}, false
 	}
 	if robotCode != "" {
-		payload = recorderDataChannelPayloadWithRobotCode(robotCode, payload)
+		payload = recorderDataChannelPayloadWithContext(roomID, robotCode, storageLabel, payload)
 	}
 
 	return recorderDataChannelMessage{

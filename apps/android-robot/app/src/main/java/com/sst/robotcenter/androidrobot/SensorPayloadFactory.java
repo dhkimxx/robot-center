@@ -11,7 +11,7 @@ public final class SensorPayloadFactory {
     private SensorPayloadFactory() {
     }
 
-    public static String createSensorPayload(int sequence, long startedAtMs, String robotCode, String missionId) {
+    public static String createSensorPayload(int sequence, long startedAtMs, String robotCode) {
         long nowMs = System.currentTimeMillis();
         double elapsedSeconds = (nowMs - startedAtMs) / 1000.0;
         try {
@@ -24,8 +24,6 @@ public final class SensorPayloadFactory {
                 .put("messageId", robotCode + "-sensor-" + sequence)
                 .put("schemaVersion", "1.0")
                 .put("messageType", "sensor")
-                .put("robotCode", robotCode)
-                .put("missionId", missionId)
                 .put("sequence", sequence)
                 .put("sentAt", Instant.ofEpochMilli(nowMs).toString())
                 .put("payload", new JSONObject()
@@ -45,7 +43,6 @@ public final class SensorPayloadFactory {
         int sequence,
         long startedAtMs,
         String robotCode,
-        String missionId,
         Location location
     ) {
         long nowMs = System.currentTimeMillis();
@@ -64,8 +61,6 @@ public final class SensorPayloadFactory {
                 .put("messageId", robotCode + "-telemetry-" + sequence)
                 .put("schemaVersion", "1.0")
                 .put("messageType", "telemetry")
-                .put("robotCode", robotCode)
-                .put("missionId", missionId)
                 .put("sequence", sequence)
                 .put("sentAt", Instant.ofEpochMilli(nowMs).toString())
                 .put("timestamp", nowMs / 1000.0)

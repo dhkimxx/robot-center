@@ -24,6 +24,7 @@ history:
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: documented recording finalization job flow and recorder-worker scale-out considerations'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: documented finalization worker attempt fencing'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: clarified live connection status source uses robots.device_state plus heartbeat freshness'
+  - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: replace legacy SFU endpoint with role-specific signaling endpoints'
 ---
 
 # Architecture
@@ -151,8 +152,11 @@ mission-005 room
 현재 signaling endpoint는 app-server 내부 SFU가 제공한다.
 
 ```text
-GET /sfu/ws?room={missionCode}&role={role}
-GET /sfu/ws?room={missionCode}&role=robot&robotCode={robotCode}
+GET /sfu/robot/ws?room={missionCode}
+Authorization: Bearer {robotToken}
+
+GET /sfu/operator/ws?room={missionCode}
+GET /sfu/recorder/ws?room={missionCode}
 ```
 
 역할:
@@ -500,7 +504,7 @@ sequenceDiagram
   Robot->>App: active mission 조회
   App-->>Robot: missionCode, roomId, signalingUrl, TURN info
 
-  Robot->>SFU: signaling join(role=robot, robotCode)
+  Robot->>SFU: /sfu/robot/ws?room=missionCode + Bearer robotToken
   Robot->>SFU: WebRTC offer
   SFU-->>Robot: WebRTC answer
   Robot->>SFU: media/data publish once
@@ -515,7 +519,7 @@ sequenceDiagram
   participant SFU as app-server/SFU
 
   Browser->>App: mission / rtc config 조회
-  Browser->>SFU: signaling join(role=operator)
+  Browser->>SFU: /sfu/operator/ws?room=missionCode
   Browser->>SFU: select robotCode
   SFU-->>Browser: offer(selected robot tracks/data)
   Browser-->>SFU: answer
@@ -535,7 +539,7 @@ sequenceDiagram
   participant DB as PostgreSQL
 
   Rec->>App: recording targets 조회
-  Rec->>SFU: signaling join(role=recorder)
+  Rec->>SFU: /sfu/recorder/ws?room=missionCode
   SFU-->>Rec: offer(all robot tracks/data)
   Rec-->>SFU: answer
   SFU-->>Rec: all robot media/data

@@ -61,9 +61,10 @@ func (s *Server) handleSystemStatus(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleRTCConfig(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"mode":               "sfu",
-		"signalingUrl":       s.config.SFUWebSocketURL,
-		"iceTransportPolicy": "relay",
+		"mode":                 "sfu",
+		"signalingUrl":         s.config.SFUOperatorWebSocketURL(),
+		"operatorSignalingUrl": s.config.SFUOperatorWebSocketURL(),
+		"iceTransportPolicy":   "relay",
 		"iceServers": []map[string]any{
 			{
 				"urls":       []string{s.config.TURNURL},
