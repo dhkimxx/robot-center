@@ -27,7 +27,9 @@ history:
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: make robot team test slots self-service'
 - '2026-05-28 danya.kim <danya.kim@thundersoft.com>: clarify DataChannel lifecycle'
 - '2026-05-28 danya.kim <danya.kim@thundersoft.com>: keep the robot-team sharing guide focused on negotiation details'
-- '2026-05-28 danya.kim <danya.kim@thundersoft.com>: simplify sensor contract to descriptor metadata plus object values'
+- '2026-05-28 danya.kim <danya.kim@thundersoft.com>: simplify sensor contract to structured descriptors plus object values'
+- '2026-05-28 danya.kim <danya.kim@thundersoft.com>: remove descriptor metadata and move gas channel alarm fields into sample values'
+- '2026-05-28 danya.kim <danya.kim@thundersoft.com>: clarify telemetry-only payload schema contract for robot team send test'
 ---
 
 # Robot Team WebRTC Send Test Guide
@@ -46,7 +48,7 @@ history:
 - 로봇이 자신에게 배정된 active mission을 조회할 수 있는가
 - 로봇이 mission room에 WebRTC publisher로 접속할 수 있는가
 - 관제 서버가 로봇의 RGB/Thermal/Audio track을 수신할 수 있는가
-- 관제 서버가 telemetry/spatial DataChannel 메시지를 수신하고 저장할 수 있는가
+- 관제 서버가 telemetry DataChannel 메시지를 수신하고 저장할 수 있는가
 - 관제 UI에서 영상, 위치, 센서값, 녹화 상태를 확인할 수 있는가
 
 이 테스트에서 제외하는 것:
@@ -592,6 +594,34 @@ ICE candidate payload는 browser/Pion 표준 candidate 필드를 사용한다.
 | `channel.event` | `event` 또는 domain-specific type | alarm, fault, detection, mission event. 현재 recorder-worker 저장 대상은 아님 |
 | `channel.control` | reserved | reserved control/ack side channel. 현재 recorder-worker 저장 대상은 아님 |
 
+### 8.1 Payload schema 확정 범위
+
+현재 로봇팀 송신 테스트에서 확정된 payload schema는 `channel.telemetry`의 sensor envelope 구조다.
+
+| Label | Negotiation status | Payload schema status | 이번 테스트 필수 여부 |
+| --- | --- | --- | --- |
+| `channel.telemetry` | 확정 | 확정. `descriptors` / `samples` / `values` 구조 사용 | Yes |
+| `channel.spatial` | DataChannel label 예약 | 미확정. mock은 IMU/odometry 예시를 보내지만 실제 로봇 계약으로 고정하지 않음 | No |
+| `channel.event` | DataChannel label 예약 | 미확정. alarm/fault/detection/mission event taxonomy는 별도 협의 필요 | No |
+| `channel.control` | DataChannel label 예약 | 미확정. command/ack/권한/감사 정책은 별도 협의 필요 | No |
+
+따라서 이번 로봇팀 송신 테스트에서 가스, GPS, battery 같은 센서 측정값은 `channel.telemetry`로 보낸다. `channel.spatial`, `channel.event`, `channel.control`은 offer/DataChannel negotiation에 포함할 수 있지만, payload 세부 schema는 이 문서에서 확정 계약으로 보지 않는다.
+
+`messageType`은 payload subtype 식별자이며 1차 라우팅 기준이 아니다. 현재 1차 라우팅 기준은 DataChannel label이다.
+
+권장 `messageType`:
+
+| Label | Recommended messageType |
+| --- | --- |
+| `channel.telemetry` | `telemetry` 또는 `telemetry.*` |
+| `channel.spatial` | `spatial.*` |
+| `channel.event` | `event.*` |
+| `channel.control` | `control.*` |
+
+관제 서버는 현재 `channel.telemetry`의 `descriptors` / `samples` / `values` 구조를 저장 및 Live UI 표시 검증 대상으로 본다. 나머지 채널은 label과 negotiation 확인용으로만 다루며, payload schema를 확정하려면 관제팀과 별도 합의한다.
+
+### 8.2 DataChannel lifecycle
+
 DataChannel 생성과 전송 시작 조건:
 
 ```text
@@ -623,6 +653,8 @@ DataChannel 생성과 전송 시작 조건:
 
 `lastDataAt`은 DataChannel open 시각이 아니라, 실제 메시지 수신 시각이다.
 
+### 8.3 `channel.telemetry` payload schema
+
 `channel.telemetry` 예시:
 
 ```json
@@ -632,20 +664,16 @@ DataChannel 생성과 전송 시작 조건:
   "descriptors": [
     {
       "sensorId": "telemetry.position_1",
-      "displayName": "GPS",
+      "label": "GPS",
       "sensorType": "position",
       "enabled": true
     },
     {
-      "sensorId": "telemetry.gas.co",
-      "displayName": "CO",
+      "sensorId": "telemetry.gas.channel_1",
+      "label": "CO",
       "sensorType": "gas",
       "unit": "ppm",
-      "enabled": true,
-      "metadata": {
-        "warningHigh": 30,
-        "criticalHigh": 50
-      }
+      "enabled": true
     }
   ],
   "samples": [
@@ -659,10 +687,16 @@ DataChannel 생성과 전송 시작 조건:
       }
     },
     {
-      "sensorId": "telemetry.gas.co",
+      "sensorId": "telemetry.gas.channel_1",
       "timestamp": "2026-05-27T05:00:00.000Z",
       "values": {
-        "concentration": 5
+        "concentration": 13.0,
+        "scale_code": 1,
+        "alarm_code": 0,
+        "alarm": "normal",
+        "low_alarm": 10.0,
+        "high_alarm": 15.0,
+        "valid": true
       }
     }
   ]
@@ -677,19 +711,18 @@ Telemetry envelope schema:
 | --- | --- | --- | --- | --- |
 | `messageId` | string | Recommended | UUID 또는 `robot-123-telemetry-102` | 메시지 추적 id |
 | `messageType` | string | Recommended | `telemetry` | telemetry channel 기본 타입 |
-| `descriptors` | array | Conditional | SensorDescriptor list | 센서 metadata. 새 `sensorId`를 처음 보낼 때는 필수 |
+| `descriptors` | array | Conditional | SensorDescriptor list | 센서 식별/표시 schema. 새 `sensorId`를 처음 보낼 때는 필수 |
 | `samples` | array | No | SensorSample list | 실제 측정값 |
 
 SensorDescriptor schema:
 
 | Field | Type | Required | Values / Example | Description |
 | --- | --- | --- | --- | --- |
-| `sensorId` | string | Yes | `telemetry.position_1`, `telemetry.battery_1`, `spatial.imu_1` | robot 내부에서 안정적으로 쓰는 sensor id |
-| `displayName` | string | Recommended | `GPS`, `Battery`, `IMU` | UI 표시 이름 |
-| `sensorType` | string | Yes | `position`, `battery`, `temperature`, `humidity`, `imu`, `odometry`, `point_cloud`, `gas` | 센서 계열. 관제 UI의 해석 전략 선택 키. 누락/오타는 서버가 거절 |
+| `sensorId` | string | Yes | `telemetry.position_1`, `telemetry.battery_1`, `telemetry.gas.channel_1`, `spatial.imu_1` | robot 내부에서 안정적으로 쓰는 sensor id. descriptor/sample 매칭용 식별자이며 화면 해석 키로 쓰지 않는다 |
+| `label` | string | Recommended | `GPS`, `Battery`, `CO` | 사람이 읽는 채널 label. 같은 `sensorType` 안에서 표시 전략의 보조 키로 사용 |
+| `sensorType` | string | Yes | `position`, `battery`, `imu`, `odometry`, `point_cloud`, `gas` | 센서 계열. 관제 UI의 1차 해석 전략 선택 키. 누락/오타는 서버가 거절 |
 | `unit` | string | No | `percent`, `celsius`, `ppm`, `m`, `m/s` | 표시 단위 |
 | `enabled` | boolean | No | `true`, `false` | UI/저장 대상으로 활성화할지 여부 |
-| `metadata` | object | No | `{ "frameId": "base_link" }` | frameId, axes, threshold 같은 부가 정보 |
 
 SensorSample schema:
 
@@ -699,16 +732,6 @@ SensorSample schema:
 | `timestamp` | string(date-time) | Recommended | `2026-05-27T05:00:00.000Z` | sample 측정 시각 |
 | `values` | object | Recommended | `{ "latitude": 37.402183 }` | 실제 측정값. 모든 sensorType에서 object로 통일 |
 | `objectKey` | string | No | `missions/.../point_cloud.bin` | object storage 참조가 필요할 때 |
-
-DataChannel sensor payload에서 사용하지 않는 필드:
-
-| Field | 처리 |
-| --- | --- |
-| `valueType` | 보내지 않는다. `samples[].values`는 object로 통일한다. |
-| `quality` | 보내지 않는다. 품질/고장 상태가 필요하면 sensorType별 metadata 또는 별도 event 계약에서 다룬다. |
-| `sentAt` | 보내지 않는다. sample 측정 시각은 `samples[].timestamp`를 사용한다. |
-| `sequence` | 보내지 않는다. 메시지 추적은 `messageId`를 사용한다. |
-| `sampleRateHz` | 보내지 않는다. 필요한 경우 추후 metadata로 협의한다. |
 
 Position `values` 권장 필드:
 
@@ -720,31 +743,35 @@ Position `values` 권장 필드:
 | `accuracyMeter` | number | No | `3.5` | 위치 정확도 meter |
 | `headingDegree` | number | No | `90` | 진행 방향. 0-360 degree |
 
-Gas `values` 권장 필드:
+Gas module `values` 권장 필드:
 
 | Field | Type | Required | Example | Description |
 | --- | --- | --- | --- | --- |
-| `concentration` | number | Yes | `20.9` | 가스 농도. 단위는 descriptor `unit`을 사용 |
+| `concentration` | number | Yes | `13.0` | 측정값. TEMP/HUM도 장비 원본 필드명을 유지한다 |
+| `scale_code` | number | No | `1` | 장비 scale code 원본값 |
+| `alarm_code` | number | No | `0` | 장비 alarm code 원본값. 현재 관제 UI는 해석하지 않음 |
+| `alarm` | string | No | `normal` | 장비 alarm 문자열. 현재 관제 UI는 해석하지 않음 |
+| `low_alarm` | number | No | `10.0` | 장비 원본 하한 alarm 기준. 현재 관제 UI는 해석하지 않음 |
+| `high_alarm` | number | No | `15.0` | 장비 원본 상한 alarm 기준. 현재 관제 UI는 해석하지 않음 |
+| `valid` | boolean | No | `true` | 장비 원본 valid flag. 현재 관제 UI는 해석하지 않음 |
 
-Gas descriptor `metadata` threshold:
-
-| Field | Type | Required | Example | Description |
-| --- | --- | --- | --- | --- |
-| `criticalLow` | number | No | `18.0` | 이 값 이하이면 critical |
-| `warningLow` | number | No | `19.0` | 이 값 이하이면 warning |
-| `warningHigh` | number | No | `30` | 이 값 이상이면 warning |
-| `criticalHigh` | number | No | `50` | 이 값 이상이면 critical |
-
-가스 채널 매핑 예:
+가스 채널 구성:
 
 ```text
-gas_name      -> descriptor.displayName
+channel name  -> descriptor.label
 concentration -> sample.values.concentration
 unit          -> descriptor.unit
-low_alarm     -> descriptor.metadata.criticalLow
-high_alarm    -> descriptor.metadata.criticalHigh
-alarm_status  -> 보내지 않음. 관제 UI가 threshold 기준으로 계산
+scale_code    -> sample.values.scale_code
+alarm_code    -> sample.values.alarm_code
+alarm         -> sample.values.alarm
+low_alarm     -> sample.values.low_alarm
+high_alarm    -> sample.values.high_alarm
+valid         -> sample.values.valid
 ```
+
+`TEMP`, `HUM` 채널도 같은 가스 모듈의 5/6번 채널이므로 `sensorType`은 `gas`로 통일한다.
+
+현재 관제 UI는 가스 모듈 descriptor의 `label`, `unit`과 sample `values.concentration`만 표시한다. `alarm_code`, `alarm`, `low_alarm`, `high_alarm`, `valid`는 저장/전달만 하고 경고 상태 계산에는 사용하지 않는다.
 
 권장:
 

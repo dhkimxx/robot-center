@@ -20,7 +20,7 @@ history:
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: documented recording finalization jobs and scale-out-safe replay storage states'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: documented finalization upload callback fencing'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: renamed robot schema status to device_state and clarified computed API connection status'
-- '2026-05-28 danya.kim <danya.kim@thundersoft.com>: replace legacy sensor sample value columns with canonical values column'
+- '2026-05-28 danya.kim <danya.kim@thundersoft.com>: document canonical sensor sample values column'
 ---
 
 # Data Storage
@@ -294,11 +294,10 @@ mission_id + robot_id + sensor_id
 | `robot_id` | uuid | yes | FK robots.id |
 | `sensor_id` | text | yes | 예: `telemetry.battery_1`, `spatial.imu_1` |
 | `channel_role` | text | yes | `channel.telemetry`, `channel.spatial` 등 |
-| `display_name` | text | yes | UI 표시명. 자동 생성 시 `sensor_id` |
+| `label` | text | yes | 사람이 읽는 센서/channel label. 자동 생성 시 `sensor_id` |
 | `sensor_type` | text | yes | position, imu, gas, point_cloud, unknown 등 |
 | `unit` | text | no | percent, ppm 등 |
 | `enabled` | boolean | yes | UI/저장 활성 여부 |
-| `metadata` | jsonb | yes | default `{}` |
 | `first_seen_at` | timestamptz | yes | default now |
 | `last_seen_at` | timestamptz | yes | default now, index |
 
@@ -313,8 +312,8 @@ Index:
 Descriptor upsert 정책:
 
 - robot payload에 descriptors가 있으면 `mission_id + robot_id + sensor_id` 기준으로 upsert한다.
-- descriptor 없는 sample만 들어와도 서버가 최소 descriptor를 자동 생성한다.
-- 자동 descriptor metadata는 현재 `{"source":"auto-sample"}`를 사용한다.
+- descriptor 없는 sample은 거절한다. 새 `sensorId`를 처음 보낼 때는 descriptor를 함께 보내야 한다.
+- descriptor는 정형 식별/표시 필드만 보관한다. frameId, gas alarm 기준, 장비 원본 상태는 `sensor_samples.values`에 둔다.
 
 ### 8.2 sensor_samples
 

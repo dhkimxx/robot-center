@@ -49,22 +49,17 @@ func (s *Store) SaveSensorEnvelope(ctx context.Context, envelope domain.SensorEn
 				continue
 			}
 			channelRole := utils.FirstNonEmptyString(descriptor.ChannelRole, envelope.ChannelRole, "channel.telemetry")
-			metadata := descriptor.Metadata
-			if len(metadata) == 0 {
-				metadata = []byte("{}")
-			}
-			displayName := utils.FirstNonEmptyString(descriptor.DisplayName, descriptor.SensorID)
+			label := utils.FirstNonEmptyString(descriptor.Label, descriptor.SensorID)
 			sensorType := domain.NormalizeSensorType(descriptor.SensorType, descriptor.SensorID)
 			records = append(records, model.SensorDescriptorModel{
 				MissionID:   envelope.MissionID,
 				RobotID:     robotID,
 				SensorID:    descriptor.SensorID,
 				ChannelRole: channelRole,
-				DisplayName: displayName,
+				Label:       label,
 				SensorType:  sensorType,
 				Unit:        optionalString(descriptor.Unit),
 				Enabled:     descriptor.Enabled,
-				Metadata:    metadata,
 				FirstSeenAt: envelope.ReceivedAt,
 				LastSeenAt:  envelope.ReceivedAt,
 			})
@@ -78,11 +73,10 @@ func (s *Store) SaveSensorEnvelope(ctx context.Context, envelope domain.SensorEn
 				},
 				DoUpdates: clause.AssignmentColumns([]string{
 					"channel_role",
-					"display_name",
+					"label",
 					"sensor_type",
 					"unit",
 					"enabled",
-					"metadata",
 					"last_seen_at",
 				}),
 			}).Create(&records).Error; err != nil {
@@ -166,11 +160,10 @@ func (s *Store) ListSensorDescriptors(ctx context.Context, missionID string, rob
 			r.robot_code,
 			sd.sensor_id,
 				sd.channel_role,
-				sd.display_name,
+				sd.label,
 				sd.sensor_type,
 				sd.unit,
 				sd.enabled,
-				sd.metadata,
 			sd.first_seen_at,
 			sd.last_seen_at
 		`).
@@ -248,11 +241,10 @@ func (s *Store) ListLatestSensorSamples(ctx context.Context, missionID string, r
 			r.robot_code,
 			sd.sensor_id,
 				sd.channel_role AS descriptor_channel_role,
-				sd.display_name,
+				sd.label,
 				sd.sensor_type,
 				sd.unit,
 				sd.enabled,
-				sd.metadata,
 			sd.first_seen_at,
 			sd.last_seen_at,
 			ss.id AS sample_id,
@@ -333,11 +325,10 @@ type sensorDescriptorQueryRow struct {
 	RobotCode   string
 	SensorID    string
 	ChannelRole string
-	DisplayName string
+	Label       string
 	SensorType  string
 	Unit        *string
 	Enabled     bool
-	Metadata    json.RawMessage
 	FirstSeenAt time.Time
 	LastSeenAt  time.Time
 }
@@ -349,11 +340,10 @@ func (row sensorDescriptorQueryRow) toDomain() domain.SensorDescriptor {
 		RobotCode:   row.RobotCode,
 		SensorID:    row.SensorID,
 		ChannelRole: row.ChannelRole,
-		DisplayName: row.DisplayName,
+		Label:       row.Label,
 		SensorType:  row.SensorType,
 		Unit:        stringFromPointer(row.Unit),
 		Enabled:     row.Enabled,
-		Metadata:    row.Metadata,
 		FirstSeenAt: row.FirstSeenAt,
 		LastSeenAt:  row.LastSeenAt,
 	}
@@ -397,11 +387,10 @@ type sensorLatestQueryRow struct {
 	RobotCode             string
 	SensorID              string
 	DescriptorChannelRole string
-	DisplayName           string
+	Label                 string
 	SensorType            string
 	Unit                  *string
 	Enabled               bool
-	Metadata              json.RawMessage
 	FirstSeenAt           time.Time
 	LastSeenAt            time.Time
 	SampleID              *string
@@ -421,11 +410,10 @@ func (row sensorLatestQueryRow) toDomain() domain.SensorLatest {
 		RobotCode:   row.RobotCode,
 		SensorID:    row.SensorID,
 		ChannelRole: row.DescriptorChannelRole,
-		DisplayName: row.DisplayName,
+		Label:       row.Label,
 		SensorType:  row.SensorType,
 		Unit:        stringFromPointer(row.Unit),
 		Enabled:     row.Enabled,
-		Metadata:    row.Metadata,
 		FirstSeenAt: row.FirstSeenAt,
 		LastSeenAt:  row.LastSeenAt,
 	}

@@ -1,12 +1,10 @@
 export const SensorType = Object.freeze({
   BATTERY: "battery",
   GAS: "gas",
-  HUMIDITY: "humidity",
   IMU: "imu",
   ODOMETRY: "odometry",
   POINT_CLOUD: "point_cloud",
   POSITION: "position",
-  TEMPERATURE: "temperature",
   UNKNOWN: "unknown"
 });
 

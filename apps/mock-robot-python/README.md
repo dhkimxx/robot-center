@@ -34,7 +34,7 @@ The mock publishes:
 - `track.video_2`: Thermal demo video
 - `track.audio_1`: silent Opus-preferred audio
 - `track.audio_2`: reserved secondary audio slot
-- `channel.telemetry`: `SensorDescriptor` / `SensorSample` payloads for GPS, temperature, humidity, battery
+- `channel.telemetry`: `SensorDescriptor` / `SensorSample` payloads for GPS, six-channel gas module values, battery
 - `channel.spatial`: `SensorDescriptor` / `SensorSample` payloads for IMU and odometry
 - `channel.event`: robot heartbeat events
 - `channel.control`: reserved stub; the mock creates the channel but does not emit control payloads

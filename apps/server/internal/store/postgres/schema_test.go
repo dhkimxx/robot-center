@@ -32,9 +32,13 @@ func TestAutoMigrateRemovesLegacySensorSampleValueColumns(t *testing.T) {
 	for _, columnName := range []string{
 		"value_type",
 		"sample_rate_hz",
+		"metadata",
+		"display_name",
+		"source_channel",
 	} {
 		assertColumnMissing(t, store, "sensor_descriptors", columnName)
 	}
+	assertColumnPresent(t, store, "sensor_descriptors", "label")
 }
 
 func assertColumnPresent(t *testing.T, store *Store, tableName string, columnName string) {

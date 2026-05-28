@@ -8,20 +8,6 @@ describe("mapLiveDataChannelPayload", () => {
       messageType: "telemetry",
       samples: [
         {
-          sensorId: "telemetry.temperature_1",
-          timestamp: "2026-05-28T01:00:00Z",
-          values: {
-            temperatureCelsius: 28.5
-          }
-        },
-        {
-          sensorId: "telemetry.humidity_1",
-          timestamp: "2026-05-28T01:00:00Z",
-          values: {
-            humidityPercent: 48
-          }
-        },
-        {
           sensorId: "telemetry.battery_1",
           timestamp: "2026-05-28T01:00:01Z",
           values: {
@@ -39,9 +25,7 @@ describe("mapLiveDataChannelPayload", () => {
       receivedAt: "2026-05-28T01:00:01Z"
     });
     expect(result.sensor.payload).toMatchObject({
-      batteryPercent: 91,
-      humidityPercent: 48,
-      temperatureCelsius: 28.5
+      batteryPercent: 91
     });
   });
 

@@ -22,7 +22,7 @@ history:
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: document robot WebSocket endpoint with robot token authorization'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: sync TURN public/internal terminology with current config'
 - '2026-05-28 danya.kim <danya.kim@thundersoft.com>: clarify DataChannel open-before-send contract'
-- '2026-05-28 danya.kim <danya.kim@thundersoft.com>: remove legacy fallback from robot-facing media DataChannel and sensor contract'
+- '2026-05-28 danya.kim <danya.kim@thundersoft.com>: finalize canonical robot-facing media DataChannel and sensor contract'
 - '2026-05-28 danya.kim <danya.kim@thundersoft.com>: finalize token-only robot gateway and values-only sensor sample contract'
 ---
 
@@ -304,7 +304,7 @@ P0 telemetry는 `SensorDescriptor`와 `SensorSample` 개념을 따른다. 고정
     {
       "sensorId": "telemetry.position_1",
       "sensorType": "position",
-      "displayName": "GPS",
+      "label": "GPS",
       "enabled": true
     }
   ],
@@ -335,13 +335,12 @@ SensorDescriptor:
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `sensorId` | string | Yes | Robot 내부에서 안정적으로 쓰는 sensor id |
+| `sensorId` | string | Yes | Robot 내부에서 안정적으로 쓰는 sensor id. descriptor/sample 매칭용 식별자이며 화면 해석 키로 쓰지 않음 |
 | `channelRole` | string | No | 없으면 envelope `channelRole` |
-| `displayName` | string | No | 없으면 `sensorId` |
-| `sensorType` | string | Yes | `position`, `battery`, `temperature`, `humidity`, `imu`, `odometry`, `point_cloud`, `gas`. 누락/오타는 서버가 거절 |
+| `label` | string | No | 없으면 `sensorId`. 사람이 읽는 채널 label이며 같은 `sensorType` 안에서 표시 전략의 보조 키 |
+| `sensorType` | string | Yes | `position`, `battery`, `imu`, `odometry`, `point_cloud`, `gas`. 관제 UI의 1차 해석 전략 키. 누락/오타는 서버가 거절 |
 | `unit` | string | No | 표시 단위 |
 | `enabled` | boolean | No | descriptor 활성 여부 |
-| `metadata` | object | No | frameId, axes, threshold 같은 부가 정보 |
 
 SensorSample:
 
@@ -355,6 +354,22 @@ SensorSample:
 | `objectKey` | string | No | object storage 참조 |
 
 `unknown`은 관제 내부 fallback용 예약값이다. 로봇 payload의 `sensorType`으로 보내지 않는다.
+
+descriptor는 정형 식별/표시 필드만 담는다. 타입별 부가 정보, 장비 원본 상태, alarm 기준은 `samples[].values`에 둔다.
+
+Gas module sample `values`는 장비 원본 필드를 유지한다.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `concentration` | number | Yes | 측정값 |
+| `scale_code` | number | No | 장비 scale code 원본값 |
+| `alarm_code` | number | No | 장비 alarm code 원본값. 현재 관제 UI는 해석하지 않음 |
+| `alarm` | string | No | 예: `normal`. 현재 관제 UI는 해석하지 않음 |
+| `low_alarm` | number | No | 장비 원본 하한 alarm 기준. 현재 관제 UI는 해석하지 않음 |
+| `high_alarm` | number | No | 장비 원본 상한 alarm 기준. 현재 관제 UI는 해석하지 않음 |
+| `valid` | boolean | No | 장비 원본 valid flag. 현재 관제 UI는 해석하지 않음 |
+
+현재 관제 UI는 gas module descriptor의 `label`, `unit`과 sample `values.concentration`만 표시한다. 해석 전략은 `sensorType=gas`와 `label` 조합을 기준으로 하며, `sensorId`는 descriptor/sample 매칭용 식별자로만 사용한다.
 
 송신 주기:
 

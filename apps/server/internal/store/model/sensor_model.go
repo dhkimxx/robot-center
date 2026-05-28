@@ -7,17 +7,16 @@ import (
 
 type SensorDescriptorModel struct {
 	BaseModel
-	MissionID   string          `gorm:"column:mission_id;type:uuid;not null;uniqueIndex:sensor_descriptors_mission_robot_sensor_unique,priority:1;index"`
-	RobotID     string          `gorm:"column:robot_id;type:uuid;not null;uniqueIndex:sensor_descriptors_mission_robot_sensor_unique,priority:2;index"`
-	SensorID    string          `gorm:"column:sensor_id;not null;uniqueIndex:sensor_descriptors_mission_robot_sensor_unique,priority:3"`
-	ChannelRole string          `gorm:"column:channel_role;not null"`
-	DisplayName string          `gorm:"column:display_name;not null"`
-	SensorType  string          `gorm:"column:sensor_type;not null;index"`
-	Unit        *string         `gorm:"column:unit"`
-	Enabled     bool            `gorm:"column:enabled;not null"`
-	Metadata    json.RawMessage `gorm:"column:metadata;type:jsonb;not null;default:'{}'::jsonb"`
-	FirstSeenAt time.Time       `gorm:"column:first_seen_at;not null;default:now()"`
-	LastSeenAt  time.Time       `gorm:"column:last_seen_at;not null;default:now();index"`
+	MissionID   string    `gorm:"column:mission_id;type:uuid;not null;uniqueIndex:sensor_descriptors_mission_robot_sensor_unique,priority:1;index"`
+	RobotID     string    `gorm:"column:robot_id;type:uuid;not null;uniqueIndex:sensor_descriptors_mission_robot_sensor_unique,priority:2;index"`
+	SensorID    string    `gorm:"column:sensor_id;not null;uniqueIndex:sensor_descriptors_mission_robot_sensor_unique,priority:3"`
+	ChannelRole string    `gorm:"column:channel_role;not null"`
+	Label       string    `gorm:"column:label"`
+	SensorType  string    `gorm:"column:sensor_type;not null;index"`
+	Unit        *string   `gorm:"column:unit"`
+	Enabled     bool      `gorm:"column:enabled;not null"`
+	FirstSeenAt time.Time `gorm:"column:first_seen_at;not null;default:now()"`
+	LastSeenAt  time.Time `gorm:"column:last_seen_at;not null;default:now();index"`
 }
 
 func (SensorDescriptorModel) TableName() string {

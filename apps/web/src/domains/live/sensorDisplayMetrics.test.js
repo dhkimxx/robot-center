@@ -9,33 +9,38 @@ describe("sensorDisplayMetrics", () => {
   it("creates dynamic metrics from canonical telemetry descriptors and samples", () => {
     const metrics = createSensorMetrics({
       descriptors: [
-        { sensorId: "telemetry.gas.ch4", sensorType: "gas", displayName: "CH4", unit: "ppm" },
-        { sensorId: "telemetry.gas.co", sensorType: "gas", displayName: "CO", unit: "ppm" },
-        { sensorId: "telemetry.gas.o2", sensorType: "gas", displayName: "O2", unit: "%" },
-        { sensorId: "telemetry.temperature_1", sensorType: "temperature", displayName: "Temperature" },
-        { sensorId: "telemetry.humidity_1", sensorType: "humidity", displayName: "Humidity" },
-        { sensorId: "telemetry.battery_1", sensorType: "battery", displayName: "Battery" }
+        { sensorId: "telemetry.gas.slot_f", sensorType: "gas", label: "HUM", unit: "RH" },
+        { sensorId: "telemetry.gas.slot_d", sensorType: "gas", label: "CH4", unit: "%LEL" },
+        { sensorId: "telemetry.gas.slot_b", sensorType: "gas", label: "H2S", unit: "ppm" },
+        { sensorId: "telemetry.gas.slot_e", sensorType: "gas", label: "TEMP", unit: "degC" },
+        { sensorId: "telemetry.gas.slot_a", sensorType: "gas", label: "CO", unit: "ppm" },
+        { sensorId: "telemetry.gas.slot_c", sensorType: "gas", label: "O2", unit: "%Vol" },
+        { sensorId: "telemetry.battery_1", sensorType: "battery", label: "Battery" }
       ],
       samples: [
         {
-          sensorId: "telemetry.gas.ch4",
+          sensorId: "telemetry.gas.slot_f",
+          values: { concentration: 48 }
+        },
+        {
+          sensorId: "telemetry.gas.slot_d",
           values: { concentration: 2 }
         },
         {
-          sensorId: "telemetry.gas.co",
+          sensorId: "telemetry.gas.slot_b",
+          values: { concentration: 2.1 }
+        },
+        {
+          sensorId: "telemetry.gas.slot_e",
+          values: { concentration: 29.5 }
+        },
+        {
+          sensorId: "telemetry.gas.slot_a",
           values: { concentration: 9 }
         },
         {
-          sensorId: "telemetry.gas.o2",
+          sensorId: "telemetry.gas.slot_c",
           values: { concentration: 20.7 }
-        },
-        {
-          sensorId: "telemetry.temperature_1",
-          values: { temperatureCelsius: 29.5 }
-        },
-        {
-          sensorId: "telemetry.humidity_1",
-          values: { humidityPercent: 48 }
         },
         {
           sensorId: "telemetry.battery_1",
@@ -47,11 +52,12 @@ describe("sensorDisplayMetrics", () => {
     });
 
     expect(metrics.map((metric) => metric.label)).toEqual([
-      "CH4",
       "CO",
+      "H2S",
       "O2",
-      "온도",
-      "습도",
+      "CH4",
+      "TEMP",
+      "HUM",
       "배터리"
     ]);
   });
@@ -59,12 +65,12 @@ describe("sensorDisplayMetrics", () => {
   it("keeps spatial samples when telemetry and spatial payloads are merged", () => {
     const merged = mergeSensorSnapshots(
       {
-        descriptors: [{ sensorId: "telemetry.battery_1", sensorType: "battery", displayName: "Battery" }],
+        descriptors: [{ sensorId: "telemetry.battery_1", sensorType: "battery", label: "Battery" }],
         samples: [{ sensorId: "telemetry.battery_1", values: { batteryPercent: 90 } }],
         receivedAt: "2026-05-26T01:00:00Z"
       },
       {
-        descriptors: [{ sensorId: "spatial.imu_1", sensorType: "imu", displayName: "IMU" }],
+        descriptors: [{ sensorId: "spatial.imu_1", sensorType: "imu", label: "IMU" }],
         samples: [
           {
             sensorId: "spatial.imu_1",
@@ -88,25 +94,28 @@ describe("sensorDisplayMetrics", () => {
     expect(merged.receivedAt).toBe("2026-05-26T01:00:01Z");
   });
 
-  it("uses gas interpreter to expose concentration and alarm level", () => {
+  it("shows gas module concentration and unit without alarm interpretation", () => {
     const metrics = createSensorMetrics({
       descriptors: [
         {
-          displayName: "CO",
-          metadata: {
-            criticalHigh: 50,
-            warningHigh: 30
-          },
-          sensorId: "telemetry.gas.co",
+          label: "CO",
+          sensorId: "telemetry.gas.channel_1",
           sensorType: "gas",
           unit: "ppm"
         }
       ],
       samples: [
         {
-          sensorId: "telemetry.gas.co",
+          sensorId: "telemetry.gas.channel_1",
           values: {
-            concentration: 35
+            alarm: "normal",
+            alarm_code: 0,
+            concentration: 35,
+            high_alarm: 30,
+            low_alarm: 10,
+            scale_code: 1,
+            unit: "ppm",
+            valid: true
           }
         }
       ]
@@ -114,7 +123,7 @@ describe("sensorDisplayMetrics", () => {
 
     expect(metrics).toHaveLength(1);
     expect(metrics[0]).toMatchObject({
-      alarmLevel: "warning",
+      alarmLevel: "normal",
       label: "CO",
       unit: "ppm",
       value: 35
@@ -124,27 +133,29 @@ describe("sensorDisplayMetrics", () => {
   it("creates metrics from sensor-latest API objects without a fixed four-metric limit", () => {
     const metrics = createSensorMetricsFromSensorLatest([
       {
-        displayName: "Temperature",
-        sensorId: "telemetry.temperature_1",
-        sensorType: "temperature",
+        label: "TEMP",
+        sensorId: "telemetry.gas.channel_5",
+        sensorType: "gas",
+        unit: "degC",
         latestSample: {
           values: {
-            temperatureCelsius: 29.5
+            concentration: 29.5
           }
         }
       },
       {
-        displayName: "Humidity",
-        sensorId: "telemetry.humidity_1",
-        sensorType: "humidity",
+        label: "HUM",
+        sensorId: "telemetry.gas.channel_6",
+        sensorType: "gas",
+        unit: "RH",
         latestSample: {
           values: {
-            humidityPercent: 48
+            concentration: 48
           }
         }
       },
       {
-        displayName: "Battery",
+        label: "Battery",
         sensorId: "telemetry.battery_1",
         sensorType: "battery",
         latestSample: {

@@ -6,18 +6,17 @@ import (
 )
 
 type SensorDescriptor struct {
-	ID          string          `json:"id"`
-	MissionID   string          `json:"missionId"`
-	RobotCode   string          `json:"robotCode"`
-	SensorID    string          `json:"sensorId"`
-	ChannelRole string          `json:"channelRole"`
-	DisplayName string          `json:"displayName"`
-	SensorType  string          `json:"sensorType"`
-	Unit        string          `json:"unit,omitempty"`
-	Enabled     bool            `json:"enabled"`
-	Metadata    json.RawMessage `json:"metadata"`
-	FirstSeenAt time.Time       `json:"firstSeenAt"`
-	LastSeenAt  time.Time       `json:"lastSeenAt"`
+	ID          string    `json:"id"`
+	MissionID   string    `json:"missionId"`
+	RobotCode   string    `json:"robotCode"`
+	SensorID    string    `json:"sensorId"`
+	ChannelRole string    `json:"channelRole"`
+	Label       string    `json:"label"`
+	SensorType  string    `json:"sensorType"`
+	Unit        string    `json:"unit,omitempty"`
+	Enabled     bool      `json:"enabled"`
+	FirstSeenAt time.Time `json:"firstSeenAt"`
+	LastSeenAt  time.Time `json:"lastSeenAt"`
 }
 
 type SensorSample struct {

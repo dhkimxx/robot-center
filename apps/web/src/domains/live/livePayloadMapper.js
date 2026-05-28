@@ -45,13 +45,9 @@ function createTelemetryProjection(payload) {
 
 function createTelemetrySensorProjection(payload) {
   const positionValues = findSampleValues(payload, "position");
-  const temperatureValues = findSampleValues(payload, "temperature");
-  const humidityValues = findSampleValues(payload, "humidity");
   const batteryValues = findSampleValues(payload, "battery");
   const projectedPayload = {
     ...(positionValues ? { position: positionValues, positionAvailable: true } : {}),
-    ...(temperatureValues ?? {}),
-    ...(humidityValues ?? {}),
     ...(batteryValues ?? {})
   };
 

@@ -5,15 +5,13 @@ import "strings"
 type SensorType string
 
 const (
-	SensorTypeBattery     SensorType = "battery"
-	SensorTypeGas         SensorType = "gas"
-	SensorTypeHumidity    SensorType = "humidity"
-	SensorTypeIMU         SensorType = "imu"
-	SensorTypeOdometry    SensorType = "odometry"
-	SensorTypePointCloud  SensorType = "point_cloud"
-	SensorTypePosition    SensorType = "position"
-	SensorTypeTemperature SensorType = "temperature"
-	SensorTypeUnknown     SensorType = "unknown"
+	SensorTypeBattery    SensorType = "battery"
+	SensorTypeGas        SensorType = "gas"
+	SensorTypeIMU        SensorType = "imu"
+	SensorTypeOdometry   SensorType = "odometry"
+	SensorTypePointCloud SensorType = "point_cloud"
+	SensorTypePosition   SensorType = "position"
+	SensorTypeUnknown    SensorType = "unknown"
 )
 
 func NormalizeSensorType(explicitType string, sensorID string) string {
@@ -24,12 +22,10 @@ func NormalizeSensorType(explicitType string, sensorID string) string {
 	switch SensorType(normalized) {
 	case SensorTypeBattery,
 		SensorTypeGas,
-		SensorTypeHumidity,
 		SensorTypeIMU,
 		SensorTypeOdometry,
 		SensorTypePointCloud,
-		SensorTypePosition,
-		SensorTypeTemperature:
+		SensorTypePosition:
 		return normalized
 	default:
 		return string(SensorTypeUnknown)
@@ -41,12 +37,10 @@ func ParseSensorType(sensorType string) (SensorType, bool) {
 	switch SensorType(normalized) {
 	case SensorTypeBattery,
 		SensorTypeGas,
-		SensorTypeHumidity,
 		SensorTypeIMU,
 		SensorTypeOdometry,
 		SensorTypePointCloud,
-		SensorTypePosition,
-		SensorTypeTemperature:
+		SensorTypePosition:
 		return SensorType(normalized), true
 	default:
 		return SensorTypeUnknown, false

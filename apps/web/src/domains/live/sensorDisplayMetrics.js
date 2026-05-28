@@ -4,14 +4,9 @@ const fieldDefinitions = {
   accuracyMeter: { label: "위치 오차", unit: "m", order: 46 },
   altitudeMeter: { label: "고도", unit: "m", order: 43 },
   batteryPercent: { label: "배터리", unit: "%", order: 30 },
-  ch4Ppm: { label: "CH4", unit: "ppm", order: 14 },
-  coPpm: { label: "CO", unit: "ppm", order: 10 },
   headingDegree: { label: "방향", unit: "deg", order: 44 },
-  humidityPercent: { label: "습도", unit: "%", order: 22 },
   networkState: { label: "네트워크", unit: "", order: 35 },
-  oxygenPercent: { label: "O2", unit: "%", order: 12 },
   speedMeterPerSecond: { label: "속도", unit: "m/s", order: 45 },
-  temperatureCelsius: { label: "온도", unit: "C", order: 20 },
   yawDegree: { label: "Yaw", unit: "deg", order: 62 }
 };
 
@@ -23,12 +18,26 @@ const segmentLabels = {
   z: "Z"
 };
 
-const hiddenFieldNames = new Set(["latitude", "longitude", "positionAvailable"]);
+const hiddenFieldNames = new Set([
+  "alarm",
+  "alarm_code",
+  "alarmCode",
+  "channel",
+  "frameId",
+  "high_alarm",
+  "highAlarm",
+  "latitude",
+  "longitude",
+  "low_alarm",
+  "lowAlarm",
+  "positionAvailable",
+  "scale_code",
+  "scaleCode",
+  "valid"
+]);
 
 const sensorTypeOrders = {
   [SensorType.GAS]: 10,
-  [SensorType.TEMPERATURE]: 20,
-  [SensorType.HUMIDITY]: 22,
   [SensorType.BATTERY]: 30,
   network: 35,
   [SensorType.POSITION]: 40,
@@ -37,6 +46,15 @@ const sensorTypeOrders = {
   [SensorType.POINT_CLOUD]: 70,
   spatial: 75,
   [SensorType.UNKNOWN]: 90
+};
+
+const gasLabelOrders = {
+  CO: 0.01,
+  H2S: 0.02,
+  O2: 0.03,
+  CH4: 0.04,
+  TEMP: 0.05,
+  HUM: 0.06
 };
 
 const sensorMetricStrategies = {
@@ -61,7 +79,7 @@ export function createSensorMetrics(sensor) {
   }
 
   appendObjectMetrics(metrics, seenMetricKeys, {
-    displayName: "Payload",
+    label: "Payload",
     sensorId: "payload",
     sensorType: SensorType.UNKNOWN,
     unit: ""
@@ -79,11 +97,10 @@ export function createSensorMetricsFromSensorLatest(sensorLatest) {
 
   for (const item of sensorLatest) {
     const descriptor = {
-      displayName: item.displayName ?? item.descriptor?.displayName,
+      label: item.label ?? item.descriptor?.label,
       sensorId: item.sensorId ?? item.descriptor?.sensorId,
       sensorType: item.sensorType ?? item.descriptor?.sensorType,
-      unit: item.unit ?? item.descriptor?.unit,
-      metadata: item.metadata ?? item.descriptor?.metadata
+      unit: item.unit ?? item.descriptor?.unit
     };
     appendSampleMetrics(metrics, seenMetricKeys, descriptor, item.latestSample);
   }
@@ -159,23 +176,29 @@ function appendDefaultSampleMetrics(metrics, seenMetricKeys, descriptor, sample)
 }
 
 function appendGasSampleMetrics(metrics, seenMetricKeys, descriptor, sample) {
+  appendSingleReadingMetric(metrics, seenMetricKeys, descriptor, sample, {
+    normalizedField: "concentration"
+  });
+}
+
+function appendSingleReadingMetric(metrics, seenMetricKeys, descriptor, sample, { normalizedField }) {
   const value = getSampleValue(sample);
   const receivedAt = sample.timestamp ?? sample.receivedAt;
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     appendDefaultSampleMetrics(metrics, seenMetricKeys, descriptor, sample);
     return;
   }
-  const concentration = value.concentration;
-  if (concentration === null || concentration === undefined || concentration === "") {
+  const reading = numberOrNull(value[normalizedField] ?? value.concentration);
+  if (reading === null) {
     appendDefaultSampleMetrics(metrics, seenMetricKeys, descriptor, sample);
     return;
   }
   appendMetric(metrics, seenMetricKeys, descriptor, {
-    alarmLevel: evaluateThresholdAlarm(concentration, descriptor.metadata),
-    fieldPath: "concentration",
-    label: descriptor.displayName,
+    fieldPath: normalizedField,
+    label: descriptor.label,
     receivedAt,
-    value: concentration
+    unit: stringOrEmpty(value.unit) || descriptor.unit,
+    value: reading
   });
 }
 
@@ -201,7 +224,7 @@ function appendObjectMetrics(metrics, seenMetricKeys, descriptor, value, basePat
   });
 }
 
-function appendMetric(metrics, seenMetricKeys, descriptor, { alarmLevel = "normal", fieldPath, label, receivedAt, value }) {
+function appendMetric(metrics, seenMetricKeys, descriptor, { alarmLevel = "normal", fieldPath, label, receivedAt, unit, value }) {
   if (value === null || value === undefined || value === "") {
     return;
   }
@@ -217,9 +240,9 @@ function appendMetric(metrics, seenMetricKeys, descriptor, { alarmLevel = "norma
     key: `${descriptor.sensorId}:${fieldPath}`,
     alarmLevel,
     label: label ?? makeMetricLabel(descriptor, fieldPath, fieldDefinition),
-    order: fieldDefinition?.order ?? (sensorTypeOrders[descriptor.sensorType] ?? sensorTypeOrders.unknown),
+    order: metricOrder(descriptor, fieldDefinition),
     receivedAt,
-    unit: fieldDefinition?.unit ?? descriptor.unit ?? "",
+    unit: unit ?? fieldDefinition?.unit ?? descriptor.unit ?? "",
     value
   });
 }
@@ -227,12 +250,26 @@ function appendMetric(metrics, seenMetricKeys, descriptor, { alarmLevel = "norma
 function normalizeDescriptor(descriptor, sample) {
   const sensorId = descriptor?.sensorId ?? sample?.sensorId ?? "sensor.unknown";
   return {
-    displayName: descriptor?.displayName ?? sensorId,
-    metadata: descriptor?.metadata ?? {},
+    label: descriptor?.label ?? sensorId,
     sensorId,
     sensorType: normalizeSensorType(descriptor?.sensorType ?? inferSensorType(sensorId)),
     unit: descriptor?.unit ?? ""
   };
+}
+
+function metricOrder(descriptor, fieldDefinition) {
+  if (descriptor.sensorType === SensorType.GAS) {
+    return sensorTypeOrders[SensorType.GAS] + gasLabelOrder(descriptor.label);
+  }
+  return fieldDefinition?.order ?? (sensorTypeOrders[descriptor.sensorType] ?? sensorTypeOrders.unknown);
+}
+
+function gasLabelOrder(label) {
+  return gasLabelOrders[normalizeLabelKey(label)] ?? 0.9;
+}
+
+function normalizeLabelKey(label) {
+  return String(label ?? "").trim().toUpperCase();
 }
 
 function getSampleValue(sample) {
@@ -255,37 +292,24 @@ function makeMetricLabel(descriptor, fieldPath, fieldDefinition) {
   const segments = fieldPath.split(".");
   if (segments.length >= 2) {
     const readableSegments = segments.map((segment) => segmentLabels[segment] ?? segment);
-    return `${descriptor.displayName} ${readableSegments.join(" ")}`;
+    return `${descriptor.label} ${readableSegments.join(" ")}`;
   }
   if (fieldPath === descriptor.sensorId) {
-    return descriptor.displayName;
+    return descriptor.label;
   }
-  return `${descriptor.displayName} ${segmentLabels[fieldPath] ?? fieldPath}`;
+  return `${descriptor.label} ${segmentLabels[fieldPath] ?? fieldPath}`;
 }
 
 function getLastPathSegment(fieldPath) {
   return fieldPath.split(".").at(-1) ?? fieldPath;
 }
 
-function evaluateThresholdAlarm(value, metadata = {}) {
-  if (typeof value !== "number") {
-    return "normal";
-  }
-  const criticalLow = numberOrNull(metadata.criticalLow);
-  const criticalHigh = numberOrNull(metadata.criticalHigh);
-  const warningLow = numberOrNull(metadata.warningLow);
-  const warningHigh = numberOrNull(metadata.warningHigh);
-  if ((criticalLow !== null && value <= criticalLow) || (criticalHigh !== null && value >= criticalHigh)) {
-    return "critical";
-  }
-  if ((warningLow !== null && value <= warningLow) || (warningHigh !== null && value >= warningHigh)) {
-    return "warning";
-  }
-  return "normal";
-}
-
 function numberOrNull(value) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function stringOrEmpty(value) {
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function sortMetrics(metrics) {
@@ -336,12 +360,6 @@ function inferSensorType(sensorId) {
   }
   if (normalizedSensorId.includes("network")) {
     return "network";
-  }
-  if (normalizedSensorId.includes("temperature")) {
-    return SensorType.TEMPERATURE;
-  }
-  if (normalizedSensorId.includes("humidity")) {
-    return SensorType.HUMIDITY;
   }
   if (normalizedSensorId.includes("gas")) {
     return SensorType.GAS;

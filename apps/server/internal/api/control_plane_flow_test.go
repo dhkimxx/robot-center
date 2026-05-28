@@ -196,16 +196,16 @@ func TestControlPlaneFlow(t *testing.T) {
 		"missionId":   missionID,
 		"descriptors": []map[string]any{
 			{
-				"sensorId":    "telemetry.position_1",
-				"sensorType":  "position",
-				"displayName": "GPS",
-				"enabled":     true,
+				"sensorId":   "telemetry.position_1",
+				"sensorType": "position",
+				"label":      "GPS",
+				"enabled":    true,
 			},
 			{
-				"sensorId":    "telemetry.gas_1",
-				"sensorType":  "gas",
-				"displayName": "Gas",
-				"enabled":     true,
+				"sensorId":   "telemetry.gas.channel_1",
+				"sensorType": "gas",
+				"label":      "Gas",
+				"enabled":    true,
 			},
 		},
 		"samples": []map[string]any{
@@ -218,11 +218,10 @@ func TestControlPlaneFlow(t *testing.T) {
 				},
 			},
 			{
-				"sensorId":  "telemetry.gas_1",
+				"sensorId":  "telemetry.gas.channel_1",
 				"timestamp": time.Now().UTC().Format(time.RFC3339Nano),
 				"values": map[string]any{
-					"coPpm":         12.3,
-					"oxygenPercent": 20.8,
+					"concentration": 12.3,
 				},
 			},
 		},
@@ -236,9 +235,9 @@ func TestControlPlaneFlow(t *testing.T) {
 		"missionId":   missionID,
 		"descriptors": []map[string]any{
 			{
-				"sensorId":    "telemetry.temperature_1",
-				"displayName": "Temperature",
-				"enabled":     true,
+				"sensorId": "telemetry.gas.channel_5",
+				"label":    "TEMP",
+				"enabled":  true,
 			},
 		},
 	})
@@ -254,10 +253,10 @@ func TestControlPlaneFlow(t *testing.T) {
 		"missionId":   missionID,
 		"descriptors": []map[string]any{
 			{
-				"sensorId":    "telemetry.custom_1",
-				"sensorType":  "custom",
-				"displayName": "Custom",
-				"enabled":     true,
+				"sensorId":   "telemetry.custom_1",
+				"sensorType": "custom",
+				"label":      "Custom",
+				"enabled":    true,
 			},
 		},
 	})

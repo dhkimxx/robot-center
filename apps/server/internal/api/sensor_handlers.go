@@ -77,13 +77,12 @@ func (s *Server) handleCreateSensorSamples(w http.ResponseWriter, r *http.Reques
 }
 
 type sensorDescriptorRequest struct {
-	SensorID    string         `json:"sensorId"`
-	ChannelRole string         `json:"channelRole"`
-	DisplayName string         `json:"displayName"`
-	SensorType  string         `json:"sensorType"`
-	Unit        string         `json:"unit"`
-	Enabled     bool           `json:"enabled"`
-	Metadata    map[string]any `json:"metadata"`
+	SensorID    string `json:"sensorId"`
+	ChannelRole string `json:"channelRole"`
+	Label       string `json:"label"`
+	SensorType  string `json:"sensorType"`
+	Unit        string `json:"unit"`
+	Enabled     bool   `json:"enabled"`
 }
 
 type sensorSampleRequest struct {
@@ -146,18 +145,17 @@ func decodeSensorEnvelope(r *http.Request) (domain.SensorEnvelope, error) {
 		}
 		sensorType, ok := domain.ParseSensorType(descriptor.SensorType)
 		if !ok {
-			return domain.SensorEnvelope{}, errors.New("descriptor sensorType is required and must be one of: battery, gas, humidity, imu, odometry, point_cloud, position, temperature")
+			return domain.SensorEnvelope{}, errors.New("descriptor sensorType is required and must be one of: battery, gas, imu, odometry, point_cloud, position")
 		}
 		envelope.Descriptors = append(envelope.Descriptors, domain.SensorDescriptor{
 			MissionID:   request.MissionID,
 			RobotCode:   request.RobotCode,
 			SensorID:    sensorID,
 			ChannelRole: utils.FirstNonEmptyString(descriptor.ChannelRole, request.ChannelRole),
-			DisplayName: utils.FirstNonEmptyString(descriptor.DisplayName, sensorID),
+			Label:       utils.FirstNonEmptyString(descriptor.Label, sensorID),
 			SensorType:  string(sensorType),
 			Unit:        strings.TrimSpace(descriptor.Unit),
 			Enabled:     descriptor.Enabled,
-			Metadata:    utils.RawJSONOrEmpty(descriptor.Metadata),
 		})
 	}
 	for _, sample := range request.Samples {

@@ -31,15 +31,14 @@ func TestSensorRepositoryPersistsDescriptorsSamplesAndLatestValues(t *testing.T)
 			{
 				SensorID:    "telemetry.position_1",
 				ChannelRole: "channel.telemetry",
-				DisplayName: "GPS",
+				Label:       "GPS",
 				SensorType:  "position",
 				Enabled:     true,
-				Metadata:    json.RawMessage(`{"frame":"wgs84"}`),
 			},
 			{
 				SensorID:    "telemetry.battery_1",
 				ChannelRole: "channel.telemetry",
-				DisplayName: "Battery",
+				Label:       "Battery",
 				SensorType:  "battery",
 				Unit:        "percent",
 				Enabled:     true,
@@ -95,11 +94,11 @@ func TestSensorRepositoryPersistsDescriptorsSamplesAndLatestValues(t *testing.T)
 		RawPayload:  json.RawMessage(`{"messageType":"telemetry"}`),
 		Descriptors: []domain.SensorDescriptor{
 			{
-				SensorID:    "telemetry.battery_1",
-				DisplayName: "Main Battery",
-				SensorType:  "battery",
-				Unit:        "percent",
-				Enabled:     true,
+				SensorID:   "telemetry.battery_1",
+				Label:      "Main Battery",
+				SensorType: "battery",
+				Unit:       "percent",
+				Enabled:    true,
 			},
 		},
 		Samples: []domain.SensorSample{
@@ -119,8 +118,8 @@ func TestSensorRepositoryPersistsDescriptorsSamplesAndLatestValues(t *testing.T)
 	if len(descriptors) != 2 {
 		t.Fatalf("expected descriptor upsert not to create duplicates, got %#v", descriptors)
 	}
-	if !descriptorHasDisplayName(descriptors, "telemetry.battery_1", "Main Battery") {
-		t.Fatalf("expected updated battery display name, got %#v", descriptors)
+	if !descriptorHasLabel(descriptors, "telemetry.battery_1", "Main Battery") {
+		t.Fatalf("expected updated battery label, got %#v", descriptors)
 	}
 
 	_, err = store.SaveSensorEnvelope(ctx, domain.SensorEnvelope{
@@ -158,9 +157,9 @@ func latestSensorHasValue(latest []domain.SensorLatest, sensorID string, key str
 	return false
 }
 
-func descriptorHasDisplayName(descriptors []domain.SensorDescriptor, sensorID string, displayName string) bool {
+func descriptorHasLabel(descriptors []domain.SensorDescriptor, sensorID string, label string) bool {
 	for _, descriptor := range descriptors {
-		if descriptor.SensorID == sensorID && descriptor.DisplayName == displayName {
+		if descriptor.SensorID == sensorID && descriptor.Label == label {
 			return true
 		}
 	}

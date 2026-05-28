@@ -17,10 +17,6 @@ func InferSensorTypeFromID(sensorID string) string {
 		return string(SensorTypePointCloud)
 	case strings.Contains(normalized, "battery"):
 		return string(SensorTypeBattery)
-	case strings.Contains(normalized, "temperature"):
-		return string(SensorTypeTemperature)
-	case strings.Contains(normalized, "humidity"):
-		return string(SensorTypeHumidity)
 	default:
 		return string(SensorTypeUnknown)
 	}

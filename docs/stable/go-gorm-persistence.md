@@ -316,7 +316,7 @@ robot-center 적용 기준:
 - post DDL은 `CREATE INDEX IF NOT EXISTS`, `pg_constraint` 존재 확인, null backfill처럼 재실행 가능한 형태로 작성한다.
 - 기존 raw SQL repository가 남아 있으므로 GORM association만 믿지 않고 실제 PostgreSQL constraint를 확인한다.
 - 오래된 빈 테이블은 post DDL에서 비어 있을 때만 제거할 수 있다.
-- 비어 있지 않은 legacy table은 런타임에서 자동 drop하지 말고 별도 정리 판단을 남긴다.
+- 비어 있지 않은 기존 table은 런타임에서 자동 drop하지 말고 별도 정리 판단을 남긴다.
 
 ## 테스트 전략
 

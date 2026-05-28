@@ -7,7 +7,7 @@ import {
 describe("sensorLatestMapper", () => {
   const sensorLatest = [
     {
-      displayName: "GPS",
+      label: "GPS",
       missionId: "mission-id",
       robotCode: "robot-001",
       sensorId: "telemetry.position_1",
@@ -21,15 +21,29 @@ describe("sensorLatestMapper", () => {
       }
     },
     {
-      displayName: "Gas",
+      label: "CO",
       missionId: "mission-id",
       robotCode: "robot-001",
-      sensorId: "telemetry.gas_1",
+      sensorId: "telemetry.gas.channel_1",
       sensorType: "gas",
+      unit: "ppm",
       latestSample: {
         values: {
-          coPpm: 9,
-          oxygenPercent: 20.8
+          concentration: 9
+        },
+        receivedAt: "2026-05-26T01:00:01Z"
+      }
+    },
+    {
+      label: "O2",
+      missionId: "mission-id",
+      robotCode: "robot-001",
+      sensorId: "telemetry.gas.channel_3",
+      sensorType: "gas",
+      unit: "%Vol",
+      latestSample: {
+        values: {
+          concentration: 20.8
         },
         receivedAt: "2026-05-26T01:00:01Z"
       }
@@ -59,7 +73,7 @@ describe("sensorLatestMapper", () => {
       expect.objectContaining({
         label: "O2",
         receivedAt: "2026-05-26T01:00:01Z",
-        unit: "%",
+        unit: "%Vol",
         value: 20.8
       })
     ]);

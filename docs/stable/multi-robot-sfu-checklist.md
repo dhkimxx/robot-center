@@ -78,7 +78,7 @@ RobotStreamBundle
 
 슬롯명은 의미를 고정하지 않는다. `track.video_1 = RGB`, `track.video_2 = Thermal` 같은 해석은 mock/display metadata에서만 다룬다.
 
-현재 PoC 호환을 위해 `rgb`, `thermal`, `audio`, `sensor`, `telemetry` 같은 legacy label은 fallback alias로만 허용한다. 신규 mock/robot은 canonical slot label을 우선 사용한다.
+신규 mock/robot은 canonical slot label을 사용한다.
 
 Subscriber policy:
 

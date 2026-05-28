@@ -156,17 +156,44 @@ func sensorContractCleanupMigrationStatement() string {
 			END IF;
 
 			IF to_regclass('public.sensor_descriptors') IS NOT NULL THEN
+				IF EXISTS (
+					SELECT 1
+					FROM information_schema.columns
+					WHERE table_schema = 'public'
+						AND table_name = 'sensor_descriptors'
+						AND column_name = 'display_name'
+				) THEN
+					UPDATE sensor_descriptors
+					SET label = display_name
+					WHERE COALESCE(label, '') = ''
+						AND display_name IS NOT NULL;
+				END IF;
+
+				UPDATE sensor_descriptors
+				SET label = sensor_id
+				WHERE COALESCE(label, '') = '';
+
 				IF to_regclass('public.sensor_samples') IS NOT NULL THEN
 					DELETE FROM sensor_samples
 					WHERE descriptor_id IN (
-						SELECT id FROM sensor_descriptors WHERE sensor_type IN ('environment', 'legacy')
+						SELECT id
+						FROM sensor_descriptors
+						WHERE sensor_type IN ('environment', 'legacy', 'temperature', 'humidity')
+							OR (sensor_type = 'gas' AND sensor_id NOT LIKE 'telemetry.gas.channel_%')
 					);
 				END IF;
 
-				DELETE FROM sensor_descriptors WHERE sensor_type IN ('environment', 'legacy');
+				DELETE FROM sensor_descriptors
+				WHERE sensor_type IN ('environment', 'legacy', 'temperature', 'humidity')
+					OR (sensor_type = 'gas' AND sensor_id NOT LIKE 'telemetry.gas.channel_%');
 
 				ALTER TABLE sensor_descriptors DROP COLUMN IF EXISTS value_type;
 				ALTER TABLE sensor_descriptors DROP COLUMN IF EXISTS sample_rate_hz;
+				ALTER TABLE sensor_descriptors DROP COLUMN IF EXISTS metadata;
+				ALTER TABLE sensor_descriptors DROP COLUMN IF EXISTS display_name;
+				ALTER TABLE sensor_descriptors ALTER COLUMN label SET NOT NULL;
+				ALTER TABLE sensor_descriptors DROP CONSTRAINT IF EXISTS sensor_descriptors_gas_source_channel_check;
+				ALTER TABLE sensor_descriptors DROP COLUMN IF EXISTS source_channel;
 			END IF;
 		END $$`
 }

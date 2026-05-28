@@ -24,7 +24,7 @@ history:
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: documented recording finalization job flow and recorder-worker scale-out considerations'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: documented finalization worker attempt fencing'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: clarified live connection status source uses robots.device_state plus heartbeat freshness'
-- '2026-05-27 danya.kim <danya.kim@thundersoft.com>: replace legacy SFU endpoint with role-specific signaling endpoints'
+- '2026-05-27 danya.kim <danya.kim@thundersoft.com>: document role-specific signaling endpoints'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: fix malformed frontmatter history entry'
 ---
 
@@ -218,7 +218,7 @@ track.audio_2
 | `track.audio_1` | Audio |
 | `track.audio_2` | reserved secondary audio slot |
 
-`rgb`, `thermal`, `audio`, `sensor`, `telemetry` 같은 legacy label은 호환 fallback으로만 취급한다. 신규 구현은 canonical slot label을 우선 사용한다.
+신규 구현은 canonical slot label만 사용한다.
 
 ### 5.2 DataChannel
 
@@ -246,7 +246,7 @@ channel.control
 
 ### 6.1 SensorDescriptor
 
-`SensorDescriptor`는 “이 로봇이 어떤 센서를 보낼 수 있는가”를 설명하는 metadata다.
+`SensorDescriptor`는 “이 로봇이 어떤 센서를 보낼 수 있는가”를 설명하는 정형 식별/표시 schema다.
 
 식별 기준:
 
@@ -260,13 +260,12 @@ missionId + robotCode + sensorId
 | --- | --- |
 | `missionId` | 센서가 관측된 mission |
 | `robotCode` | 센서를 publish한 robot |
-| `sensorId` | robot 내부에서 안정적으로 쓰는 sensor slot id |
+| `sensorId` | robot 내부에서 안정적으로 쓰는 sensor slot id. descriptor/sample 매칭용 식별자 |
 | `channelRole` | 들어온 DataChannel 역할 |
-| `displayName` | UI 표시명 |
-| `sensorType` | position, imu, gas, point_cloud 등 센서 계열. 로봇 payload descriptor 필수값 |
+| `label` | 사람이 읽는 센서/channel label. 같은 sensorType 안에서 표시 전략의 보조 키 |
+| `sensorType` | position, imu, gas, point_cloud 등 센서 계열. 로봇 payload descriptor 필수값이자 관제 UI의 1차 해석 전략 키 |
 | `unit` | 표시 단위 |
 | `enabled` | UI/저장 대상으로 활성화할지 여부 |
-| `metadata` | frameId, axes 같은 부가 정보 |
 | `firstSeenAt` / `lastSeenAt` | 최초/마지막 관측 시각 |
 
 ### 6.2 SensorSample
@@ -286,6 +285,8 @@ missionId + robotCode + sensorId
 | `sample_timestamp` / `receivedAt` | sample 측정 시각과 서버 수신 시각 |
 | `values` / `objectKey` | object 기반 측정값 또는 object storage 참조 |
 | `rawPayload` | 원본 또는 정규화 전 payload snapshot |
+
+frameId, gas alarm 기준, 장비 원본 상태처럼 sensorType별로 달라지는 값은 descriptor가 아니라 `values`에 둔다. UI와 저장 해석은 `sensorType`별 strategy가 담당한다.
 
 샘플만 들어오고 descriptor가 없으면 서버는 기존 descriptor를 기준으로 저장한다. 새 sensorId를 처음 보낼 때는 descriptor를 함께 보내야 하며, descriptor의 `sensorType`은 필수다.
 
