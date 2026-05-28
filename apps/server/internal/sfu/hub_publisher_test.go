@@ -106,6 +106,12 @@ func TestHubObservedRoomsSummarizePublisherActivity(t *testing.T) {
 	if publisherSummary.State != "publishing" || publisherSummary.TrackCount != 1 || publisherSummary.DataChannelCount != 1 {
 		t.Fatalf("unexpected observed publisher summary: %#v", publisherSummary)
 	}
+	if len(publisherSummary.DataChannelStates) != 1 || publisherSummary.DataChannelStates[0].Label != StreamRoleChannelTelemetry {
+		t.Fatalf("expected telemetry data channel lifecycle summary, got %#v", publisherSummary.DataChannelStates)
+	}
+	if publisherSummary.DataChannelStates[0].State != "detected" {
+		t.Fatalf("expected default data channel state to be detected, got %#v", publisherSummary.DataChannelStates[0])
+	}
 	if publisherSummary.SubscriberCount != 2 {
 		t.Fatalf("expected operator and recorder subscriber count, got %#v", publisherSummary)
 	}

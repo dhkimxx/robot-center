@@ -2,6 +2,7 @@ package sfu
 
 import (
 	"strings"
+	"time"
 
 	"robot-center/apps/server/internal/utils"
 
@@ -32,7 +33,14 @@ type RobotStreamMetadata struct {
 }
 
 type PublishedDataChannel struct {
-	Role string
+	Role          string
+	State         string
+	DetectedAt    *time.Time
+	OpenedAt      *time.Time
+	LastMessageAt *time.Time
+	MessageCount  int
+	ClosedAt      *time.Time
+	LastError     string
 }
 
 type RobotStreamBundle struct {

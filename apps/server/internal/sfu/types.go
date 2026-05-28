@@ -29,13 +29,14 @@ type Hub struct {
 }
 
 type RoomSummary struct {
-	RoomID          string        `json:"roomId"`
-	RobotCount      int           `json:"robotCount"`
-	OperatorCount   int           `json:"operatorCount"`
-	RecorderCount   int           `json:"recorderCount"`
-	MediaMode       string        `json:"mediaMode"`
-	PublishedTracks []string      `json:"publishedTracks,omitempty"`
-	Peers           []PeerSummary `json:"peers"`
+	RoomID          string                     `json:"roomId"`
+	RobotCount      int                        `json:"robotCount"`
+	OperatorCount   int                        `json:"operatorCount"`
+	RecorderCount   int                        `json:"recorderCount"`
+	MediaMode       string                     `json:"mediaMode"`
+	PublishedTracks []string                   `json:"publishedTracks,omitempty"`
+	Publishers      []ObservedPublisherSummary `json:"publishers,omitempty"`
+	Peers           []PeerSummary              `json:"peers"`
 }
 
 type ObservedRoomSummary struct {
@@ -45,19 +46,31 @@ type ObservedRoomSummary struct {
 }
 
 type ObservedPublisherSummary struct {
-	RobotCode        string     `json:"robotCode"`
-	PublisherPeerID  string     `json:"publisherPeerId"`
-	State            string     `json:"state"`
-	ICEState         string     `json:"iceState,omitempty"`
-	TrackCount       int        `json:"trackCount"`
-	DataChannelCount int        `json:"dataChannelCount"`
-	SubscriberCount  int        `json:"subscriberCount"`
-	Tracks           []string   `json:"tracks"`
-	DataChannels     []string   `json:"dataChannels"`
-	JoinedAt         time.Time  `json:"joinedAt"`
-	LastTrackAt      *time.Time `json:"lastTrackAt,omitempty"`
-	LastDataAt       *time.Time `json:"lastDataAt,omitempty"`
-	UpdatedAt        time.Time  `json:"updatedAt"`
+	RobotCode         string                       `json:"robotCode"`
+	PublisherPeerID   string                       `json:"publisherPeerId"`
+	State             string                       `json:"state"`
+	ICEState          string                       `json:"iceState,omitempty"`
+	TrackCount        int                          `json:"trackCount"`
+	DataChannelCount  int                          `json:"dataChannelCount"`
+	SubscriberCount   int                          `json:"subscriberCount"`
+	Tracks            []string                     `json:"tracks"`
+	DataChannels      []string                     `json:"dataChannels"`
+	DataChannelStates []ObservedDataChannelSummary `json:"dataChannelStates,omitempty"`
+	JoinedAt          time.Time                    `json:"joinedAt"`
+	LastTrackAt       *time.Time                   `json:"lastTrackAt,omitempty"`
+	LastDataAt        *time.Time                   `json:"lastDataAt,omitempty"`
+	UpdatedAt         time.Time                    `json:"updatedAt"`
+}
+
+type ObservedDataChannelSummary struct {
+	Label         string     `json:"label"`
+	State         string     `json:"state"`
+	DetectedAt    *time.Time `json:"detectedAt,omitempty"`
+	OpenedAt      *time.Time `json:"openedAt,omitempty"`
+	LastMessageAt *time.Time `json:"lastMessageAt,omitempty"`
+	MessageCount  int        `json:"messageCount"`
+	ClosedAt      *time.Time `json:"closedAt,omitempty"`
+	LastError     string     `json:"lastError,omitempty"`
 }
 
 type PeerSummary struct {

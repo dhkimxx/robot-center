@@ -1,7 +1,7 @@
 ---
 title: "robot-team-webrtc-send-test-guide"
 created: 2026-05-27
-updated: '2026-05-27'
+updated: '2026-05-28'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>"]
 type: "guide"
@@ -25,6 +25,8 @@ history:
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: normalize canonical guide history wording'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: add robot team signaling Q&A'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: make robot team test slots self-service'
+- '2026-05-28 danya.kim <danya.kim@thundersoft.com>: clarify DataChannel lifecycle'
+- '2026-05-28 danya.kim <danya.kim@thundersoft.com>: keep the robot-team sharing guide focused on negotiation details'
 ---
 
 # Robot Team WebRTC Send Test Guide
@@ -285,7 +287,7 @@ WebRTC room 규칙:
 8. DataChannel publish
 ```
 
-관제팀이 제공하는 Android/Python Mock Robot은 테스트용 sample client다. 실제 로봇 구현은 로봇팀 코드베이스에서 담당한다.
+실제 로봇 구현은 로봇팀 코드베이스에서 담당한다. 이 문서는 관제 서버와 Robot Gateway/Publisher 사이의 외부 연동 계약만 정의한다.
 
 ## 5. REST API Reference
 
@@ -589,6 +591,37 @@ ICE candidate payload는 browser/Pion 표준 candidate 필드를 사용한다.
 | `channel.event` | `event` 또는 domain-specific type | alarm, fault, detection, mission event. 현재 recorder-worker 저장 대상은 아님 |
 | `channel.control` | reserved | reserved control/ack side channel. 현재 recorder-worker 저장 대상은 아님 |
 
+DataChannel 생성과 전송 시작 조건:
+
+```text
+1. Robot은 offer 생성 전에 필요한 DataChannel을 생성한다.
+2. Robot은 offer를 WebSocket으로 보낸다.
+3. Robot은 answer를 받아 remote description으로 적용한다.
+4. ICE / DTLS / SCTP / DataChannel negotiation이 끝난다.
+5. 각 DataChannel이 OPEN 상태가 된다.
+6. Robot은 해당 DataChannel OPEN 이후에만 JSON payload를 send한다.
+```
+
+주의:
+
+- `createDataChannel()` 직후에는 send하지 않는다.
+- `answer` 수신 직후에는 send하지 않는다.
+- ICE state가 `connected`가 됐더라도 DataChannel OPEN callback 전이면 send하지 않는다.
+- SDK가 open callback을 제공하면 callback 이후 전송한다.
+- SDK가 callback 대신 state polling을 사용하면 `readyState == open` 또는 동일 의미의 상태를 확인한 뒤 전송한다.
+
+상태 판단 기준:
+
+| 관측값 | 의미 |
+| --- | --- |
+| SFU `detected` | 로봇 offer의 DataChannel/SCTP 협상이 서버에 도달함 |
+| SFU `open` | 로봇 publisher와 SFU 사이 DataChannel이 실제 OPEN됨 |
+| SFU `lastMessageAt` | SFU가 로봇 DataChannel payload를 실제 수신함 |
+| recorder `open` | SFU가 recorder subscriber로 만든 downstream DataChannel이 OPEN됨 |
+| recorder `lastDataAt` | recorder가 SFU에서 forward된 payload를 실제 수신함 |
+
+`lastDataAt`은 DataChannel open 시각이 아니라, 실제 메시지 수신 시각이다.
+
 `channel.telemetry` 예시:
 
 ```json
@@ -731,6 +764,8 @@ Sensor/UI:
 - TURN candidate 생성 여부
 - publish한 track id, stream id, codec, resolution, fps
 - 열린 DataChannel label 목록
+- DataChannel별 open callback 발생 여부와 발생 시각
+- DataChannel별 첫 send 시각과 send 직전 state
 - 마지막으로 송신한 DataChannel payload 예시
 
 ## 12. 테스트 결과 기록

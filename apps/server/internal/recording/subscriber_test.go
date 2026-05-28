@@ -2,6 +2,7 @@ package recording
 
 import (
 	"testing"
+	"time"
 
 	"robot-center/apps/server/internal/domain"
 )
@@ -64,5 +65,30 @@ func TestRecorderDataChannelFileLabelKeepsTelemetryJSONLOnly(t *testing.T) {
 		if got := recorderDataChannelFileLabel(input); got != want {
 			t.Fatalf("recorderDataChannelFileLabel(%q) = %q, want %q", input, got, want)
 		}
+	}
+}
+
+func TestSubscriberDataChannelStatusesExposeLifecycle(t *testing.T) {
+	observedAt := time.Now().UTC()
+	status := recorderSessionStatus{
+		dataChannelLabels: map[string]struct{}{},
+		dataChannelStates: map[string]recorderDataChannelRuntime{},
+	}
+	runtime := ensureRecorderDataChannelRuntime(&status, "channel.telemetry", observedAt)
+	runtime.state = "open"
+	runtime.openedAt = observedAt
+	runtime.lastMessageAt = observedAt
+	runtime.messageCount = 3
+	status.dataChannelStates["channel.telemetry"] = runtime
+
+	dataChannels := subscriberDataChannelStatuses(status)
+	if len(dataChannels) != 1 {
+		t.Fatalf("expected one data channel status, got %#v", dataChannels)
+	}
+	if dataChannels[0].Label != "channel.telemetry" || dataChannels[0].State != "open" || dataChannels[0].MessageCount != 3 {
+		t.Fatalf("unexpected data channel status: %#v", dataChannels[0])
+	}
+	if dataChannels[0].DetectedAt == nil || dataChannels[0].OpenedAt == nil || dataChannels[0].LastMessageAt == nil {
+		t.Fatalf("expected data channel lifecycle timestamps, got %#v", dataChannels[0])
 	}
 }

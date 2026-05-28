@@ -51,7 +51,19 @@ func (s *publisherSession) prepareConnection(roomID string, hub *Hub) {
 	s.peerConnection.OnDataChannel(func(dataChannel *webrtc.DataChannel) {
 		label := normalizeDataChannelRole(dataChannel.Label())
 		hub.markPublisherDataChannel(roomID, s.robotCode, s.peerID, label)
-		log.Printf("sfu robot datachannel room=%s robot=%s label=%s", roomID, s.robotCode, label)
+		log.Printf("sfu robot datachannel detected room=%s robot=%s label=%s", roomID, s.robotCode, label)
+		dataChannel.OnOpen(func() {
+			hub.markPublisherDataChannelOpen(roomID, s.robotCode, s.peerID, label)
+			log.Printf("sfu robot datachannel open room=%s robot=%s label=%s", roomID, s.robotCode, label)
+		})
+		dataChannel.OnClose(func() {
+			hub.markPublisherDataChannelClosed(roomID, s.robotCode, s.peerID, label)
+			log.Printf("sfu robot datachannel closed room=%s robot=%s label=%s", roomID, s.robotCode, label)
+		})
+		dataChannel.OnError(func(err error) {
+			hub.markPublisherDataChannelError(roomID, s.robotCode, s.peerID, label, err)
+			log.Printf("sfu robot datachannel error room=%s robot=%s label=%s: %v", roomID, s.robotCode, label, err)
+		})
 		dataChannel.OnMessage(func(message webrtc.DataChannelMessage) {
 			hub.markPublisherDataActivity(roomID, s.robotCode, s.peerID, label)
 			hub.forwardDataChannelMessage(roomID, s.robotCode, label, message.Data)

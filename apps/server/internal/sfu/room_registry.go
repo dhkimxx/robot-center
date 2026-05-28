@@ -15,6 +15,7 @@ func (h *Hub) Summaries() []RoomSummary {
 			RoomID:          room.id,
 			MediaMode:       "go_sfu",
 			PublishedTracks: make([]string, 0),
+			Publishers:      observedPublisherSummaries(room),
 			Peers:           make([]PeerSummary, 0, len(room.peers)),
 		}
 		for _, publisher := range room.publishers {
@@ -61,51 +62,90 @@ func (h *Hub) ObservedRooms() []ObservedRoomSummary {
 		summary := ObservedRoomSummary{
 			RoomID:     room.id,
 			MediaMode:  "go_sfu",
-			Publishers: make([]ObservedPublisherSummary, 0, len(room.publishers)),
+			Publishers: observedPublisherSummaries(room),
 		}
-		for _, publisher := range room.publishers {
-			tracks := make([]string, 0, len(publisher.publishedTracks))
-			for trackKey := range publisher.publishedTracks {
-				tracks = append(tracks, trackKey)
-			}
-			sort.Strings(tracks)
-
-			dataChannels := make([]string, 0)
-			if publisher.streamBundle != nil {
-				for label := range publisher.streamBundle.DataChannels {
-					dataChannels = append(dataChannels, label)
-				}
-			}
-			sort.Strings(dataChannels)
-
-			summary.Publishers = append(summary.Publishers, ObservedPublisherSummary{
-				RobotCode:        publisher.robotCode,
-				PublisherPeerID:  publisher.peerID,
-				State:            observedPublisherState(publisher),
-				ICEState:         publisher.iceState,
-				TrackCount:       len(tracks),
-				DataChannelCount: len(dataChannels),
-				SubscriberCount:  room.subscriberCountForRobot(publisher.robotCode),
-				Tracks:           tracks,
-				DataChannels:     dataChannels,
-				JoinedAt:         publisher.joinedAt,
-				LastTrackAt:      cloneTimePointer(publisher.lastTrackAt),
-				LastDataAt:       cloneTimePointer(publisher.lastDataAt),
-				UpdatedAt:        publisher.updatedAt,
-			})
-		}
-		sort.Slice(summary.Publishers, func(i, j int) bool {
-			if summary.Publishers[i].RobotCode != summary.Publishers[j].RobotCode {
-				return summary.Publishers[i].RobotCode < summary.Publishers[j].RobotCode
-			}
-			return summary.Publishers[i].PublisherPeerID < summary.Publishers[j].PublisherPeerID
-		})
 		summaries = append(summaries, summary)
 	}
 	sort.Slice(summaries, func(i, j int) bool {
 		return summaries[i].RoomID < summaries[j].RoomID
 	})
 	return summaries
+}
+
+func observedPublisherSummaries(currentRoom *room) []ObservedPublisherSummary {
+	if currentRoom == nil {
+		return nil
+	}
+	summaries := make([]ObservedPublisherSummary, 0, len(currentRoom.publishers))
+	for _, publisher := range currentRoom.publishers {
+		summaries = append(summaries, observedPublisherSummary(currentRoom, publisher))
+	}
+	sort.Slice(summaries, func(i, j int) bool {
+		if summaries[i].RobotCode != summaries[j].RobotCode {
+			return summaries[i].RobotCode < summaries[j].RobotCode
+		}
+		return summaries[i].PublisherPeerID < summaries[j].PublisherPeerID
+	})
+	return summaries
+}
+
+func observedPublisherSummary(currentRoom *room, publisher *publisherSession) ObservedPublisherSummary {
+	tracks := make([]string, 0, len(publisher.publishedTracks))
+	for trackKey := range publisher.publishedTracks {
+		tracks = append(tracks, trackKey)
+	}
+	sort.Strings(tracks)
+
+	dataChannels, dataChannelStates := observedDataChannelSummaries(publisher)
+	return ObservedPublisherSummary{
+		RobotCode:         publisher.robotCode,
+		PublisherPeerID:   publisher.peerID,
+		State:             observedPublisherState(publisher),
+		ICEState:          publisher.iceState,
+		TrackCount:        len(tracks),
+		DataChannelCount:  len(dataChannels),
+		SubscriberCount:   currentRoom.subscriberCountForRobot(publisher.robotCode),
+		Tracks:            tracks,
+		DataChannels:      dataChannels,
+		DataChannelStates: dataChannelStates,
+		JoinedAt:          publisher.joinedAt,
+		LastTrackAt:       cloneTimePointer(publisher.lastTrackAt),
+		LastDataAt:        cloneTimePointer(publisher.lastDataAt),
+		UpdatedAt:         publisher.updatedAt,
+	}
+}
+
+func observedDataChannelSummaries(publisher *publisherSession) ([]string, []ObservedDataChannelSummary) {
+	if publisher == nil || publisher.streamBundle == nil {
+		return nil, nil
+	}
+	dataChannels := make([]string, 0, len(publisher.streamBundle.DataChannels))
+	states := make([]ObservedDataChannelSummary, 0, len(publisher.streamBundle.DataChannels))
+	for label, channel := range publisher.streamBundle.DataChannels {
+		dataChannels = append(dataChannels, label)
+		if channel == nil {
+			states = append(states, ObservedDataChannelSummary{
+				Label: label,
+				State: "unknown",
+			})
+			continue
+		}
+		states = append(states, ObservedDataChannelSummary{
+			Label:         label,
+			State:         publishedDataChannelState(channel),
+			DetectedAt:    cloneTimePointer(channel.DetectedAt),
+			OpenedAt:      cloneTimePointer(channel.OpenedAt),
+			LastMessageAt: cloneTimePointer(channel.LastMessageAt),
+			MessageCount:  channel.MessageCount,
+			ClosedAt:      cloneTimePointer(channel.ClosedAt),
+			LastError:     channel.LastError,
+		})
+	}
+	sort.Strings(dataChannels)
+	sort.Slice(states, func(i, j int) bool {
+		return states[i].Label < states[j].Label
+	})
+	return dataChannels, states
 }
 
 func (h *Hub) registerPeer(joinedPeer *peer) []*peer {

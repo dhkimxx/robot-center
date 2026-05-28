@@ -112,6 +112,120 @@ func ensureRecorderRobotRuntime(status *recorderSessionStatus, robotCode string)
 	return runtime
 }
 
+func ensureRecorderDataChannelRuntime(status *recorderSessionStatus, label string, observedAt time.Time) recorderDataChannelRuntime {
+	if status.dataChannelStates == nil {
+		status.dataChannelStates = map[string]recorderDataChannelRuntime{}
+	}
+	if status.dataChannelLabels == nil {
+		status.dataChannelLabels = map[string]struct{}{}
+	}
+	status.dataChannelLabels[label] = struct{}{}
+	runtime := status.dataChannelStates[label]
+	if runtime.label == "" {
+		runtime.label = label
+		runtime.state = "detected"
+		runtime.detectedAt = observedAt
+	}
+	if runtime.state == "" {
+		runtime.state = "detected"
+	}
+	return runtime
+}
+
+func subscriberDataChannelStatuses(status recorderSessionStatus) []SubscriberDataChannelStatus {
+	labels := make([]string, 0, len(status.dataChannelStates))
+	for label := range status.dataChannelStates {
+		labels = append(labels, label)
+	}
+	sort.Strings(labels)
+	output := make([]SubscriberDataChannelStatus, 0, len(labels))
+	for _, label := range labels {
+		runtime := status.dataChannelStates[label]
+		output = append(output, SubscriberDataChannelStatus{
+			Label:         label,
+			State:         runtime.state,
+			DetectedAt:    recorderTimePointer(runtime.detectedAt),
+			OpenedAt:      recorderTimePointer(runtime.openedAt),
+			LastMessageAt: recorderTimePointer(runtime.lastMessageAt),
+			MessageCount:  runtime.messageCount,
+			ClosedAt:      recorderTimePointer(runtime.closedAt),
+			LastError:     runtime.lastError,
+		})
+	}
+	return output
+}
+
+func recorderTimePointer(value time.Time) *time.Time {
+	if value.IsZero() {
+		return nil
+	}
+	cloned := value.UTC()
+	return &cloned
+}
+
+func (w *Worker) markRecorderDataChannelDetected(roomID string, label string) {
+	observedAt := time.Now().UTC()
+	w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
+		runtime := ensureRecorderDataChannelRuntime(status, label, observedAt)
+		status.dataChannelStates[label] = runtime
+		status.lastDataLabel = label
+	})
+}
+
+func (w *Worker) markRecorderDataChannelOpen(roomID string, label string) {
+	observedAt := time.Now().UTC()
+	w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
+		runtime := ensureRecorderDataChannelRuntime(status, label, observedAt)
+		runtime.state = "open"
+		runtime.openedAt = observedAt
+		runtime.lastError = ""
+		status.dataChannelStates[label] = runtime
+		status.lastDataLabel = label
+	})
+}
+
+func (w *Worker) markRecorderDataChannelMessage(roomID string, label string, observedAt time.Time) {
+	if observedAt.IsZero() {
+		observedAt = time.Now().UTC()
+	}
+	w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
+		runtime := ensureRecorderDataChannelRuntime(status, label, observedAt)
+		if runtime.state != "closed" && runtime.state != "error" {
+			runtime.state = "open"
+		}
+		runtime.lastMessageAt = observedAt
+		runtime.messageCount++
+		status.dataChannelStates[label] = runtime
+		status.dataMessageCount++
+		status.lastDataLabel = label
+		status.lastDataMessageAt = observedAt
+	})
+}
+
+func (w *Worker) markRecorderDataChannelClosed(roomID string, label string) {
+	observedAt := time.Now().UTC()
+	w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
+		runtime := ensureRecorderDataChannelRuntime(status, label, observedAt)
+		runtime.state = "closed"
+		runtime.closedAt = observedAt
+		status.dataChannelStates[label] = runtime
+	})
+}
+
+func (w *Worker) markRecorderDataChannelError(roomID string, label string, err error) {
+	observedAt := time.Now().UTC()
+	w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
+		runtime := ensureRecorderDataChannelRuntime(status, label, observedAt)
+		if runtime.state != "closed" {
+			runtime.state = "error"
+		}
+		if err != nil {
+			runtime.lastError = err.Error()
+		}
+		status.dataChannelStates[label] = runtime
+	})
+}
+
 func (w *Worker) markRecorderRobotTrackActivity(mediaKey string, label string, observedAt time.Time) {
 	if observedAt.IsZero() {
 		observedAt = time.Now().UTC()

@@ -21,25 +21,37 @@ type SubscriberStatus struct {
 }
 
 type SubscriberRoomStatus struct {
-	RoomID               string                  `json:"roomId"`
-	MissionCode          string                  `json:"missionCode"`
-	RobotCode            string                  `json:"robotCode"`
-	RobotCodes           []string                `json:"robotCodes,omitempty"`
-	Robots               []SubscriberRobotStatus `json:"robots,omitempty"`
-	SignalingState       string                  `json:"signalingState"`
-	ICEState             string                  `json:"iceState"`
-	TrackCount           int                     `json:"trackCount"`
-	DataChannelCount     int                     `json:"dataChannelCount"`
-	DataMessageCount     int                     `json:"dataMessageCount"`
-	SensorStoredCount    int                     `json:"sensorStoredCount"`
-	TelemetryStoredCount int                     `json:"telemetryStoredCount"`
-	LastTrackLabel       string                  `json:"lastTrackLabel"`
-	LastDataLabel        string                  `json:"lastDataLabel"`
-	LastDataMessageAt    time.Time               `json:"lastDataMessageAt,omitempty"`
-	LastPersistedLabel   string                  `json:"lastPersistedLabel,omitempty"`
-	LastPersistedAt      time.Time               `json:"lastPersistedAt,omitempty"`
-	LastError            string                  `json:"lastError,omitempty"`
-	UpdatedAt            time.Time               `json:"updatedAt"`
+	RoomID               string                        `json:"roomId"`
+	MissionCode          string                        `json:"missionCode"`
+	RobotCode            string                        `json:"robotCode"`
+	RobotCodes           []string                      `json:"robotCodes,omitempty"`
+	Robots               []SubscriberRobotStatus       `json:"robots,omitempty"`
+	SignalingState       string                        `json:"signalingState"`
+	ICEState             string                        `json:"iceState"`
+	TrackCount           int                           `json:"trackCount"`
+	DataChannelCount     int                           `json:"dataChannelCount"`
+	DataChannels         []SubscriberDataChannelStatus `json:"dataChannels,omitempty"`
+	DataMessageCount     int                           `json:"dataMessageCount"`
+	SensorStoredCount    int                           `json:"sensorStoredCount"`
+	TelemetryStoredCount int                           `json:"telemetryStoredCount"`
+	LastTrackLabel       string                        `json:"lastTrackLabel"`
+	LastDataLabel        string                        `json:"lastDataLabel"`
+	LastDataMessageAt    time.Time                     `json:"lastDataMessageAt,omitempty"`
+	LastPersistedLabel   string                        `json:"lastPersistedLabel,omitempty"`
+	LastPersistedAt      time.Time                     `json:"lastPersistedAt,omitempty"`
+	LastError            string                        `json:"lastError,omitempty"`
+	UpdatedAt            time.Time                     `json:"updatedAt"`
+}
+
+type SubscriberDataChannelStatus struct {
+	Label         string     `json:"label"`
+	State         string     `json:"state"`
+	DetectedAt    *time.Time `json:"detectedAt,omitempty"`
+	OpenedAt      *time.Time `json:"openedAt,omitempty"`
+	LastMessageAt *time.Time `json:"lastMessageAt,omitempty"`
+	MessageCount  int        `json:"messageCount"`
+	ClosedAt      *time.Time `json:"closedAt,omitempty"`
+	LastError     string     `json:"lastError,omitempty"`
 }
 
 type SubscriberRobotStatus struct {
@@ -65,6 +77,7 @@ type recorderSessionStatus struct {
 	iceState             string
 	trackLabels          map[string]struct{}
 	dataChannelLabels    map[string]struct{}
+	dataChannelStates    map[string]recorderDataChannelRuntime
 	robotStatuses        map[string]recorderRobotRuntime
 	dataMessageCount     int
 	sensorStoredCount    int
@@ -76,6 +89,17 @@ type recorderSessionStatus struct {
 	lastPersistedAt      time.Time
 	lastError            string
 	updatedAt            time.Time
+}
+
+type recorderDataChannelRuntime struct {
+	label         string
+	state         string
+	detectedAt    time.Time
+	openedAt      time.Time
+	lastMessageAt time.Time
+	messageCount  int
+	closedAt      time.Time
+	lastError     string
 }
 
 type recorderRobotRuntime struct {
@@ -205,6 +229,7 @@ func (w *Worker) SubscriberStatus() SubscriberStatus {
 			ICEState:             roomStatus.iceState,
 			TrackCount:           len(roomStatus.trackLabels),
 			DataChannelCount:     len(roomStatus.dataChannelLabels),
+			DataChannels:         subscriberDataChannelStatuses(roomStatus),
 			DataMessageCount:     roomStatus.dataMessageCount,
 			SensorStoredCount:    roomStatus.sensorStoredCount,
 			TelemetryStoredCount: roomStatus.telemetryStoredCount,
@@ -237,6 +262,9 @@ func (w *Worker) updateSubscriberStatus(roomID string, update func(*recorderSess
 	}
 	if status.dataChannelLabels == nil {
 		status.dataChannelLabels = map[string]struct{}{}
+	}
+	if status.dataChannelStates == nil {
+		status.dataChannelStates = map[string]recorderDataChannelRuntime{}
 	}
 	if status.robotStatuses == nil {
 		status.robotStatuses = map[string]recorderRobotRuntime{}
@@ -441,19 +469,23 @@ func (w *Worker) createRecorderPeerConnection(ctx context.Context, roomID string
 	})
 	peerConnection.OnDataChannel(func(dataChannel *webrtc.DataChannel) {
 		label := dataChannel.Label()
-		w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
-			status.dataChannelLabels[label] = struct{}{}
-			status.lastDataLabel = label
+		w.markRecorderDataChannelDetected(roomID, label)
+		log.Printf("recorder-worker datachannel detected room=%s label=%s", roomID, label)
+		dataChannel.OnOpen(func() {
+			w.markRecorderDataChannelOpen(roomID, label)
+			log.Printf("recorder-worker datachannel open room=%s label=%s", roomID, label)
 		})
-		log.Printf("recorder-worker datachannel room=%s label=%s", roomID, label)
+		dataChannel.OnClose(func() {
+			w.markRecorderDataChannelClosed(roomID, label)
+			log.Printf("recorder-worker datachannel closed room=%s label=%s", roomID, label)
+		})
+		dataChannel.OnError(func(err error) {
+			w.markRecorderDataChannelError(roomID, label, err)
+			log.Printf("recorder-worker datachannel error room=%s label=%s: %v", roomID, label, err)
+		})
 		dataChannel.OnMessage(func(message webrtc.DataChannelMessage) {
 			payload := append([]byte(nil), message.Data...)
-			w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
-				status.dataChannelLabels[label] = struct{}{}
-				status.dataMessageCount++
-				status.lastDataLabel = label
-				status.lastDataMessageAt = time.Now().UTC()
-			})
+			w.markRecorderDataChannelMessage(roomID, label, time.Now().UTC())
 			w.enqueueRecorderDataChannelMessage(ctx, roomID, label, payload)
 		})
 	})

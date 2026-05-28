@@ -552,6 +552,10 @@ class MockRobot:
         self.event_channel = self.peer_connection.createDataChannel("channel.event")
         self.spatial_channel = self.peer_connection.createDataChannel("channel.spatial")
         self.control_channel = self.peer_connection.createDataChannel("channel.control")
+        self.attach_data_channel_logging("channel.telemetry", self.telemetry_channel)
+        self.attach_data_channel_logging("channel.event", self.event_channel)
+        self.attach_data_channel_logging("channel.spatial", self.spatial_channel)
+        self.attach_data_channel_logging("channel.control", self.control_channel)
 
         self.publish_tasks.extend(
             (
@@ -597,6 +601,15 @@ class MockRobot:
         async def on_ice_gathering_state_change() -> None:
             assert self.peer_connection is not None
             self.log(f"ICE gathering: {self.peer_connection.iceGatheringState}")
+
+    def attach_data_channel_logging(self, label: str, channel: Any) -> None:
+        @channel.on("open")
+        def on_open() -> None:
+            self.log(f"{label} DataChannel open")
+
+        @channel.on("close")
+        def on_close() -> None:
+            self.log(f"{label} DataChannel closed")
 
     def add_media_tracks(self) -> None:
         assert self.peer_connection is not None

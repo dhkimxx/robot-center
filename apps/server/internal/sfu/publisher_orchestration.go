@@ -224,10 +224,26 @@ func (h *Hub) markPublisherDataChannel(roomID string, robotCode string, peerID s
 	if publisher == nil {
 		return
 	}
-	if publisher.streamBundle != nil {
-		publisher.streamBundle.DataChannels[label] = &PublishedDataChannel{Role: label}
+	now := time.Now().UTC()
+	ensurePublishedDataChannel(publisher, label, now)
+	publisher.updatedAt = now
+}
+
+func (h *Hub) markPublisherDataChannelOpen(roomID string, robotCode string, peerID string, label string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	publisher := h.findPublisherLocked(roomID, robotCode, peerID)
+	if publisher == nil {
+		return
 	}
 	now := time.Now().UTC()
+	channel := ensurePublishedDataChannel(publisher, label, now)
+	if channel != nil {
+		channel.State = "open"
+		channel.OpenedAt = cloneTimePointer(&now)
+		channel.LastError = ""
+	}
 	publisher.updatedAt = now
 }
 
@@ -239,11 +255,54 @@ func (h *Hub) markPublisherDataActivity(roomID string, robotCode string, peerID 
 	if publisher == nil {
 		return
 	}
-	if publisher.streamBundle != nil {
-		publisher.streamBundle.DataChannels[label] = &PublishedDataChannel{Role: label}
+	now := time.Now().UTC()
+	channel := ensurePublishedDataChannel(publisher, label, now)
+	if channel != nil {
+		if channel.State != "closed" && channel.State != "error" {
+			channel.State = "open"
+		}
+		channel.LastMessageAt = cloneTimePointer(&now)
+		channel.MessageCount++
+	}
+	publisher.lastDataAt = &now
+	publisher.updatedAt = now
+}
+
+func (h *Hub) markPublisherDataChannelClosed(roomID string, robotCode string, peerID string, label string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	publisher := h.findPublisherLocked(roomID, robotCode, peerID)
+	if publisher == nil {
+		return
 	}
 	now := time.Now().UTC()
-	publisher.lastDataAt = &now
+	channel := ensurePublishedDataChannel(publisher, label, now)
+	if channel != nil {
+		channel.State = "closed"
+		channel.ClosedAt = cloneTimePointer(&now)
+	}
+	publisher.updatedAt = now
+}
+
+func (h *Hub) markPublisherDataChannelError(roomID string, robotCode string, peerID string, label string, err error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	publisher := h.findPublisherLocked(roomID, robotCode, peerID)
+	if publisher == nil {
+		return
+	}
+	now := time.Now().UTC()
+	channel := ensurePublishedDataChannel(publisher, label, now)
+	if channel != nil {
+		if channel.State != "closed" {
+			channel.State = "error"
+		}
+		if err != nil {
+			channel.LastError = err.Error()
+		}
+	}
 	publisher.updatedAt = now
 }
 

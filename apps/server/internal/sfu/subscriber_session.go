@@ -183,6 +183,15 @@ func (s *subscriberSession) ensureDataChannels() bool {
 			log.Printf("sfu subscriber datachannel create failed peer=%s label=%s: %v", s.peerID, label, err)
 			continue
 		}
+		dataChannel.OnOpen(func() {
+			log.Printf("sfu subscriber datachannel open peer=%s role=%s label=%s", s.peerID, s.role, label)
+		})
+		dataChannel.OnClose(func() {
+			log.Printf("sfu subscriber datachannel closed peer=%s role=%s label=%s", s.peerID, s.role, label)
+		})
+		dataChannel.OnError(func(err error) {
+			log.Printf("sfu subscriber datachannel error peer=%s role=%s label=%s: %v", s.peerID, s.role, label, err)
+		})
 		s.dataChannels[label] = dataChannel
 		created = true
 	}

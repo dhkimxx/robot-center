@@ -1,7 +1,7 @@
 ---
 title: "robot-interface"
 created: 2026-05-26
-updated: '2026-05-27'
+updated: '2026-05-28'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>"]
 type: "design"
@@ -21,6 +21,7 @@ history:
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: remove publisher token from P0 robot contract'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: document robot WebSocket endpoint with robot token authorization'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: sync TURN public/internal terminology with current config'
+- '2026-05-28 danya.kim <danya.kim@thundersoft.com>: clarify DataChannel open-before-send contract'
 ---
 
 # Robot Gateway Interface
@@ -264,6 +265,15 @@ Canonical DataChannel role:
 | `channel.spatial` | recorder-worker가 app-server `/api/sensor-samples`로 저장한다. |
 | `channel.event` | SFU relay/runtime 역할이다. 현재 recorder-worker 저장 대상은 아니다. |
 | `channel.control` | reserved control/ack side channel이다. 현재 sensor API 저장 대상은 아니다. |
+
+DataChannel lifecycle 계약:
+
+- Robot Gateway는 offer 생성 전에 canonical DataChannel을 만든다.
+- Robot Gateway는 `createDataChannel()` 직후 또는 `answer` 수신 직후에 payload를 send하지 않는다.
+- Robot Gateway는 각 DataChannel의 OPEN callback 이후에만 payload를 send한다.
+- SDK가 callback 대신 state polling을 사용하면 `readyState == open` 또는 동일 의미의 상태를 확인한 뒤 send한다.
+- app-server SFU의 `lastDataAt`은 DataChannel open 시각이 아니라 실제 payload 수신 시각이다.
+- recorder-worker의 `lastDataAt`은 SFU가 downstream DataChannel로 forward한 payload를 recorder가 수신한 시각이다.
 
 Legacy DataChannel label fallback:
 
