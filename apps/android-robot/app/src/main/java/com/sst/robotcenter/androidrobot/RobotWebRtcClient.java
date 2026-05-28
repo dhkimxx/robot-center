@@ -52,6 +52,7 @@ public final class RobotWebRtcClient {
     private final Context applicationContext;
     private final RobotWebRtcConfig config;
     private final LogSink logSink;
+    private final DisconnectSink disconnectSink;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
     private OkHttpClient httpClient;
@@ -79,6 +80,8 @@ public final class RobotWebRtcClient {
     private VideoTrack thermalVideoTrack;
     private AudioSource audioSource;
     private AudioTrack audioTrack;
+    private volatile boolean stopRequested;
+    private volatile boolean disconnectNotified;
 
     private static final class PeerSession {
         private final String peerId;
@@ -97,10 +100,11 @@ public final class RobotWebRtcClient {
         }
     }
 
-    public RobotWebRtcClient(Context context, RobotWebRtcConfig config, LogSink logSink) {
+    public RobotWebRtcClient(Context context, RobotWebRtcConfig config, LogSink logSink, DisconnectSink disconnectSink) {
         this.applicationContext = context.getApplicationContext();
         this.config = config;
         this.logSink = logSink;
+        this.disconnectSink = disconnectSink;
     }
 
     public void start() {
@@ -112,12 +116,14 @@ public final class RobotWebRtcClient {
                 connectSignaling();
             } catch (Exception exception) {
                 log("start failed: " + exception.getMessage());
+                notifyDisconnected("start failed: " + exception.getMessage());
                 stopInternal();
             }
         });
     }
 
     public void stop() {
+        stopRequested = true;
         executor.execute(this::stopInternal);
         executor.shutdown();
     }
@@ -278,11 +284,13 @@ public final class RobotWebRtcClient {
             @Override
             public void onClosed(WebSocket webSocket, int code, String reason) {
                 log("signaling closed: " + code + " " + reason);
+                notifyDisconnected("signaling closed: " + code + " " + reason);
             }
 
             @Override
             public void onFailure(WebSocket webSocket, Throwable throwable, Response response) {
                 log("signaling failed: " + throwable.getMessage());
+                notifyDisconnected("signaling failed: " + throwable.getMessage());
             }
         });
         log("signaling connecting: " + config.signalingUrl + " / room " + config.roomId);
@@ -535,6 +543,11 @@ public final class RobotWebRtcClient {
             public void onIceConnectionChange(PeerConnection.IceConnectionState iceConnectionState) {
                 PeerSession session = peerSessions.get(peerId);
                 log("ICE state " + peerLabel(session, peerId) + ": " + iceConnectionState);
+                if (iceConnectionState == PeerConnection.IceConnectionState.FAILED
+                    || iceConnectionState == PeerConnection.IceConnectionState.DISCONNECTED
+                    || iceConnectionState == PeerConnection.IceConnectionState.CLOSED) {
+                    notifyDisconnected("ICE " + iceConnectionState + " for " + peerLabel(session, peerId));
+                }
             }
 
             @Override
@@ -1060,6 +1073,15 @@ public final class RobotWebRtcClient {
             log("video capturer stop failed: " + exception.getMessage());
         }
         capturer.dispose();
+    }
+
+    private void notifyDisconnected(String reason) {
+        if (stopRequested || disconnectNotified) {
+            return;
+        }
+        disconnectNotified = true;
+        log("reconnect requested: " + reason);
+        disconnectSink.disconnected(reason);
     }
 
     private void log(String message) {

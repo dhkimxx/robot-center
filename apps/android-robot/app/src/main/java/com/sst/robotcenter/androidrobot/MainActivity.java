@@ -257,10 +257,24 @@ public class MainActivity extends Activity {
                 mission.missionCode,
                 mission.roomId
             );
-            robotClient = new RobotWebRtcClient(this, config, this::appendLog);
+            robotClient = new RobotWebRtcClient(this, config, this::appendLog, this::handleWebRtcDisconnected);
             robotClient.start();
             activeMissionCode = mission.missionCode;
             setStatus("streaming / " + mission.missionCode + " / " + mission.roomId);
+        });
+    }
+
+    private void handleWebRtcDisconnected(String reason) {
+        runOnUiThread(() -> {
+            if (robotClient == null) {
+                return;
+            }
+            appendLog("WebRTC disconnected; mission polling will retry: " + reason);
+            RobotWebRtcClient disconnectedClient = robotClient;
+            robotClient = null;
+            activeMissionCode = null;
+            disconnectedClient.stop();
+            setStatus("online / reconnecting");
         });
     }
 

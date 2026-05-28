@@ -23,6 +23,7 @@ MOCK_RGB_HEIGHT="${MOCK_RGB_HEIGHT:-720}"
 MOCK_THERMAL_WIDTH="${MOCK_THERMAL_WIDTH:-640}"
 MOCK_THERMAL_HEIGHT="${MOCK_THERMAL_HEIGHT:-480}"
 MOCK_FPS="${MOCK_FPS:-15}"
+MOCK_RESTART_DELAY_SECONDS="${MOCK_RESTART_DELAY_SECONDS:-5}"
 
 json_get() {
   local code="$1"
@@ -260,15 +261,20 @@ start_mock_robot() {
   local session_name
   session_name="$(printf '%s-%03d' "$MOCK_SESSION_PREFIX" "$((index + 1))")"
   start_screen_session "$session_name" "cd '$PYTHON_MOCK_DIR' && \
-'$PYTHON_VENV_DIR/bin/python' mock_robot.py \
-  --server-url '$APP_SERVER_URL' \
-  --robot-code '$robot_code' \
-  --robot-token '$robot_token' \
-  --rgb-width '$MOCK_RGB_WIDTH' \
-  --rgb-height '$MOCK_RGB_HEIGHT' \
-  --thermal-width '$MOCK_THERMAL_WIDTH' \
-  --thermal-height '$MOCK_THERMAL_HEIGHT' \
-  --fps '$MOCK_FPS'"
+while true; do \
+  '$PYTHON_VENV_DIR/bin/python' mock_robot.py \
+    --server-url '$APP_SERVER_URL' \
+    --robot-code '$robot_code' \
+    --robot-token '$robot_token' \
+    --rgb-width '$MOCK_RGB_WIDTH' \
+    --rgb-height '$MOCK_RGB_HEIGHT' \
+    --thermal-width '$MOCK_THERMAL_WIDTH' \
+    --thermal-height '$MOCK_THERMAL_HEIGHT' \
+    --fps '$MOCK_FPS'; \
+  exit_code=\$?; \
+  printf '[%s] mock robot process exited with %s; restarting in %ss\n' \"\$(date -u +%Y-%m-%dT%H:%M:%SZ)\" \"\$exit_code\" '$MOCK_RESTART_DELAY_SECONDS'; \
+  sleep '$MOCK_RESTART_DELAY_SECONDS'; \
+done"
 }
 
 require_app_server_url

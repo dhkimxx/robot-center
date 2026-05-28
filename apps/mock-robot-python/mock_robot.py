@@ -22,6 +22,9 @@ from aiortc import (
     VideoStreamTrack,
 )
 
+INITIAL_RECONNECT_DELAY_SECONDS = 1
+MAX_RECONNECT_DELAY_SECONDS = 30
+
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -330,6 +333,8 @@ class MockRobot:
         self.spatial_channel = None
         self.control_channel = None
         self.stop_event = asyncio.Event()
+        self.publish_stop_event = asyncio.Event()
+        self.publish_tasks: list[asyncio.Task[Any]] = []
         self.sequence = 0
         self.offer_sent = False
 
@@ -340,16 +345,58 @@ class MockRobot:
             headers={"Authorization": f"Bearer {self.robot_token}"},
         )
         try:
-            await self.send_heartbeat("online")
-            if self.has_mission_override():
-                self.mission = await self.create_override_mission()
-            else:
-                self.mission = await self.wait_for_active_mission()
-            await self.send_heartbeat("streaming")
-            await self.connect_signaling()
+            await self.run_reconnect_loop()
         finally:
-            await self.report_publish_stopped()
             await self.close()
+
+    async def run_reconnect_loop(self) -> None:
+        retry_delay_seconds = INITIAL_RECONNECT_DELAY_SECONDS
+        while not self.stop_event.is_set():
+            self.reset_publish_state()
+            try:
+                await self.send_heartbeat("online")
+                if self.has_mission_override():
+                    self.mission = await self.create_override_mission()
+                else:
+                    self.mission = await self.wait_for_active_mission()
+                await self.send_heartbeat("streaming")
+                await self.connect_signaling()
+                retry_delay_seconds = INITIAL_RECONNECT_DELAY_SECONDS
+                if not self.stop_event.is_set():
+                    self.log("publish connection ended; retrying from mission lookup")
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:
+                if not self.stop_event.is_set():
+                    self.log(f"publish connection failed: {error}")
+            finally:
+                await self.report_publish_stopped()
+                await self.close_publish_resources()
+
+            if self.stop_event.is_set():
+                return
+            await self.sleep_until_retry(retry_delay_seconds)
+            retry_delay_seconds = min(retry_delay_seconds * 2, MAX_RECONNECT_DELAY_SECONDS)
+
+    async def sleep_until_retry(self, delay_seconds: int) -> None:
+        self.log(f"reconnect retry in {delay_seconds}s")
+        try:
+            await asyncio.wait_for(self.stop_event.wait(), timeout=delay_seconds)
+        except asyncio.TimeoutError:
+            return
+
+    def reset_publish_state(self) -> None:
+        self.publish_stop_event = asyncio.Event()
+        self.publish_tasks = []
+        self.peer_connection = None
+        self.websocket = None
+        self.local_peer_id = ""
+        self.mission = {}
+        self.telemetry_channel = None
+        self.event_channel = None
+        self.spatial_channel = None
+        self.control_channel = None
+        self.offer_sent = False
 
     def has_mission_override(self) -> bool:
         return any(
@@ -446,11 +493,12 @@ class MockRobot:
                         aiohttp.WSMsgType.ERROR,
                     ):
                         break
-                    if self.stop_event.is_set():
+                    if self.stop_event.is_set() or self.publish_stop_event.is_set():
                         break
             finally:
                 heartbeat_task.cancel()
                 await asyncio.gather(heartbeat_task, return_exceptions=True)
+        self.log("signaling disconnected")
 
     async def handle_signaling_message(self, message: dict[str, Any]) -> None:
         message_type = message.get("type")
@@ -505,9 +553,13 @@ class MockRobot:
         self.spatial_channel = self.peer_connection.createDataChannel("channel.spatial")
         self.control_channel = self.peer_connection.createDataChannel("channel.control")
 
-        asyncio.create_task(self.data_channel_loop("channel.telemetry", self.telemetry_channel))
-        asyncio.create_task(self.data_channel_loop("channel.event", self.event_channel))
-        asyncio.create_task(self.data_channel_loop("channel.spatial", self.spatial_channel))
+        self.publish_tasks.extend(
+            (
+                asyncio.create_task(self.data_channel_loop("channel.telemetry", self.telemetry_channel)),
+                asyncio.create_task(self.data_channel_loop("channel.event", self.event_channel)),
+                asyncio.create_task(self.data_channel_loop("channel.spatial", self.spatial_channel)),
+            )
+        )
 
         offer = await self.peer_connection.createOffer()
         await self.peer_connection.setLocalDescription(offer)
@@ -600,7 +652,7 @@ class MockRobot:
             await asyncio.sleep(0.1)
 
     async def data_channel_loop(self, label: str, channel: Any) -> None:
-        while not self.stop_event.is_set():
+        while not self.stop_event.is_set() and not self.publish_stop_event.is_set():
             await asyncio.sleep(1)
             if channel.readyState != "open":
                 continue
@@ -616,7 +668,7 @@ class MockRobot:
             channel.send(json.dumps(payload, separators=(",", ":")))
 
     async def heartbeat_loop(self) -> None:
-        while not self.stop_event.is_set():
+        while not self.stop_event.is_set() and not self.publish_stop_event.is_set():
             await asyncio.sleep(10)
             active_mission = await self.fetch_active_mission()
             if not active_mission or active_mission.get("missionCode") != self.mission.get("missionCode"):
@@ -842,22 +894,41 @@ class MockRobot:
 
     async def stop_publish(self, reason: str) -> None:
         self.log(f"stopping publish: {reason}")
-        self.stop_event.set()
+        self.publish_stop_event.set()
         if self.websocket is not None and not self.websocket.closed:
             await self.websocket.close()
         if self.peer_connection is not None:
             await self.peer_connection.close()
             self.peer_connection = None
 
-    async def close(self) -> None:
-        self.stop_event.set()
+    async def close_publish_resources(self) -> None:
+        self.publish_stop_event.set()
+        for task in self.publish_tasks:
+            task.cancel()
+        if self.publish_tasks:
+            await asyncio.gather(*self.publish_tasks, return_exceptions=True)
+        self.publish_tasks = []
         if self.websocket is not None and not self.websocket.closed:
             await self.websocket.close()
+        self.websocket = None
         if self.peer_connection is not None:
             await self.peer_connection.close()
             self.peer_connection = None
+        self.telemetry_channel = None
+        self.event_channel = None
+        self.spatial_channel = None
+        self.control_channel = None
+
+    async def close(self) -> None:
+        self.stop_event.set()
+        self.publish_stop_event.set()
+        await self.close_publish_resources()
         if self.session is not None:
             await self.session.close()
+
+    def request_stop(self) -> None:
+        self.stop_event.set()
+        self.publish_stop_event.set()
 
     def log(self, message: str) -> None:
         print(f"[{utc_now_iso()}] [{self.robot_code}] {message}", flush=True)
@@ -887,7 +958,7 @@ async def main() -> None:
     robot = MockRobot(parse_args())
     loop = asyncio.get_running_loop()
     for signal_name in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(signal_name, robot.stop_event.set)
+        loop.add_signal_handler(signal_name, robot.request_stop)
     await robot.run()
 
 
