@@ -4,18 +4,15 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"robot-center/apps/server/internal/config"
 	"robot-center/apps/server/internal/sfu"
+	"robot-center/apps/server/internal/testsupport/postgrestest"
 	"testing"
 	"time"
 )
 
 func TestControlPlaneFlow(t *testing.T) {
-	postgresDSN := os.Getenv("TEST_POSTGRES_DSN")
-	if postgresDSN == "" {
-		t.Skip("TEST_POSTGRES_DSN is required for PostgreSQL-backed control plane flow test")
-	}
+	postgresContainer := postgrestest.Start(t)
 
 	recorderHealth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"status": "ok"})
@@ -23,7 +20,7 @@ func TestControlPlaneFlow(t *testing.T) {
 	defer recorderHealth.Close()
 
 	appServer, err := NewServerFromConfig(context.Background(), config.AppServerConfig{
-		PostgresDSN:               postgresDSN,
+		PostgresDSN:               postgresContainer.DSN,
 		PublicURL:                 "http://center.local",
 		RecorderWorkerURL:         recorderHealth.URL,
 		SFUWebSocketPublicBaseURL: "ws://center.local",

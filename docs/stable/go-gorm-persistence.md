@@ -1,7 +1,7 @@
 ---
 title: "go-gorm-persistence"
 created: 2026-05-22
-updated: '2026-05-27'
+updated: '2026-05-28'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>", "dhkimxx <dhkimxx@naver.com>"]
 type: "guide"
@@ -17,6 +17,7 @@ history:
 - "2026-05-26 danya.kim <danya.kim@thundersoft.com>: flattened from harness directory into stable docs"
 - '2026-05-26 danya.kim <danya.kim@thundersoft.com>: flattened persistence guide from harness directory into stable docs'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: documented robot-center FK and AutoMigrate post-DDL persistence rules'
+- '2026-05-28 danya.kim <danya.kim@thundersoft.com>: documented testcontainers repository test isolation and Docker runtime requirements'
 ---
 # Go GORM Persistence
 
@@ -327,6 +328,15 @@ Repository test는 운영 DB와 같은 PostgreSQL 계열 testcontainers를 우�
 - SQLite in-memory는 GORM tag/hook 같은 좁은 테스트에만 제한적으로 사용한다.
 - lock, JSON, UUID, regex, FK 동작은 PostgreSQL 기반 테스트를 우선한다.
 - 상태 전이 repository는 `RowsAffected == 0`, `ErrRecordNotFound`, 동시성 경로를 함께 검증한다.
+
+robot-center 적용 기준:
+
+- repository 테스트는 로컬 PostgreSQL DSN 환경변수에 의존하지 않는다.
+- `go test ./...`는 Docker 또는 OrbStack을 통해 PostgreSQL/PostGIS testcontainer를 실행할 수 있어야 한다.
+- package 단위로 컨테이너를 공유하고, test case 단위로 별도 database를 만들어 격리한다.
+- 각 test database는 `AutoMigrate`와 post DDL을 그대로 실행해 실제 app-server 시작 경로와 같은 schema를 검증한다.
+- test case cleanup은 store connection을 먼저 닫고, 그 다음 test database를 drop한다.
+- service/domain 순수 로직은 컨테이너 없이 테스트하되, DB constraint, row lock, JSONB, FK, finalization queue 동작은 repository test에서 검증한다.
 
 ## 자주 빠지는 함정
 
