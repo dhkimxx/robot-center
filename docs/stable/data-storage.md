@@ -1,7 +1,7 @@
 ---
 title: "data-storage"
 created: 2026-05-26
-updated: '2026-05-27'
+updated: '2026-05-28'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>"]
 type: "design"
@@ -20,6 +20,7 @@ history:
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: documented recording finalization jobs and scale-out-safe replay storage states'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: documented finalization upload callback fencing'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: renamed robot schema status to device_state and clarified computed API connection status'
+- '2026-05-28 danya.kim <danya.kim@thundersoft.com>: replace legacy sensor sample value columns with canonical values column'
 ---
 
 # Data Storage
@@ -333,11 +334,7 @@ Descriptor upsert 정책:
 | `sequence` | bigint | no | robot sequence |
 | `sent_at` | timestamptz | no | robot 송신 시각 |
 | `received_at` | timestamptz | yes | server 수신 시각, latest index 기준 |
-| `numeric_value` | numeric | no | 단일 숫자 값 |
-| `text_value` | text | no | 문자열 값 |
-| `bool_value` | boolean | no | boolean 값 |
-| `vector_value` | jsonb | no | 벡터/좌표형 값 |
-| `object_value` | jsonb | no | 작은 구조화 값 |
+| `values` | jsonb | no | canonical sample value. number/string/boolean/object/vector 값을 JSON으로 저장 |
 | `object_key` | text | no | 대용량 object 참조 |
 | `raw_payload` | jsonb | yes | 원본 또는 정규화 전 payload |
 

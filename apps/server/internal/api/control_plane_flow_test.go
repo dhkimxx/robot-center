@@ -86,15 +86,20 @@ func TestControlPlaneFlow(t *testing.T) {
 	}
 
 	requestJSON[map[string]any](t, server.URL, http.MethodPost, "/api/robot-gateway/heartbeat", robotToken, map[string]any{
-		"robotCode": robotCode,
-		"state":     "online",
-		"sentAt":    time.Now().UTC().Format(time.RFC3339Nano),
+		"state":  "online",
+		"sentAt": time.Now().UTC().Format(time.RFC3339Nano),
 	})
 	requestJSON[map[string]any](t, server.URL, http.MethodPost, "/api/robot-gateway/heartbeat", supportRobotToken, map[string]any{
-		"robotCode": supportRobotCode,
-		"state":     "online",
-		"sentAt":    time.Now().UTC().Format(time.RFC3339Nano),
+		"state":  "online",
+		"sentAt": time.Now().UTC().Format(time.RFC3339Nano),
 	})
+	heartbeatWithRobotCodeStatus, _ := requestRawJSON(t, server.URL, http.MethodPost, "/api/robot-gateway/heartbeat", robotToken, map[string]any{
+		"robotCode": robotCode,
+		"state":     "online",
+	})
+	if heartbeatWithRobotCodeStatus != http.StatusBadRequest {
+		t.Fatalf("expected heartbeat robotCode body to be rejected, got %d", heartbeatWithRobotCodeStatus)
+	}
 
 	createMissionPayload := requestJSON[map[string]any](t, server.URL, http.MethodPost, "/api/missions", "", map[string]any{
 		"name":        "Integration Mission",
@@ -173,9 +178,9 @@ func TestControlPlaneFlow(t *testing.T) {
 		sfu.StreamRoleChannelEvent,
 		sfu.StreamRoleChannelControl,
 	})
-	mismatchStatus, _ := requestRawJSON(t, server.URL, http.MethodGet, "/api/robot-gateway/mission?robotCode="+supportRobotCode, robotToken, nil)
-	if mismatchStatus != http.StatusUnauthorized {
-		t.Fatalf("expected robotCode/token mismatch to be unauthorized, got %d", mismatchStatus)
+	missionRobotCodeQueryStatus, _ := requestRawJSON(t, server.URL, http.MethodGet, "/api/robot-gateway/mission?robotCode="+supportRobotCode, robotToken, nil)
+	if missionRobotCodeQueryStatus != http.StatusBadRequest {
+		t.Fatalf("expected robotCode query to be rejected, got %d", missionRobotCodeQueryStatus)
 	}
 	supportMissionPayload := requestJSON[map[string]any](t, server.URL, http.MethodGet, "/api/robot-gateway/mission", supportRobotToken, nil)
 	if supportMissionPayload["missionStatus"] != "active" || supportMissionPayload["roomId"] != missionCode {
@@ -194,14 +199,14 @@ func TestControlPlaneFlow(t *testing.T) {
 		"descriptors": []map[string]any{
 			{
 				"sensorId":    "telemetry.position_1",
-				"kind":        "position",
+				"sensorType":  "position",
 				"displayName": "GPS",
 				"valueType":   "object",
 				"enabled":     true,
 			},
 			{
 				"sensorId":    "telemetry.gas_1",
-				"kind":        "gas",
+				"sensorType":  "gas",
 				"displayName": "Gas",
 				"valueType":   "object",
 				"enabled":     true,
@@ -228,6 +233,21 @@ func TestControlPlaneFlow(t *testing.T) {
 			},
 		},
 	})
+
+	payloadOnlyStatus, _ := requestRawJSON(t, server.URL, http.MethodPost, "/api/sensor-samples", "", map[string]any{
+		"messageId":   "telemetry-legacy-payload",
+		"messageType": "telemetry",
+		"channelRole": "channel.telemetry",
+		"robotCode":   robotCode,
+		"missionId":   missionID,
+		"sequence":    3,
+		"payload": map[string]any{
+			"batteryPercent": 82,
+		},
+	})
+	if payloadOnlyStatus != http.StatusBadRequest {
+		t.Fatalf("expected payload-only sensor envelope to be rejected, got %d", payloadOnlyStatus)
+	}
 
 	sensorLatestPayload := requestJSON[map[string]any](t, server.URL, http.MethodGet, "/api/sensor-latest?missionId="+missionID+"&robotCode="+robotCode, "", nil)
 	latestSensors := sensorLatestPayload["sensors"].([]any)

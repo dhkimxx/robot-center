@@ -21,13 +21,7 @@ describe("mapLiveDataChannelPayload", () => {
             batteryPercent: 91
           }
         }
-      ],
-      payload: {
-        position: {
-          latitude: 37.5,
-          longitude: 127.0
-        }
-      }
+      ]
     };
 
     const result = mapLiveDataChannelPayload("channel.telemetry", JSON.stringify(payload));
@@ -38,27 +32,8 @@ describe("mapLiveDataChannelPayload", () => {
       batteryPercent: 91,
       coPpm: 7,
       oxygenPercent: 20.8,
-      position: {
-        latitude: 37.5,
-        longitude: 127.0
-      },
       temperatureCelsius: 28.5
     });
-  });
-
-  it("maps legacy sensor message to sensor only", () => {
-    const payload = {
-      messageType: "sensor",
-      payload: {
-        coPpm: 3
-      }
-    };
-
-    const result = mapLiveDataChannelPayload("sensor", JSON.stringify(payload));
-
-    expect(result.ok).toBe(true);
-    expect(result.telemetry).toBeUndefined();
-    expect(result.sensor).toEqual(payload);
   });
 
   it("maps event channel to event message", () => {
@@ -76,7 +51,6 @@ describe("mapLiveDataChannelPayload", () => {
   it("maps spatial channel to event message and sensor payload", () => {
     const payload = {
       channelRole: "channel.spatial",
-      state: "available",
       samples: [
         {
           sensorId: "spatial.imu_1",
@@ -92,7 +66,7 @@ describe("mapLiveDataChannelPayload", () => {
     const result = mapLiveDataChannelPayload("channel.spatial", JSON.stringify(payload));
 
     expect(result.ok).toBe(true);
-    expect(result.eventMessage).toBe("공간 상태: available");
+    expect(result.eventMessage).toBe("공간 데이터 수신");
     expect(result.sensor).toEqual(payload);
   });
 

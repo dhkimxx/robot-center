@@ -63,30 +63,18 @@ func newRobotStreamBundle(missionCode string, robotCode string) *RobotStreamBund
 	}
 }
 
-func normalizeTrackRole(track *webrtc.TrackRemote, usedRoles map[string]*publishedTrack) string {
+func normalizeTrackRole(track *webrtc.TrackRemote, _ map[string]*publishedTrack) string {
 	raw := strings.ToLower(strings.TrimSpace(track.StreamID() + " " + track.ID()))
 	for _, role := range []string{StreamRoleTrackVideo1, StreamRoleTrackVideo2, StreamRoleTrackAudio1, StreamRoleTrackAudio2} {
 		if strings.Contains(raw, role) {
 			return role
 		}
 	}
-
-	// Legacy compatibility only. New robot clients should publish canonical
-	// slot IDs such as track.video_1 rather than semantic names.
-	if strings.Contains(raw, "thermal") {
-		return StreamRoleTrackVideo2
+	if track.ID() != "" {
+		return utils.SafeTrackToken(track.ID())
 	}
-	if strings.Contains(raw, "rgb") {
-		return StreamRoleTrackVideo1
-	}
-	if strings.Contains(raw, "audio") {
-		return firstAvailableRole([]string{StreamRoleTrackAudio1, StreamRoleTrackAudio2}, usedRoles)
-	}
-	if track.Kind() == webrtc.RTPCodecTypeAudio {
-		return firstAvailableRole([]string{StreamRoleTrackAudio1, StreamRoleTrackAudio2}, usedRoles)
-	}
-	if track.Kind() == webrtc.RTPCodecTypeVideo {
-		return firstAvailableRole([]string{StreamRoleTrackVideo1, StreamRoleTrackVideo2}, usedRoles)
+	if track.StreamID() != "" {
+		return utils.SafeTrackToken(track.StreamID())
 	}
 	return utils.SafeTrackToken(track.Kind().String())
 }
@@ -94,36 +82,15 @@ func normalizeTrackRole(track *webrtc.TrackRemote, usedRoles map[string]*publish
 func normalizeDataChannelRole(label string) string {
 	normalized := strings.ToLower(strings.TrimSpace(label))
 	switch normalized {
-	case StreamRoleChannelTelemetry, "telemetry", "sensor":
+	case StreamRoleChannelTelemetry:
 		return StreamRoleChannelTelemetry
-	case StreamRoleChannelSpatial, "spatial":
+	case StreamRoleChannelSpatial:
 		return StreamRoleChannelSpatial
-	case StreamRoleChannelEvent, "event":
+	case StreamRoleChannelEvent:
 		return StreamRoleChannelEvent
-	case StreamRoleChannelControl, "control":
+	case StreamRoleChannelControl:
 		return StreamRoleChannelControl
 	default:
 		return utils.SafeTrackToken(label)
 	}
-}
-
-func firstAvailableRole(candidates []string, usedRoles map[string]*publishedTrack) string {
-	for _, candidate := range candidates {
-		if !trackRoleUsed(candidate, usedRoles) {
-			return candidate
-		}
-	}
-	return candidates[0]
-}
-
-func trackRoleUsed(role string, usedRoles map[string]*publishedTrack) bool {
-	for trackKey, publishedTrack := range usedRoles {
-		if publishedTrack != nil && publishedTrack.label == role {
-			return true
-		}
-		if strings.HasSuffix(trackKey, ":"+utils.SafeTrackToken(role)) || trackKey == utils.SafeTrackToken(role) {
-			return true
-		}
-	}
-	return false
 }

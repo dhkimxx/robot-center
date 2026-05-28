@@ -96,14 +96,14 @@ func (s *Store) EndMission(ctx context.Context, missionCode string) (domain.Miss
 	return s.transitionMission(ctx, strings.TrimSpace(missionCode), "active", "ended")
 }
 
-func (s *Store) FindActiveMissionForRobot(ctx context.Context, robotCode string, bearerToken string) (domain.Mission, bool, error) {
+func (s *Store) FindActiveMissionForRobot(ctx context.Context, bearerToken string) (domain.Mission, bool, error) {
 	tx, err := s.sqlDB.BeginTx(ctx, nil)
 	if err != nil {
 		return domain.Mission{}, false, err
 	}
 	defer rollbackUnlessCommitted(tx)
 
-	robot, err := s.authorizeRobot(ctx, tx, robotCode, bearerToken)
+	robot, err := s.authorizeRobot(ctx, tx, bearerToken)
 	if err != nil {
 		return domain.Mission{}, false, err
 	}

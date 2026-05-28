@@ -52,8 +52,8 @@ func (s *MissionService) EndMission(ctx context.Context, missionCode string) (do
 	return mission, err
 }
 
-func (s *MissionService) FindActiveMissionForRobot(ctx context.Context, robotCode string, bearerToken string) (domain.Mission, bool, error) {
-	return s.repository.FindActiveMissionForRobot(ctx, robotCode, bearerToken)
+func (s *MissionService) FindActiveMissionForRobot(ctx context.Context, bearerToken string) (domain.Mission, bool, error) {
+	return s.repository.FindActiveMissionForRobot(ctx, bearerToken)
 }
 
 func (s *MissionService) ValidateActiveMissionRobot(ctx context.Context, missionCode string, robotCode string) error {

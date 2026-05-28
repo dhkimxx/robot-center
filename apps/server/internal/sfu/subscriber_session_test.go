@@ -53,13 +53,15 @@ func TestRecorderSubscriberReceivesEveryRobot(t *testing.T) {
 
 func TestCanonicalDataChannelRoles(t *testing.T) {
 	cases := map[string]string{
-		"telemetry":         StreamRoleChannelTelemetry,
-		"sensor":            StreamRoleChannelTelemetry,
 		"channel.telemetry": StreamRoleChannelTelemetry,
-		"event":             StreamRoleChannelEvent,
 		"channel.event":     StreamRoleChannelEvent,
-		"spatial":           StreamRoleChannelSpatial,
-		"control":           StreamRoleChannelControl,
+		"channel.spatial":   StreamRoleChannelSpatial,
+		"channel.control":   StreamRoleChannelControl,
+		"telemetry":         "telemetry",
+		"sensor":            "sensor",
+		"event":             "event",
+		"spatial":           "spatial",
+		"control":           "control",
 	}
 	for input, want := range cases {
 		if got := normalizeDataChannelRole(input); got != want {

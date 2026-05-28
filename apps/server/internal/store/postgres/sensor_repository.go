@@ -143,11 +143,7 @@ func (s *Store) SaveSensorEnvelope(ctx context.Context, envelope domain.SensorEn
 			Sequence:     optionalInt64(utils.FirstNonZeroInt64(sample.Sequence, envelope.Sequence)),
 			SentAt:       utils.FirstTimePointer(sample.SentAt, envelope.SentAt),
 			ReceivedAt:   receivedAt,
-			NumericValue: sample.NumericValue,
-			TextValue:    optionalString(sample.TextValue),
-			BoolValue:    sample.BoolValue,
-			VectorValue:  emptyJSONToNil(sample.VectorValue),
-			ObjectValue:  emptyJSONToNil(sample.ObjectValue),
+			Values:       emptyJSONToNil(sample.Values),
 			ObjectKey:    optionalString(sample.ObjectKey),
 			RawPayload:   rawPayload,
 		})
@@ -223,11 +219,7 @@ func (s *Store) ListSensorSamples(ctx context.Context, missionID string, robotCo
 			ss.sequence,
 			ss.sent_at,
 			ss.received_at,
-			ss.numeric_value,
-			ss.text_value,
-			ss.bool_value,
-			ss.vector_value,
-			ss.object_value,
+			ss."values" AS "values",
 			ss.object_key,
 			ss.raw_payload
 		`).
@@ -279,11 +271,7 @@ func (s *Store) ListLatestSensorSamples(ctx context.Context, missionID string, r
 			ss.sequence,
 			ss.sent_at,
 			ss.received_at,
-			ss.numeric_value,
-			ss.text_value,
-			ss.bool_value,
-			ss.vector_value,
-			ss.object_value,
+			ss."values" AS "values",
 			ss.object_key,
 			ss.raw_payload
 		FROM sensor_descriptors sd
@@ -428,11 +416,7 @@ type sensorSampleQueryRow struct {
 	Sequence     *int64
 	SentAt       *time.Time
 	ReceivedAt   time.Time
-	NumericValue *float64
-	TextValue    *string
-	BoolValue    *bool
-	VectorValue  json.RawMessage
-	ObjectValue  json.RawMessage
+	Values       json.RawMessage
 	ObjectKey    *string
 	RawPayload   json.RawMessage
 }
@@ -449,11 +433,7 @@ func (row sensorSampleQueryRow) toDomain() domain.SensorSample {
 		Sequence:     int64FromPointer(row.Sequence),
 		SentAt:       row.SentAt,
 		ReceivedAt:   row.ReceivedAt,
-		NumericValue: row.NumericValue,
-		TextValue:    stringFromPointer(row.TextValue),
-		BoolValue:    row.BoolValue,
-		VectorValue:  row.VectorValue,
-		ObjectValue:  row.ObjectValue,
+		Values:       row.Values,
 		ObjectKey:    stringFromPointer(row.ObjectKey),
 		RawPayload:   row.RawPayload,
 	}
@@ -480,11 +460,7 @@ type sensorLatestQueryRow struct {
 	Sequence              *int64
 	SentAt                *time.Time
 	ReceivedAt            *time.Time
-	NumericValue          *float64
-	TextValue             *string
-	BoolValue             *bool
-	VectorValue           json.RawMessage
-	ObjectValue           json.RawMessage
+	Values                json.RawMessage
 	ObjectKey             *string
 	RawPayload            json.RawMessage
 }
@@ -524,11 +500,7 @@ func (row sensorLatestQueryRow) toDomain() domain.SensorLatest {
 		Sequence:     int64FromPointer(row.Sequence),
 		SentAt:       row.SentAt,
 		ReceivedAt:   receivedAt,
-		NumericValue: row.NumericValue,
-		TextValue:    stringFromPointer(row.TextValue),
-		BoolValue:    row.BoolValue,
-		VectorValue:  row.VectorValue,
-		ObjectValue:  row.ObjectValue,
+		Values:       row.Values,
 		ObjectKey:    stringFromPointer(row.ObjectKey),
 		RawPayload:   row.RawPayload,
 	}

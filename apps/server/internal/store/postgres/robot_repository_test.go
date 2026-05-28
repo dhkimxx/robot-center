@@ -57,7 +57,7 @@ func TestRobotRepositoryPersistsRobotMissionAndHeartbeat(t *testing.T) {
 		t.Fatalf("expected active mission, got %#v", startedMission)
 	}
 
-	activeMission, found, err := store.FindActiveMissionForRobot(ctx, "", connectionInfo.RobotToken)
+	activeMission, found, err := store.FindActiveMissionForRobot(ctx, connectionInfo.RobotToken)
 	if err != nil {
 		t.Fatalf("find active mission by token: %v", err)
 	}

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"net/url"
 	"robot-center/apps/server/internal/sfu"
@@ -11,7 +12,6 @@ import (
 )
 
 type heartbeatRequest struct {
-	RobotCode      string    `json:"robotCode"`
 	State          string    `json:"state"`
 	BatteryPercent int       `json:"batteryPercent"`
 	NetworkQuality string    `json:"networkQuality"`
@@ -26,7 +26,6 @@ func (s *Server) handleRobotGatewayHeartbeat(w http.ResponseWriter, r *http.Requ
 	}
 
 	robot, err := s.services.Robots.ApplyHeartbeat(r.Context(), store.HeartbeatInput{
-		RobotCode:      strings.TrimSpace(request.RobotCode),
 		State:          utils.FirstNonEmptyString(request.State, "online"),
 		BatteryPercent: request.BatteryPercent,
 		NetworkQuality: request.NetworkQuality,
@@ -46,8 +45,11 @@ func (s *Server) handleRobotGatewayHeartbeat(w http.ResponseWriter, r *http.Requ
 }
 
 func (s *Server) handleRobotGatewayMission(w http.ResponseWriter, r *http.Request) {
-	requestedRobotCode := strings.TrimSpace(r.URL.Query().Get("robotCode"))
-	mission, found, err := s.services.Missions.FindActiveMissionForRobot(r.Context(), requestedRobotCode, bearerToken(r))
+	if strings.TrimSpace(r.URL.Query().Get("robotCode")) != "" {
+		writeError(w, http.StatusBadRequest, errors.New("robotCode query is not allowed for robot gateway mission lookup"))
+		return
+	}
+	mission, found, err := s.services.Missions.FindActiveMissionForRobot(r.Context(), bearerToken(r))
 	if err != nil {
 		writeStoreError(w, err)
 		return

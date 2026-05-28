@@ -221,7 +221,7 @@ func (s *Store) ApplyHeartbeat(ctx context.Context, input repo.HeartbeatInput, b
 	}
 	defer rollbackUnlessCommitted(tx)
 
-	robot, err := s.authorizeRobot(ctx, tx, input.RobotCode, bearerToken)
+	robot, err := s.authorizeRobot(ctx, tx, bearerToken)
 	if err != nil {
 		return domain.Robot{}, err
 	}
@@ -263,7 +263,7 @@ func (s *Store) ResolveRobotByBearerToken(ctx context.Context, bearerToken strin
 	}
 	defer rollbackUnlessCommitted(tx)
 
-	robot, err := s.authorizeRobot(ctx, tx, "", bearerToken)
+	robot, err := s.authorizeRobot(ctx, tx, bearerToken)
 	if err != nil {
 		return domain.Robot{}, err
 	}
@@ -300,46 +300,7 @@ func (s *Store) findRobotRecordByIDIncludingArchivedWithGorm(tx *gorm.DB, robotI
 	return record, err
 }
 
-func (s *Store) authorizeRobotWithGorm(tx *gorm.DB, robotCode string, bearerToken string) (domain.Robot, error) {
-	trimmedRobotCode := strings.TrimSpace(robotCode)
-	trimmedToken := strings.TrimSpace(bearerToken)
-	if trimmedRobotCode == "" || trimmedToken == "" {
-		return domain.Robot{}, repo.ErrUnauthorized
-	}
-
-	tokenHash := utils.HashToken(trimmedToken)
-	var record model.RobotModel
-	err := tx.Table("robots AS r").
-		Select(`
-			r.id::text AS id,
-			r.robot_code AS robot_code,
-			r.display_name AS display_name,
-			r.model_name AS model_name,
-			r.device_state AS device_state,
-			r.last_seen_at AS last_seen_at,
-			r.created_at AS created_at,
-			r.updated_at AS updated_at
-		`).
-		Joins("JOIN robot_tokens rt ON rt.robot_id = r.id").
-		Where("r.robot_code = ? AND r.archived_at IS NULL AND rt.token_hash = ? AND rt.is_active = ?", trimmedRobotCode, tokenHash, true).
-		Take(&record).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return domain.Robot{}, repo.ErrUnauthorized
-	}
-	if err != nil {
-		return domain.Robot{}, err
-	}
-
-	if err := tx.Model(&model.RobotConnectionTokenModel{}).
-		Where("robot_id = ? AND token_hash = ?", record.ID, tokenHash).
-		Update("last_used_at", gorm.Expr("now()")).Error; err != nil {
-		return domain.Robot{}, err
-	}
-	return record.ToDomainRobot(), nil
-}
-
-func (s *Store) authorizeRobot(ctx context.Context, tx *sql.Tx, robotCode string, bearerToken string) (domain.Robot, error) {
-	trimmedRobotCode := strings.TrimSpace(robotCode)
+func (s *Store) authorizeRobot(ctx context.Context, tx *sql.Tx, bearerToken string) (domain.Robot, error) {
 	trimmedToken := strings.TrimSpace(bearerToken)
 	if trimmedToken == "" {
 		return domain.Robot{}, repo.ErrUnauthorized
@@ -349,9 +310,9 @@ func (s *Store) authorizeRobot(ctx context.Context, tx *sql.Tx, robotCode string
 		       r.last_seen_at, r.created_at, r.updated_at
 			FROM robots r
 			JOIN robot_tokens rt ON rt.robot_id = r.id
-			WHERE ($1 = '' OR r.robot_code = $1) AND r.archived_at IS NULL AND rt.token_hash = $2 AND rt.is_active = true
+			WHERE r.archived_at IS NULL AND rt.token_hash = $1 AND rt.is_active = true
 			LIMIT 1
-	`, trimmedRobotCode, utils.HashToken(trimmedToken))
+	`, utils.HashToken(trimmedToken))
 	robot, err := scanRobot(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.Robot{}, repo.ErrUnauthorized

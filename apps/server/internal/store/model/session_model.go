@@ -6,7 +6,7 @@ import (
 )
 
 type RobotSessionModel struct {
-	ID              string          `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	BaseModel
 	RobotID         string          `gorm:"column:robot_id;type:uuid;not null;index"`
 	MissionID       *string         `gorm:"column:mission_id;type:uuid;index"`
 	State           string          `gorm:"column:state;not null"`
@@ -23,7 +23,7 @@ func (RobotSessionModel) TableName() string {
 }
 
 type BrowserSessionModel struct {
-	ID             string          `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	BaseModel
 	MissionID      string          `gorm:"column:mission_id;type:uuid;not null;index"`
 	UserID         *string         `gorm:"column:user_id;type:uuid;index"`
 	State          string          `gorm:"column:state;not null"`
@@ -37,7 +37,7 @@ func (BrowserSessionModel) TableName() string {
 }
 
 type RecorderSessionModel struct {
-	ID        string          `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	BaseModel
 	MissionID string          `gorm:"column:mission_id;type:uuid;not null;index"`
 	State     string          `gorm:"column:state;not null"`
 	StartedAt time.Time       `gorm:"column:started_at;not null;default:now()"`

@@ -6,7 +6,7 @@ import (
 )
 
 type RecordingSessionModel struct {
-	ID                   string          `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	BaseModel
 	MissionID            string          `gorm:"column:mission_id;type:uuid;not null;index"`
 	RobotID              string          `gorm:"column:robot_id;type:uuid;not null;index"`
 	RecorderSessionID    *string         `gorm:"column:recorder_session_id;type:uuid;index"`
@@ -23,7 +23,7 @@ func (RecordingSessionModel) TableName() string {
 }
 
 type RecordingChunkModel struct {
-	ID                 string          `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	BaseModel
 	RecordingSessionID string          `gorm:"column:recording_session_id;type:uuid;not null;uniqueIndex:recording_chunks_session_index_unique,priority:1"`
 	MissionID          string          `gorm:"column:mission_id;type:uuid;not null;index"`
 	RobotID            string          `gorm:"column:robot_id;type:uuid;not null;index"`
@@ -34,8 +34,6 @@ type RecordingChunkModel struct {
 	DurationSeconds    *float64        `gorm:"column:duration_seconds"`
 	ManifestObjectID   *string         `gorm:"column:manifest_object_id;type:uuid;index"`
 	Metadata           json.RawMessage `gorm:"column:metadata;type:jsonb;not null;default:'{}'::jsonb"`
-	CreatedAt          time.Time       `gorm:"column:created_at;not null;default:now()"`
-	UpdatedAt          time.Time       `gorm:"column:updated_at;not null;default:now()"`
 }
 
 func (RecordingChunkModel) TableName() string {
@@ -43,7 +41,7 @@ func (RecordingChunkModel) TableName() string {
 }
 
 type RecordingFinalizationJobModel struct {
-	ID                 string          `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	BaseModel
 	RecordingChunkID   string          `gorm:"column:recording_chunk_id;type:uuid;not null;uniqueIndex"`
 	RecordingSessionID string          `gorm:"column:recording_session_id;type:uuid;not null;index"`
 	MissionID          string          `gorm:"column:mission_id;type:uuid;not null;index"`
@@ -56,8 +54,6 @@ type RecordingFinalizationJobModel struct {
 	LastError          *string         `gorm:"column:last_error"`
 	Metadata           json.RawMessage `gorm:"column:metadata;type:jsonb;not null;default:'{}'::jsonb"`
 	CompletedAt        *time.Time      `gorm:"column:completed_at"`
-	CreatedAt          time.Time       `gorm:"column:created_at;not null;default:now()"`
-	UpdatedAt          time.Time       `gorm:"column:updated_at;not null;default:now()"`
 }
 
 func (RecordingFinalizationJobModel) TableName() string {

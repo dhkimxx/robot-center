@@ -33,11 +33,7 @@ type SensorSample struct {
 	Sequence     int64           `json:"sequence,omitempty"`
 	SentAt       *time.Time      `json:"sentAt,omitempty"`
 	ReceivedAt   time.Time       `json:"receivedAt"`
-	NumericValue *float64        `json:"numericValue,omitempty"`
-	TextValue    string          `json:"textValue,omitempty"`
-	BoolValue    *bool           `json:"boolValue,omitempty"`
-	VectorValue  json.RawMessage `json:"vectorValue,omitempty"`
-	ObjectValue  json.RawMessage `json:"objectValue,omitempty"`
+	Values       json.RawMessage `json:"values,omitempty"`
 	ObjectKey    string          `json:"objectKey,omitempty"`
 	RawPayload   json.RawMessage `json:"rawPayload"`
 }

@@ -2,6 +2,7 @@ package com.sst.robotcenter.androidrobot;
 
 import android.location.Location;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -23,16 +24,26 @@ public final class SensorPayloadFactory {
             return new JSONObject()
                 .put("messageId", robotCode + "-sensor-" + sequence)
                 .put("schemaVersion", "1.0")
-                .put("messageType", "sensor")
+                .put("messageType", "spatial")
                 .put("sequence", sequence)
                 .put("sentAt", Instant.ofEpochMilli(nowMs).toString())
-                .put("payload", new JSONObject()
-                    .put("batteryPercent", round(82.0 - ((elapsedSeconds * 0.01) % 8.0), 1))
-                    .put("coPpm", round(18.0 + 8.0 * Math.sin(elapsedSeconds / 8.0) + 3.0 * Math.sin(elapsedSeconds / 2.1), 1))
-                    .put("oxygenPercent", round(20.8 + 0.2 * Math.cos(elapsedSeconds / 11.0), 2))
-                    .put("temperatureCelsius", round(29.0 + 2.8 * Math.sin(elapsedSeconds / 13.0), 1))
-                    .put("humidityPercent", round(61.0 + 5.0 * Math.cos(elapsedSeconds / 17.0), 1))
-                    .put("pose", pose))
+                .put("descriptors", new JSONArray()
+                    .put(new JSONObject()
+                        .put("sensorId", "spatial.odometry_1")
+                        .put("displayName", "Odometry")
+                        .put("sensorType", "odometry")
+                        .put("valueType", "object")
+                        .put("unit", "m")
+                        .put("sampleRateHz", 1)
+                        .put("enabled", true)
+                        .put("metadata", new JSONObject().put("frameId", "odom"))))
+                .put("samples", new JSONArray()
+                    .put(new JSONObject()
+                        .put("sensorId", "spatial.odometry_1")
+                        .put("timestamp", Instant.ofEpochMilli(nowMs).toString())
+                        .put("sequence", sequence)
+                        .put("quality", "mock")
+                        .put("values", pose)))
                 .toString();
         } catch (JSONException exception) {
             throw new IllegalStateException("failed to create sensor payload", exception);
@@ -48,13 +59,9 @@ public final class SensorPayloadFactory {
         long nowMs = System.currentTimeMillis();
         double elapsedSeconds = (nowMs - startedAtMs) / 1000.0;
         try {
-            JSONObject payload = new JSONObject()
-                .put("positionAvailable", location != null)
-                .put("batteryPercent", round(82.0 - ((elapsedSeconds * 0.01) % 8.0), 1))
-                .put("networkState", "android");
-
+            JSONObject position = new JSONObject().put("positionAvailable", location != null);
             if (location != null) {
-                payload.put("position", createGpsPosition(location));
+                copyJsonObject(createGpsPosition(location), position);
             }
 
             return new JSONObject()
@@ -63,8 +70,54 @@ public final class SensorPayloadFactory {
                 .put("messageType", "telemetry")
                 .put("sequence", sequence)
                 .put("sentAt", Instant.ofEpochMilli(nowMs).toString())
-                .put("timestamp", nowMs / 1000.0)
-                .put("payload", payload)
+                .put("descriptors", new JSONArray()
+                    .put(new JSONObject()
+                        .put("sensorId", "telemetry.position_1")
+                        .put("displayName", "GPS")
+                        .put("sensorType", "position")
+                        .put("valueType", "object")
+                        .put("sampleRateHz", 1)
+                        .put("enabled", true))
+                    .put(new JSONObject()
+                        .put("sensorId", "telemetry.battery_1")
+                        .put("displayName", "Battery")
+                        .put("sensorType", "battery")
+                        .put("valueType", "object")
+                        .put("unit", "percent")
+                        .put("sampleRateHz", 1)
+                        .put("enabled", true))
+                    .put(new JSONObject()
+                        .put("sensorId", "telemetry.environment_1")
+                        .put("displayName", "Environment")
+                        .put("sensorType", "environment")
+                        .put("valueType", "object")
+                        .put("sampleRateHz", 1)
+                        .put("enabled", true)))
+                .put("samples", new JSONArray()
+                    .put(new JSONObject()
+                        .put("sensorId", "telemetry.position_1")
+                        .put("timestamp", Instant.ofEpochMilli(nowMs).toString())
+                        .put("sequence", sequence)
+                        .put("quality", location == null ? "unknown" : "good")
+                        .put("values", position))
+                    .put(new JSONObject()
+                        .put("sensorId", "telemetry.battery_1")
+                        .put("timestamp", Instant.ofEpochMilli(nowMs).toString())
+                        .put("sequence", sequence)
+                        .put("quality", "mock")
+                        .put("values", new JSONObject()
+                            .put("batteryPercent", round(82.0 - ((elapsedSeconds * 0.01) % 8.0), 1))))
+                    .put(new JSONObject()
+                        .put("sensorId", "telemetry.environment_1")
+                        .put("timestamp", Instant.ofEpochMilli(nowMs).toString())
+                        .put("sequence", sequence)
+                        .put("quality", "mock")
+                        .put("values", new JSONObject()
+                            .put("networkState", "android")
+                            .put("coPpm", round(18.0 + 8.0 * Math.sin(elapsedSeconds / 8.0) + 3.0 * Math.sin(elapsedSeconds / 2.1), 1))
+                            .put("oxygenPercent", round(20.8 + 0.2 * Math.cos(elapsedSeconds / 11.0), 2))
+                            .put("temperatureCelsius", round(29.0 + 2.8 * Math.sin(elapsedSeconds / 13.0), 1))
+                            .put("humidityPercent", round(61.0 + 5.0 * Math.cos(elapsedSeconds / 17.0), 1)))))
                 .toString();
         } catch (JSONException exception) {
             throw new IllegalStateException("failed to create telemetry payload", exception);
@@ -94,6 +147,17 @@ public final class SensorPayloadFactory {
             position.put("fixTime", Instant.ofEpochMilli(location.getTime()).toString());
         }
         return position;
+    }
+
+    private static void copyJsonObject(JSONObject source, JSONObject destination) throws JSONException {
+        JSONArray names = source.names();
+        if (names == null) {
+            return;
+        }
+        for (int index = 0; index < names.length(); index++) {
+            String name = names.getString(index);
+            destination.put(name, source.get(name));
+        }
     }
 
     private static double round(double value, int digits) {

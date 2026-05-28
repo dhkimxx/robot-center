@@ -23,11 +23,8 @@ func newPublisherSession(peerID string, robotCode string, peerConnection *webrtc
 	}
 }
 
-func publisherRobotCode(sender *peer, payload map[string]any) (string, error) {
+func publisherRobotCode(sender *peer) (string, error) {
 	robotCode := strings.TrimSpace(sender.robotCode)
-	if robotCode == "" {
-		robotCode = strings.TrimSpace(payloadString(payload, "robotCode"))
-	}
 	if robotCode == "" {
 		return "", fmt.Errorf("robotCode is required")
 	}

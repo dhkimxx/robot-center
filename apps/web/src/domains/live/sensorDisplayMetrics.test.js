@@ -9,12 +9,9 @@ describe("sensorDisplayMetrics", () => {
   it("creates dynamic metrics from canonical telemetry descriptors and samples", () => {
     const metrics = createSensorMetrics({
       descriptors: [
-        { sensorId: "telemetry.environment_1", kind: "environment", displayName: "Environment" },
-        { sensorId: "telemetry.battery_1", kind: "battery", displayName: "Battery" }
+        { sensorId: "telemetry.environment_1", sensorType: "environment", displayName: "Environment" },
+        { sensorId: "telemetry.battery_1", sensorType: "battery", displayName: "Battery" }
       ],
-      payload: {
-        networkState: "mock-local"
-      },
       samples: [
         {
           sensorId: "telemetry.environment_1",
@@ -41,20 +38,19 @@ describe("sensorDisplayMetrics", () => {
       "CH4",
       "온도",
       "습도",
-      "배터리",
-      "네트워크"
+      "배터리"
     ]);
   });
 
   it("keeps spatial samples when telemetry and spatial payloads are merged", () => {
     const merged = mergeSensorSnapshots(
       {
-        descriptors: [{ sensorId: "telemetry.battery_1", kind: "battery", displayName: "Battery" }],
+        descriptors: [{ sensorId: "telemetry.battery_1", sensorType: "battery", displayName: "Battery" }],
         samples: [{ sensorId: "telemetry.battery_1", values: { batteryPercent: 90 } }],
         sentAt: "2026-05-26T01:00:00Z"
       },
       {
-        descriptors: [{ sensorId: "spatial.imu_1", kind: "imu", displayName: "IMU" }],
+        descriptors: [{ sensorId: "spatial.imu_1", sensorType: "imu", displayName: "IMU" }],
         samples: [
           {
             sensorId: "spatial.imu_1",
@@ -85,7 +81,7 @@ describe("sensorDisplayMetrics", () => {
         sensorId: "telemetry.environment_1",
         sensorType: "environment",
         latestSample: {
-          objectValue: {
+          values: {
             ch4Ppm: 2,
             coPpm: 9,
             humidityPercent: 48,
@@ -99,7 +95,7 @@ describe("sensorDisplayMetrics", () => {
         sensorId: "telemetry.battery_1",
         sensorType: "battery",
         latestSample: {
-          objectValue: {
+          values: {
             batteryPercent: 91
           }
         }

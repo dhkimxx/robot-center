@@ -204,7 +204,7 @@ func (s *recordingStoreSpy) EndMission(_ context.Context, missionCode string) (d
 	return domain.Mission{MissionCode: missionCode, Status: "ended"}, nil
 }
 
-func (s *recordingStoreSpy) FindActiveMissionForRobot(_ context.Context, _ string, _ string) (domain.Mission, bool, error) {
+func (s *recordingStoreSpy) FindActiveMissionForRobot(_ context.Context, _ string) (domain.Mission, bool, error) {
 	return domain.Mission{}, false, nil
 }
 

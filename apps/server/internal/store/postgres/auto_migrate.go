@@ -70,11 +70,14 @@ func (s *Store) applyPostAutoMigrateDDL(db *gorm.DB) error {
 				AND sd.sensor_id = ss.sensor_id`,
 		`ALTER TABLE sensor_samples
 			ALTER COLUMN descriptor_id SET NOT NULL`,
+		sensorSampleValueColumnMigrationStatement(),
 		`CREATE INDEX IF NOT EXISTS events_geom_idx
 			ON events USING gist(geom)`,
 		dropEmptyTableStatement("sensor_readings"),
 		dropEmptyTableStatement("telemetry_snapshots"),
 	}
+	statements = append(statements, baseModelColumnStatements()...)
+	statements = append(statements, updatedAtTriggerStatements()...)
 	statements = append(statements, foreignKeyConstraintStatements()...)
 	for _, statement := range statements {
 		if err := db.Exec(statement).Error; err != nil {
@@ -82,6 +85,135 @@ func (s *Store) applyPostAutoMigrateDDL(db *gorm.DB) error {
 		}
 	}
 	return nil
+}
+
+func sensorSampleValueColumnMigrationStatement() string {
+	return `DO $$
+		BEGIN
+			IF to_regclass('public.sensor_samples') IS NOT NULL THEN
+				IF NOT EXISTS (
+					SELECT 1
+					FROM information_schema.columns
+					WHERE table_schema = 'public'
+						AND table_name = 'sensor_samples'
+						AND column_name = 'values'
+				) THEN
+					ALTER TABLE sensor_samples ADD COLUMN "values" jsonb;
+				END IF;
+
+				IF EXISTS (
+					SELECT 1
+					FROM information_schema.columns
+					WHERE table_schema = 'public'
+						AND table_name = 'sensor_samples'
+						AND column_name = 'object_value'
+				) THEN
+					UPDATE sensor_samples
+					SET "values" = object_value
+					WHERE "values" IS NULL
+						AND object_value IS NOT NULL;
+				END IF;
+
+				ALTER TABLE sensor_samples DROP COLUMN IF EXISTS numeric_value;
+				ALTER TABLE sensor_samples DROP COLUMN IF EXISTS text_value;
+				ALTER TABLE sensor_samples DROP COLUMN IF EXISTS bool_value;
+				ALTER TABLE sensor_samples DROP COLUMN IF EXISTS vector_value;
+				ALTER TABLE sensor_samples DROP COLUMN IF EXISTS object_value;
+			END IF;
+		END $$`
+}
+
+func baseModelTableNames() []string {
+	return []string{
+		model.UserModel{}.TableName(),
+		model.RobotModel{}.TableName(),
+		model.RobotConnectionTokenModel{}.TableName(),
+		model.MissionModel{}.TableName(),
+		model.MissionRobotModel{}.TableName(),
+		model.RobotSessionModel{}.TableName(),
+		model.BrowserSessionModel{}.TableName(),
+		model.RecorderSessionModel{}.TableName(),
+		model.SensorDescriptorModel{}.TableName(),
+		model.SensorSampleModel{}.TableName(),
+		model.RecordingSessionModel{}.TableName(),
+		model.RecordingChunkModel{}.TableName(),
+		model.RecordingFinalizationJobModel{}.TableName(),
+		model.StorageObjectModel{}.TableName(),
+		model.EventModel{}.TableName(),
+		model.ControlCommandModel{}.TableName(),
+		model.ControlAckModel{}.TableName(),
+	}
+}
+
+func baseModelColumnStatements() []string {
+	statements := make([]string, 0, len(baseModelTableNames())*2)
+	for _, tableName := range baseModelTableNames() {
+		statements = append(statements, fmt.Sprintf(`DO $$
+			BEGIN
+				IF to_regclass('public.%s') IS NOT NULL THEN
+					IF EXISTS (
+						SELECT 1
+						FROM information_schema.columns
+						WHERE table_schema = 'public'
+							AND table_name = '%s'
+							AND column_name = 'created_at'
+					) THEN
+						EXECUTE 'UPDATE public.%s SET created_at = now() WHERE created_at IS NULL';
+						ALTER TABLE %s ALTER COLUMN created_at SET DEFAULT now();
+						ALTER TABLE %s ALTER COLUMN created_at SET NOT NULL;
+					END IF;
+
+					IF EXISTS (
+						SELECT 1
+						FROM information_schema.columns
+						WHERE table_schema = 'public'
+							AND table_name = '%s'
+							AND column_name = 'updated_at'
+					) THEN
+						EXECUTE 'UPDATE public.%s SET updated_at = COALESCE(created_at, now()) WHERE updated_at IS NULL';
+						ALTER TABLE %s ALTER COLUMN updated_at SET DEFAULT now();
+						ALTER TABLE %s ALTER COLUMN updated_at SET NOT NULL;
+					END IF;
+				END IF;
+			END $$`, tableName, tableName, tableName, tableName, tableName, tableName, tableName, tableName, tableName))
+	}
+	return statements
+}
+
+func updatedAtTriggerStatements() []string {
+	statements := []string{`CREATE OR REPLACE FUNCTION set_updated_at_timestamp()
+		RETURNS trigger AS $$
+		BEGIN
+			NEW.updated_at = now();
+			RETURN NEW;
+		END;
+		$$ LANGUAGE plpgsql`}
+	for _, tableName := range baseModelTableNames() {
+		triggerName := tableName + "_set_updated_at"
+		statements = append(statements, fmt.Sprintf(`DO $$
+			BEGIN
+				IF to_regclass('public.%s') IS NOT NULL
+					AND EXISTS (
+						SELECT 1
+						FROM information_schema.columns
+						WHERE table_schema = 'public'
+							AND table_name = '%s'
+							AND column_name = 'updated_at'
+					)
+					AND NOT EXISTS (
+						SELECT 1
+						FROM pg_trigger
+						WHERE tgname = '%s'
+					)
+				THEN
+					CREATE TRIGGER %s
+						BEFORE UPDATE ON %s
+						FOR EACH ROW
+						EXECUTE FUNCTION set_updated_at_timestamp();
+				END IF;
+			END $$`, tableName, tableName, triggerName, triggerName, tableName))
+	}
+	return statements
 }
 
 func robotDeviceStateMigrationStatement() string {

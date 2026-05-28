@@ -35,13 +35,8 @@ type SensorSampleResponse struct {
 	Sequence     int64           `json:"sequence,omitempty"`
 	SentAt       *time.Time      `json:"sentAt,omitempty"`
 	ReceivedAt   time.Time       `json:"receivedAt"`
-	NumericValue *float64        `json:"numericValue,omitempty"`
-	TextValue    string          `json:"textValue,omitempty"`
-	BoolValue    *bool           `json:"boolValue,omitempty"`
-	VectorValue  json.RawMessage `json:"vectorValue,omitempty"`
-	ObjectValue  json.RawMessage `json:"objectValue,omitempty"`
+	Values       json.RawMessage `json:"values,omitempty"`
 	ObjectKey    string          `json:"objectKey,omitempty"`
-	RawPayload   json.RawMessage `json:"rawPayload"`
 }
 
 type SensorLatestResponse struct {
@@ -62,7 +57,20 @@ func SensorDescriptors(descriptors []domain.SensorDescriptor) []SensorDescriptor
 }
 
 func SensorSample(sample domain.SensorSample) SensorSampleResponse {
-	return SensorSampleResponse(sample)
+	return SensorSampleResponse{
+		ID:           sample.ID,
+		DescriptorID: sample.DescriptorID,
+		MissionID:    sample.MissionID,
+		RobotCode:    sample.RobotCode,
+		SensorID:     sample.SensorID,
+		ChannelRole:  sample.ChannelRole,
+		MessageID:    sample.MessageID,
+		Sequence:     sample.Sequence,
+		SentAt:       sample.SentAt,
+		ReceivedAt:   sample.ReceivedAt,
+		Values:       sample.Values,
+		ObjectKey:    sample.ObjectKey,
+	}
 }
 
 func SensorSamples(samples []domain.SensorSample) []SensorSampleResponse {

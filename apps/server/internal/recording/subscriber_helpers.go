@@ -319,12 +319,10 @@ func recorderStorageDataChannelLabel(label string) string {
 		return "channel.telemetry"
 	case "channel.spatial":
 		return "channel.spatial"
-	case "telemetry", "sensor":
-		return "channel.telemetry"
 	case "channel.event", "channel.control":
 		return ""
 	default:
-		return strings.TrimSpace(label)
+		return ""
 	}
 }
 

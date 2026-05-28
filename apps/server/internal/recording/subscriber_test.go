@@ -48,6 +48,9 @@ func TestRecorderStorageDataChannelLabelKeepsSensorSampleChannels(t *testing.T) 
 		"channel.spatial":   "channel.spatial",
 		"channel.event":     "",
 		"channel.control":   "",
+		"telemetry":         "",
+		"sensor":            "",
+		"spatial":           "",
 	}
 	for input, want := range cases {
 		if got := recorderStorageDataChannelLabel(input); got != want {

@@ -6,7 +6,7 @@ import (
 )
 
 type SensorDescriptorModel struct {
-	ID           string          `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	BaseModel
 	MissionID    string          `gorm:"column:mission_id;type:uuid;not null;uniqueIndex:sensor_descriptors_mission_robot_sensor_unique,priority:1;index"`
 	RobotID      string          `gorm:"column:robot_id;type:uuid;not null;uniqueIndex:sensor_descriptors_mission_robot_sensor_unique,priority:2;index"`
 	SensorID     string          `gorm:"column:sensor_id;not null;uniqueIndex:sensor_descriptors_mission_robot_sensor_unique,priority:3"`
@@ -27,7 +27,7 @@ func (SensorDescriptorModel) TableName() string {
 }
 
 type SensorSampleModel struct {
-	ID           string          `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	BaseModel
 	DescriptorID string          `gorm:"column:descriptor_id;type:uuid;not null;index;index:sensor_samples_descriptor_received_idx,priority:1"`
 	MissionID    string          `gorm:"column:mission_id;type:uuid;not null;index:sensor_samples_latest_idx,priority:1"`
 	RobotID      string          `gorm:"column:robot_id;type:uuid;not null;index:sensor_samples_latest_idx,priority:2"`
@@ -37,11 +37,7 @@ type SensorSampleModel struct {
 	Sequence     *int64          `gorm:"column:sequence"`
 	SentAt       *time.Time      `gorm:"column:sent_at"`
 	ReceivedAt   time.Time       `gorm:"column:received_at;not null;default:now();index:sensor_samples_latest_idx,sort:desc,priority:4;index:sensor_samples_descriptor_received_idx,sort:desc,priority:2"`
-	NumericValue *float64        `gorm:"column:numeric_value"`
-	TextValue    *string         `gorm:"column:text_value"`
-	BoolValue    *bool           `gorm:"column:bool_value"`
-	VectorValue  json.RawMessage `gorm:"column:vector_value;type:jsonb"`
-	ObjectValue  json.RawMessage `gorm:"column:object_value;type:jsonb"`
+	Values       json.RawMessage `gorm:"column:values;type:jsonb"`
 	ObjectKey    *string         `gorm:"column:object_key"`
 	RawPayload   json.RawMessage `gorm:"column:raw_payload;type:jsonb;not null;default:'{}'::jsonb"`
 }

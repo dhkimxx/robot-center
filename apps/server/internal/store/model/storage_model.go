@@ -6,7 +6,7 @@ import (
 )
 
 type StorageObjectModel struct {
-	ID               string          `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	BaseModel
 	MissionID        string          `gorm:"column:mission_id;type:uuid;not null;index"`
 	RobotID          *string         `gorm:"column:robot_id;type:uuid;index"`
 	RecordingChunkID *string         `gorm:"column:recording_chunk_id;type:uuid;index"`
@@ -19,7 +19,6 @@ type StorageObjectModel struct {
 	StartedAt        *time.Time      `gorm:"column:started_at"`
 	EndedAt          *time.Time      `gorm:"column:ended_at"`
 	Metadata         json.RawMessage `gorm:"column:metadata;type:jsonb;not null;default:'{}'::jsonb"`
-	CreatedAt        time.Time       `gorm:"column:created_at;not null;default:now()"`
 }
 
 func (StorageObjectModel) TableName() string {

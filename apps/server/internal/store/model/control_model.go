@@ -6,7 +6,7 @@ import (
 )
 
 type ControlCommandModel struct {
-	ID            string          `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	BaseModel
 	MissionID     string          `gorm:"column:mission_id;type:uuid;not null;index"`
 	RobotID       string          `gorm:"column:robot_id;type:uuid;not null;index"`
 	RequestedBy   *string         `gorm:"column:requested_by;type:uuid;index"`
@@ -24,7 +24,7 @@ func (ControlCommandModel) TableName() string {
 }
 
 type ControlAckModel struct {
-	ID               string          `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	BaseModel
 	ControlCommandID string          `gorm:"column:control_command_id;type:uuid;not null;index"`
 	RobotID          string          `gorm:"column:robot_id;type:uuid;not null;index"`
 	AckStatus        string          `gorm:"column:ack_status;not null"`

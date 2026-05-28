@@ -12,7 +12,7 @@ func (h *Hub) handleRobotOffer(sender *peer, payload map[string]any) error {
 	if offerSDP == "" {
 		return fmt.Errorf("offer sdp is empty")
 	}
-	robotCode, err := publisherRobotCode(sender, payload)
+	robotCode, err := publisherRobotCode(sender)
 	if err != nil {
 		return err
 	}

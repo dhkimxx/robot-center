@@ -43,12 +43,6 @@ export function findTrackSlot(event, fallbackIndex) {
   if (raw.includes("track.video_1")) {
     return "rgb";
   }
-  if (raw.includes("thermal")) {
-    return "thermal";
-  }
-  if (raw.includes("rgb")) {
-    return "rgb";
-  }
   return fallbackIndex === 0 ? "rgb" : "thermal";
 }
 
@@ -57,8 +51,6 @@ export function findRobotCodeFromDataMessage(message) {
     const parsed = JSON.parse(message);
     return parsed?.robotCode
       ?? parsed?.payload?.robotCode
-      ?? parsed?.rawPayload?.robotCode
-      ?? parsed?.rawPayload?.payload?.robotCode
       ?? "";
   } catch {
     return "";

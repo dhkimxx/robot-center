@@ -42,19 +42,19 @@ func TestSensorRepositoryPersistsDescriptorsSamplesAndLatestValues(t *testing.T)
 				ChannelRole: "channel.telemetry",
 				DisplayName: "Battery",
 				SensorType:  "battery",
-				ValueType:   "number",
+				ValueType:   "object",
 				Unit:        "percent",
 				Enabled:     true,
 			},
 		},
 		Samples: []domain.SensorSample{
 			{
-				SensorID:    "telemetry.position_1",
-				ObjectValue: json.RawMessage(`{"latitude":37.402181,"longitude":127.106818}`),
+				SensorID: "telemetry.position_1",
+				Values:   json.RawMessage(`{"latitude":37.402181,"longitude":127.106818}`),
 			},
 			{
-				SensorID:     "telemetry.battery_1",
-				NumericValue: &batteryValue,
+				SensorID: "telemetry.battery_1",
+				Values:   json.RawMessage(`{"batteryPercent":87.5}`),
 			},
 		},
 	})
@@ -80,10 +80,10 @@ func TestSensorRepositoryPersistsDescriptorsSamplesAndLatestValues(t *testing.T)
 	if len(latest) != 2 {
 		t.Fatalf("expected 2 latest sensor rows, got %#v", latest)
 	}
-	if !latestSensorHasNumericValue(latest, "telemetry.battery_1", batteryValue) {
+	if !latestSensorHasValue(latest, "telemetry.battery_1", "batteryPercent") {
 		t.Fatalf("expected latest battery value %.1f, got %#v", batteryValue, latest)
 	}
-	if !latestSensorHasObjectValue(latest, "telemetry.position_1", "latitude") {
+	if !latestSensorHasValue(latest, "telemetry.position_1", "latitude") {
 		t.Fatalf("expected latest position object value, got %#v", latest)
 	}
 
@@ -100,15 +100,15 @@ func TestSensorRepositoryPersistsDescriptorsSamplesAndLatestValues(t *testing.T)
 				SensorID:    "telemetry.battery_1",
 				DisplayName: "Main Battery",
 				SensorType:  "battery",
-				ValueType:   "number",
+				ValueType:   "object",
 				Unit:        "percent",
 				Enabled:     true,
 			},
 		},
 		Samples: []domain.SensorSample{
 			{
-				SensorID:     "telemetry.battery_1",
-				NumericValue: &batteryValue,
+				SensorID: "telemetry.battery_1",
+				Values:   json.RawMessage(`{"batteryPercent":87.5}`),
 			},
 		},
 	}); err != nil {
@@ -127,22 +127,13 @@ func TestSensorRepositoryPersistsDescriptorsSamplesAndLatestValues(t *testing.T)
 	}
 }
 
-func latestSensorHasNumericValue(latest []domain.SensorLatest, sensorID string, expected float64) bool {
-	for _, item := range latest {
-		if item.Descriptor.SensorID == sensorID && item.LatestSample != nil && item.LatestSample.NumericValue != nil {
-			return *item.LatestSample.NumericValue == expected
-		}
-	}
-	return false
-}
-
-func latestSensorHasObjectValue(latest []domain.SensorLatest, sensorID string, key string) bool {
+func latestSensorHasValue(latest []domain.SensorLatest, sensorID string, key string) bool {
 	for _, item := range latest {
 		if item.Descriptor.SensorID != sensorID || item.LatestSample == nil {
 			continue
 		}
 		var payload map[string]any
-		if err := json.Unmarshal(item.LatestSample.ObjectValue, &payload); err != nil {
+		if err := json.Unmarshal(item.LatestSample.Values, &payload); err != nil {
 			return false
 		}
 		if _, ok := payload[key]; ok {

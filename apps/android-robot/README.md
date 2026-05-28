@@ -13,7 +13,7 @@ robotToken
 그 다음 REST API로 heartbeat와 mission 조회를 수행하고, active mission을 받으면 app-server/SFU로 WebRTC publish를 시작한다.
 센서와 위치 데이터는 REST로 직접 저장하지 않고 WebRTC DataChannel로만 보낸다.
 
-Mission 단위 multi-robot 구조에서는 여러 Android Mock Robot이 같은 `roomId=missionCode`로 publish한다. 각 앱 인스턴스는 서로 다른 `robotCode`와 `robotToken`으로 실행하고, telemetry/spatial/event payload에는 해당 `robotCode`를 유지한다.
+Mission 단위 multi-robot 구조에서는 여러 Android Mock Robot이 같은 `roomId=missionCode`로 publish한다. 각 앱 인스턴스는 서로 다른 `robotCode`와 `robotToken`으로 실행하되, telemetry/spatial/event payload에는 `robotCode`, `missionId`, `missionCode`, `channelRole`을 넣지 않는다. 서버가 token, room, DataChannel label에서 context를 주입한다.
 
 ## 송신 범위
 
@@ -109,7 +109,7 @@ adb shell 'am start -n com.sst.robotcenter.androidrobot/.MainActivity \
 - mission 응답의 `roomId`를 signaling URL의 `room` query에 반영
 - RGB/Thermal/Audio WebRTC publish
 - active mission 중 heartbeat state를 `streaming`으로 유지
-- telemetry/spatial DataChannel payload에 `robotCode`, `missionId` 포함
+- telemetry/spatial DataChannel payload는 canonical `descriptors`/`samples`/`values` schema로 송신
 - 위치/센서 데이터는 WebRTC DataChannel 경로로만 저장
 - React Live UI에서 RGB/Thermal/Audio와 telemetry/spatial 수신 확인
 - recorder-worker에서 RGB/Thermal/Audio track과 telemetry/spatial DataChannel 수신 확인

@@ -75,31 +75,24 @@ type sensorDescriptorRequest struct {
 	SensorID     string         `json:"sensorId"`
 	ChannelRole  string         `json:"channelRole"`
 	DisplayName  string         `json:"displayName"`
-	Kind         string         `json:"kind"`
 	SensorType   string         `json:"sensorType"`
 	ValueType    string         `json:"valueType"`
 	Unit         string         `json:"unit"`
-	SamplingRate *float64       `json:"samplingRate"`
 	SampleRateHz *float64       `json:"sampleRateHz"`
 	Enabled      bool           `json:"enabled"`
 	Metadata     map[string]any `json:"metadata"`
 }
 
 type sensorSampleRequest struct {
-	SensorID     string         `json:"sensorId"`
-	ChannelRole  string         `json:"channelRole"`
-	MessageID    string         `json:"messageId"`
-	Sequence     int64          `json:"sequence"`
-	Timestamp    *time.Time     `json:"timestamp"`
-	SentAt       *time.Time     `json:"sentAt"`
-	NumericValue *float64       `json:"numericValue"`
-	TextValue    string         `json:"textValue"`
-	BoolValue    *bool          `json:"boolValue"`
-	VectorValue  map[string]any `json:"vectorValue"`
-	ObjectValue  map[string]any `json:"objectValue"`
-	Values       any            `json:"values"`
-	ObjectKey    string         `json:"objectKey"`
-	RawPayload   map[string]any `json:"rawPayload"`
+	SensorID    string     `json:"sensorId,omitempty"`
+	ChannelRole string     `json:"channelRole,omitempty"`
+	MessageID   string     `json:"messageId,omitempty"`
+	Sequence    int64      `json:"sequence,omitempty"`
+	Timestamp   *time.Time `json:"timestamp,omitempty"`
+	SentAt      *time.Time `json:"sentAt,omitempty"`
+	Quality     string     `json:"quality,omitempty"`
+	Values      any        `json:"values,omitempty"`
+	ObjectKey   string     `json:"objectKey,omitempty"`
 }
 
 type sensorEnvelopeRequest struct {
@@ -112,7 +105,6 @@ type sensorEnvelopeRequest struct {
 	SentAt      *time.Time                `json:"sentAt"`
 	Descriptors []sensorDescriptorRequest `json:"descriptors"`
 	Samples     []sensorSampleRequest     `json:"samples"`
-	Payload     map[string]any            `json:"payload"`
 }
 
 func decodeSensorEnvelope(r *http.Request) (domain.SensorEnvelope, error) {
@@ -156,20 +148,16 @@ func decodeSensorEnvelope(r *http.Request) (domain.SensorEnvelope, error) {
 		if sensorID == "" {
 			continue
 		}
-		sampleRateHz := descriptor.SampleRateHz
-		if sampleRateHz == nil {
-			sampleRateHz = descriptor.SamplingRate
-		}
 		envelope.Descriptors = append(envelope.Descriptors, domain.SensorDescriptor{
 			MissionID:    request.MissionID,
 			RobotCode:    request.RobotCode,
 			SensorID:     sensorID,
 			ChannelRole:  utils.FirstNonEmptyString(descriptor.ChannelRole, request.ChannelRole),
 			DisplayName:  utils.FirstNonEmptyString(descriptor.DisplayName, sensorID),
-			SensorType:   inferSensorType(sensorID, utils.FirstNonEmptyString(descriptor.SensorType, descriptor.Kind)),
+			SensorType:   inferSensorType(sensorID, descriptor.SensorType),
 			ValueType:    utils.FirstNonEmptyString(descriptor.ValueType, "object"),
 			Unit:         strings.TrimSpace(descriptor.Unit),
-			SampleRateHz: sampleRateHz,
+			SampleRateHz: descriptor.SampleRateHz,
 			Enabled:      descriptor.Enabled,
 			Metadata:     utils.RawJSONOrEmpty(descriptor.Metadata),
 		})
@@ -179,6 +167,9 @@ func decodeSensorEnvelope(r *http.Request) (domain.SensorEnvelope, error) {
 		if sensorID == "" {
 			continue
 		}
+		if sample.Values == nil && strings.TrimSpace(sample.ObjectKey) == "" {
+			return domain.SensorEnvelope{}, errors.New("sample values or objectKey is required")
+		}
 		sentAt := sample.SentAt
 		if sentAt == nil {
 			sentAt = sample.Timestamp
@@ -187,47 +178,21 @@ func decodeSensorEnvelope(r *http.Request) (domain.SensorEnvelope, error) {
 			sentAt = request.SentAt
 		}
 		envelope.Samples = append(envelope.Samples, domain.SensorSample{
-			MissionID:    request.MissionID,
-			RobotCode:    request.RobotCode,
-			SensorID:     sensorID,
-			ChannelRole:  utils.FirstNonEmptyString(sample.ChannelRole, request.ChannelRole),
-			MessageID:    utils.FirstNonEmptyString(sample.MessageID, request.MessageID),
-			Sequence:     utils.FirstNonZeroInt64(sample.Sequence, request.Sequence),
-			SentAt:       sentAt,
-			ReceivedAt:   envelope.ReceivedAt,
-			NumericValue: sample.NumericValue,
-			TextValue:    strings.TrimSpace(sample.TextValue),
-			BoolValue:    sample.BoolValue,
-			VectorValue:  utils.RawJSONOrNil(sample.VectorValue),
-			ObjectValue:  marshalSensorSampleObjectValue(sample),
-			ObjectKey:    strings.TrimSpace(sample.ObjectKey),
-			RawPayload:   utils.RawJSONOrEmpty(sample),
+			MissionID:   request.MissionID,
+			RobotCode:   request.RobotCode,
+			SensorID:    sensorID,
+			ChannelRole: utils.FirstNonEmptyString(sample.ChannelRole, request.ChannelRole),
+			MessageID:   utils.FirstNonEmptyString(sample.MessageID, request.MessageID),
+			Sequence:    utils.FirstNonZeroInt64(sample.Sequence, request.Sequence),
+			SentAt:      sentAt,
+			ReceivedAt:  envelope.ReceivedAt,
+			Values:      marshalSensorSampleValues(sample),
+			ObjectKey:   strings.TrimSpace(sample.ObjectKey),
+			RawPayload:  utils.RawJSONOrEmpty(sample),
 		})
 	}
-	if len(envelope.Descriptors) == 0 && len(envelope.Samples) == 0 && len(request.Payload) > 0 {
-		envelope.Descriptors = append(envelope.Descriptors, domain.SensorDescriptor{
-			MissionID:   request.MissionID,
-			RobotCode:   request.RobotCode,
-			SensorID:    "legacy.payload_1",
-			ChannelRole: request.ChannelRole,
-			DisplayName: "Legacy Payload",
-			SensorType:  "legacy",
-			ValueType:   "object",
-			Enabled:     true,
-			Metadata:    []byte("{}"),
-		})
-		envelope.Samples = append(envelope.Samples, domain.SensorSample{
-			MissionID:   request.MissionID,
-			RobotCode:   request.RobotCode,
-			SensorID:    "legacy.payload_1",
-			ChannelRole: request.ChannelRole,
-			MessageID:   request.MessageID,
-			Sequence:    request.Sequence,
-			SentAt:      request.SentAt,
-			ReceivedAt:  envelope.ReceivedAt,
-			ObjectValue: utils.RawJSONOrEmpty(request.Payload),
-			RawPayload:  envelope.RawPayload,
-		})
+	if len(envelope.Descriptors) == 0 && len(envelope.Samples) == 0 {
+		return domain.SensorEnvelope{}, errors.New("descriptors or samples are required")
 	}
 	return envelope, nil
 }
@@ -261,10 +226,7 @@ func inferSensorType(sensorID string, explicitType string) string {
 	}
 }
 
-func marshalSensorSampleObjectValue(sample sensorSampleRequest) json.RawMessage {
-	if sample.ObjectValue != nil {
-		return utils.RawJSONOrNil(sample.ObjectValue)
-	}
+func marshalSensorSampleValues(sample sensorSampleRequest) json.RawMessage {
 	if sample.Values != nil {
 		return utils.RawJSONOrNil(sample.Values)
 	}

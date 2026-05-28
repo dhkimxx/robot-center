@@ -58,7 +58,6 @@ type CreateMissionInput struct {
 }
 
 type HeartbeatInput struct {
-	RobotCode      string
 	State          string
 	BatteryPercent int
 	NetworkQuality string

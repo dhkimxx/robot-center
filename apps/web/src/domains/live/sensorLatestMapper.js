@@ -4,7 +4,7 @@ function getSampleObjectValue(sample) {
   if (!sample) {
     return null;
   }
-  return sample.objectValue ?? sample.vectorValue ?? sample.rawPayload?.values ?? sample.rawPayload?.payload ?? null;
+  return sample.values ?? null;
 }
 
 function getSensorType(item) {

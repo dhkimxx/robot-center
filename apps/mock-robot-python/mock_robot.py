@@ -703,24 +703,24 @@ class MockRobot:
             "descriptors": [
                 {
                     "sensorId": "telemetry.position_1",
-                    "kind": "position",
+                    "sensorType": "position",
                     "displayName": "GPS",
-                    "samplingRate": 1,
+                    "sampleRateHz": 1,
                     "enabled": True,
                 },
                 {
                     "sensorId": "telemetry.environment_1",
-                    "kind": "environment",
+                    "sensorType": "environment",
                     "displayName": "Environment",
-                    "samplingRate": 1,
+                    "sampleRateHz": 1,
                     "enabled": True,
                 },
                 {
                     "sensorId": "telemetry.battery_1",
-                    "kind": "battery",
+                    "sensorType": "battery",
                     "displayName": "Battery",
                     "unit": "percent",
-                    "samplingRate": 1,
+                    "sampleRateHz": 1,
                     "enabled": True,
                 },
             ],
@@ -760,24 +760,6 @@ class MockRobot:
                     "values": {"batteryPercent": self.current_battery_percent()},
                 },
             ],
-            "payload": {
-                "batteryPercent": self.current_battery_percent(),
-                "networkState": "mock-local",
-                "temperatureCelsius": 28.5 + math.sin(self.sequence / 5) * 2,
-                "humidityPercent": 52.0 + math.cos(self.sequence / 8) * 5,
-                "oxygenPercent": 20.7,
-                "coPpm": 5 + self.sequence % 6,
-                "ch4Ppm": 1 + self.sequence % 3,
-                "positionAvailable": True,
-                "position": {
-                    "latitude": latitude,
-                    "longitude": longitude,
-                    "altitudeMeter": 45.0 + (self.sequence % 8),
-                    "accuracyMeter": 4.5,
-                    "headingDegree": (self.sequence * 12) % 360,
-                    "speedMeterPerSecond": 0.4 + (self.sequence % 4) * 0.1,
-                },
-            },
         }
 
     def create_event_payload(self) -> dict[str, Any]:
@@ -802,10 +784,10 @@ class MockRobot:
             "descriptors": [
                 {
                     "sensorId": "spatial.imu_1",
-                    "kind": "imu",
+                    "sensorType": "imu",
                     "displayName": "IMU",
                     "valueType": "object",
-                    "samplingRate": 5,
+                    "sampleRateHz": 5,
                     "enabled": True,
                     "metadata": {
                         "frameId": "base_link",
@@ -814,11 +796,11 @@ class MockRobot:
                 },
                 {
                     "sensorId": "spatial.odometry_1",
-                    "kind": "odometry",
+                    "sensorType": "odometry",
                     "displayName": "Odometry",
                     "valueType": "object",
                     "unit": "m",
-                    "samplingRate": 5,
+                    "sampleRateHz": 5,
                     "enabled": True,
                     "metadata": {
                         "frameId": "odom",
@@ -826,10 +808,10 @@ class MockRobot:
                 },
                 {
                     "sensorId": "spatial.point_cloud_front_1",
-                    "kind": "point_cloud",
+                    "sensorType": "point_cloud",
                     "displayName": "Front Point Cloud",
                     "valueType": "object_ref",
-                    "samplingRate": 0.2,
+                    "sampleRateHz": 0.2,
                     "enabled": False,
                     "metadata": {
                         "state": "unsupported",

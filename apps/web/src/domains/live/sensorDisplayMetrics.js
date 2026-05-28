@@ -197,7 +197,7 @@ function normalizeDescriptor(descriptor, sample) {
   return {
     displayName: descriptor?.displayName ?? sensorId,
     sensorId,
-    sensorType: descriptor?.sensorType ?? descriptor?.kind ?? inferSensorType(sensorId),
+    sensorType: descriptor?.sensorType ?? inferSensorType(sensorId),
     unit: descriptor?.unit ?? ""
   };
 }
@@ -208,27 +208,6 @@ function getSampleValue(sample) {
   }
   if (sample.values !== null && sample.values !== undefined) {
     return sample.values;
-  }
-  if (sample.objectValue !== null && sample.objectValue !== undefined) {
-    return sample.objectValue;
-  }
-  if (sample.vectorValue !== null && sample.vectorValue !== undefined) {
-    return sample.vectorValue;
-  }
-  if (sample.rawPayload?.values !== null && sample.rawPayload?.values !== undefined) {
-    return sample.rawPayload.values;
-  }
-  if (sample.rawPayload?.payload !== null && sample.rawPayload?.payload !== undefined) {
-    return sample.rawPayload.payload;
-  }
-  if (sample.numericValue !== null && sample.numericValue !== undefined) {
-    return sample.numericValue;
-  }
-  if (sample.textValue) {
-    return sample.textValue;
-  }
-  if (sample.boolValue !== null && sample.boolValue !== undefined) {
-    return sample.boolValue;
   }
   if (sample.objectKey) {
     return sample.objectKey;

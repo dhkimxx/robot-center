@@ -13,7 +13,7 @@ describe("sensorLatestMapper", () => {
       sensorId: "telemetry.position_1",
       sensorType: "position",
       latestSample: {
-        objectValue: {
+        values: {
           latitude: 37.5,
           longitude: 127.0
         },
@@ -27,7 +27,7 @@ describe("sensorLatestMapper", () => {
       sensorId: "telemetry.gas_1",
       sensorType: "gas",
       latestSample: {
-        objectValue: {
+        values: {
           coPpm: 9,
           oxygenPercent: 20.8
         },

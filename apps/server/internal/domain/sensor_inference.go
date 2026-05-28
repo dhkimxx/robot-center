@@ -1,6 +1,9 @@
 package domain
 
-import "strings"
+import (
+	"encoding/json"
+	"strings"
+)
 
 func InferSensorTypeFromID(sensorID string) string {
 	normalized := strings.ToLower(strings.TrimSpace(sensorID))
@@ -21,17 +24,25 @@ func InferSensorTypeFromID(sensorID string) string {
 }
 
 func InferSensorValueType(sample SensorSample) string {
-	switch {
-	case sample.NumericValue != nil:
-		return "number"
-	case sample.BoolValue != nil:
-		return "boolean"
-	case len(sample.VectorValue) > 0:
-		return "vector"
-	case strings.TrimSpace(sample.TextValue) != "":
-		return "string"
-	case strings.TrimSpace(sample.ObjectKey) != "":
+	if strings.TrimSpace(sample.ObjectKey) != "" {
 		return "object_ref"
+	}
+	if len(sample.Values) == 0 {
+		return "object"
+	}
+	var value any
+	if err := json.Unmarshal(sample.Values, &value); err != nil {
+		return "object"
+	}
+	switch value.(type) {
+	case float64:
+		return "number"
+	case bool:
+		return "boolean"
+	case string:
+		return "string"
+	case []any:
+		return "vector"
 	default:
 		return "object"
 	}

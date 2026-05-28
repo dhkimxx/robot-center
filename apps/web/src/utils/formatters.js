@@ -40,7 +40,7 @@ export function formatElapsedTime(value, now = Date.now()) {
 }
 
 export function getTelemetryPositionState(telemetry, now = Date.now()) {
-  const position = telemetry?.payload?.position ?? telemetry?.rawPayload?.payload?.position ?? telemetry;
+  const position = telemetry?.payload?.position ?? telemetry;
   const latitude = position?.latitude;
   const longitude = position?.longitude;
   const hasPosition = latitude !== null
@@ -49,7 +49,7 @@ export function getTelemetryPositionState(telemetry, now = Date.now()) {
     && longitude !== undefined
     && !Number.isNaN(Number(latitude))
     && !Number.isNaN(Number(longitude));
-  const timestamp = telemetry?.sentAt ?? telemetry?.receivedAt ?? telemetry?.rawPayload?.sentAt ?? position?.fixTime;
+  const timestamp = telemetry?.sentAt ?? telemetry?.receivedAt ?? position?.fixTime;
   const timestampMs = timestamp ? new Date(timestamp).getTime() : Number.NaN;
   const ageMs = Number.isNaN(timestampMs) ? null : Math.max(0, now - timestampMs);
   const isFresh = hasPosition && ageMs !== null && ageMs <= freshTelemetryThresholdMs;
@@ -61,7 +61,7 @@ export function getTelemetryPositionState(telemetry, now = Date.now()) {
     isFresh,
     latitude,
     longitude,
-    provider: position?.provider ?? telemetry?.rawPayload?.payload?.position?.provider ?? "-",
+    provider: position?.provider ?? "-",
     statusLabel: !hasPosition ? "GPS 대기" : isFresh ? "현재 위치" : "마지막 위치",
     timestamp
   };
