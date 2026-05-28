@@ -8,15 +8,22 @@ describe("mapLiveDataChannelPayload", () => {
       messageType: "telemetry",
       samples: [
         {
-          sensorId: "telemetry.environment_1",
+          sensorId: "telemetry.temperature_1",
+          timestamp: "2026-05-28T01:00:00Z",
           values: {
-            coPpm: 7,
-            oxygenPercent: 20.8,
             temperatureCelsius: 28.5
           }
         },
         {
+          sensorId: "telemetry.humidity_1",
+          timestamp: "2026-05-28T01:00:00Z",
+          values: {
+            humidityPercent: 48
+          }
+        },
+        {
           sensorId: "telemetry.battery_1",
+          timestamp: "2026-05-28T01:00:01Z",
           values: {
             batteryPercent: 91
           }
@@ -27,11 +34,13 @@ describe("mapLiveDataChannelPayload", () => {
     const result = mapLiveDataChannelPayload("channel.telemetry", JSON.stringify(payload));
 
     expect(result.ok).toBe(true);
-    expect(result.telemetry).toEqual(payload);
+    expect(result.telemetry).toMatchObject({
+      ...payload,
+      receivedAt: "2026-05-28T01:00:01Z"
+    });
     expect(result.sensor.payload).toMatchObject({
       batteryPercent: 91,
-      coPpm: 7,
-      oxygenPercent: 20.8,
+      humidityPercent: 48,
       temperatureCelsius: 28.5
     });
   });
@@ -54,6 +63,7 @@ describe("mapLiveDataChannelPayload", () => {
       samples: [
         {
           sensorId: "spatial.imu_1",
+          timestamp: "2026-05-28T01:00:00Z",
           values: {
             linearAcceleration: {
               x: 0.1
@@ -67,7 +77,10 @@ describe("mapLiveDataChannelPayload", () => {
 
     expect(result.ok).toBe(true);
     expect(result.eventMessage).toBe("공간 데이터 수신");
-    expect(result.sensor).toEqual(payload);
+    expect(result.sensor).toMatchObject({
+      ...payload,
+      receivedAt: "2026-05-28T01:00:00Z"
+    });
   });
 
   it("returns failed result for malformed JSON", () => {

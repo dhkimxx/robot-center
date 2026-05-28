@@ -3,10 +3,12 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
 	"robot-center/apps/server/internal/domain"
+	repo "robot-center/apps/server/internal/store/port"
 )
 
 func TestSensorRepositoryPersistsDescriptorsSamplesAndLatestValues(t *testing.T) {
@@ -14,7 +16,7 @@ func TestSensorRepositoryPersistsDescriptorsSamplesAndLatestValues(t *testing.T)
 	fixture := createActiveMissionFixture(t, store)
 	ctx := context.Background()
 	receivedAt := time.Date(2026, 5, 28, 1, 2, 3, 0, time.UTC)
-	sentAt := receivedAt.Add(-time.Second)
+	sampleTimestamp := receivedAt.Add(-time.Second)
 	batteryValue := 87.5
 
 	samples, err := store.SaveSensorEnvelope(ctx, domain.SensorEnvelope{
@@ -23,8 +25,6 @@ func TestSensorRepositoryPersistsDescriptorsSamplesAndLatestValues(t *testing.T)
 		RobotCode:   fixture.Robot.RobotCode,
 		MissionID:   fixture.Mission.ID,
 		ChannelRole: "channel.telemetry",
-		Sequence:    10,
-		SentAt:      &sentAt,
 		ReceivedAt:  receivedAt,
 		RawPayload:  json.RawMessage(`{"messageType":"telemetry"}`),
 		Descriptors: []domain.SensorDescriptor{
@@ -33,7 +33,6 @@ func TestSensorRepositoryPersistsDescriptorsSamplesAndLatestValues(t *testing.T)
 				ChannelRole: "channel.telemetry",
 				DisplayName: "GPS",
 				SensorType:  "position",
-				ValueType:   "object",
 				Enabled:     true,
 				Metadata:    json.RawMessage(`{"frame":"wgs84"}`),
 			},
@@ -42,15 +41,15 @@ func TestSensorRepositoryPersistsDescriptorsSamplesAndLatestValues(t *testing.T)
 				ChannelRole: "channel.telemetry",
 				DisplayName: "Battery",
 				SensorType:  "battery",
-				ValueType:   "object",
 				Unit:        "percent",
 				Enabled:     true,
 			},
 		},
 		Samples: []domain.SensorSample{
 			{
-				SensorID: "telemetry.position_1",
-				Values:   json.RawMessage(`{"latitude":37.402181,"longitude":127.106818}`),
+				SensorID:  "telemetry.position_1",
+				Timestamp: &sampleTimestamp,
+				Values:    json.RawMessage(`{"latitude":37.402181,"longitude":127.106818}`),
 			},
 			{
 				SensorID: "telemetry.battery_1",
@@ -92,7 +91,6 @@ func TestSensorRepositoryPersistsDescriptorsSamplesAndLatestValues(t *testing.T)
 		RobotCode:   fixture.Robot.RobotCode,
 		MissionID:   fixture.Mission.ID,
 		ChannelRole: "channel.telemetry",
-		Sequence:    11,
 		ReceivedAt:  receivedAt.Add(time.Second),
 		RawPayload:  json.RawMessage(`{"messageType":"telemetry"}`),
 		Descriptors: []domain.SensorDescriptor{
@@ -100,7 +98,6 @@ func TestSensorRepositoryPersistsDescriptorsSamplesAndLatestValues(t *testing.T)
 				SensorID:    "telemetry.battery_1",
 				DisplayName: "Main Battery",
 				SensorType:  "battery",
-				ValueType:   "object",
 				Unit:        "percent",
 				Enabled:     true,
 			},
@@ -124,6 +121,24 @@ func TestSensorRepositoryPersistsDescriptorsSamplesAndLatestValues(t *testing.T)
 	}
 	if !descriptorHasDisplayName(descriptors, "telemetry.battery_1", "Main Battery") {
 		t.Fatalf("expected updated battery display name, got %#v", descriptors)
+	}
+
+	_, err = store.SaveSensorEnvelope(ctx, domain.SensorEnvelope{
+		MessageID:   "telemetry-003",
+		RobotCode:   fixture.Robot.RobotCode,
+		MissionID:   fixture.Mission.ID,
+		ChannelRole: "channel.telemetry",
+		ReceivedAt:  receivedAt.Add(2 * time.Second),
+		RawPayload:  json.RawMessage(`{"messageType":"telemetry"}`),
+		Samples: []domain.SensorSample{
+			{
+				SensorID: "telemetry.unregistered_1",
+				Values:   json.RawMessage(`{"value":1}`),
+			},
+		},
+	})
+	if !errors.Is(err, repo.ErrInvalidState) {
+		t.Fatalf("expected sample without descriptor to be rejected, got %v", err)
 	}
 }
 

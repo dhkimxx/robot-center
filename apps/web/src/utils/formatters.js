@@ -49,7 +49,7 @@ export function getTelemetryPositionState(telemetry, now = Date.now()) {
     && longitude !== undefined
     && !Number.isNaN(Number(latitude))
     && !Number.isNaN(Number(longitude));
-  const timestamp = telemetry?.sentAt ?? telemetry?.receivedAt ?? position?.fixTime;
+  const timestamp = telemetry?.timestamp ?? telemetry?.receivedAt ?? position?.fixTime;
   const timestampMs = timestamp ? new Date(timestamp).getTime() : Number.NaN;
   const ageMs = Number.isNaN(timestampMs) ? null : Math.max(0, now - timestampMs);
   const isFresh = hasPosition && ageMs !== null && ageMs <= freshTelemetryThresholdMs;

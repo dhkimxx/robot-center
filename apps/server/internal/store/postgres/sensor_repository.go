@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -53,22 +54,19 @@ func (s *Store) SaveSensorEnvelope(ctx context.Context, envelope domain.SensorEn
 				metadata = []byte("{}")
 			}
 			displayName := utils.FirstNonEmptyString(descriptor.DisplayName, descriptor.SensorID)
-			sensorType := utils.FirstNonEmptyString(descriptor.SensorType, "unknown")
-			valueType := utils.FirstNonEmptyString(descriptor.ValueType, "object")
+			sensorType := domain.NormalizeSensorType(descriptor.SensorType, descriptor.SensorID)
 			records = append(records, model.SensorDescriptorModel{
-				MissionID:    envelope.MissionID,
-				RobotID:      robotID,
-				SensorID:     descriptor.SensorID,
-				ChannelRole:  channelRole,
-				DisplayName:  displayName,
-				SensorType:   sensorType,
-				ValueType:    valueType,
-				Unit:         optionalString(descriptor.Unit),
-				SampleRateHz: descriptor.SampleRateHz,
-				Enabled:      descriptor.Enabled,
-				Metadata:     metadata,
-				FirstSeenAt:  envelope.ReceivedAt,
-				LastSeenAt:   envelope.ReceivedAt,
+				MissionID:   envelope.MissionID,
+				RobotID:     robotID,
+				SensorID:    descriptor.SensorID,
+				ChannelRole: channelRole,
+				DisplayName: displayName,
+				SensorType:  sensorType,
+				Unit:        optionalString(descriptor.Unit),
+				Enabled:     descriptor.Enabled,
+				Metadata:    metadata,
+				FirstSeenAt: envelope.ReceivedAt,
+				LastSeenAt:  envelope.ReceivedAt,
 			})
 		}
 		if len(records) > 0 {
@@ -82,9 +80,7 @@ func (s *Store) SaveSensorEnvelope(ctx context.Context, envelope domain.SensorEn
 					"channel_role",
 					"display_name",
 					"sensor_type",
-					"value_type",
 					"unit",
-					"sample_rate_hz",
 					"enabled",
 					"metadata",
 					"last_seen_at",
@@ -140,8 +136,7 @@ func (s *Store) SaveSensorEnvelope(ctx context.Context, envelope domain.SensorEn
 			SensorID:     sample.SensorID,
 			ChannelRole:  utils.FirstNonEmptyString(sample.ChannelRole, envelope.ChannelRole, "channel.telemetry"),
 			MessageID:    optionalString(utils.FirstNonEmptyString(sample.MessageID, envelope.MessageID)),
-			Sequence:     optionalInt64(utils.FirstNonZeroInt64(sample.Sequence, envelope.Sequence)),
-			SentAt:       utils.FirstTimePointer(sample.SentAt, envelope.SentAt),
+			Timestamp:    sample.Timestamp,
 			ReceivedAt:   receivedAt,
 			Values:       emptyJSONToNil(sample.Values),
 			ObjectKey:    optionalString(sample.ObjectKey),
@@ -170,14 +165,12 @@ func (s *Store) ListSensorDescriptors(ctx context.Context, missionID string, rob
 			sd.mission_id,
 			r.robot_code,
 			sd.sensor_id,
-			sd.channel_role,
-			sd.display_name,
-			sd.sensor_type,
-			sd.value_type,
-			sd.unit,
-			sd.sample_rate_hz,
-			sd.enabled,
-			sd.metadata,
+				sd.channel_role,
+				sd.display_name,
+				sd.sensor_type,
+				sd.unit,
+				sd.enabled,
+				sd.metadata,
 			sd.first_seen_at,
 			sd.last_seen_at
 		`).
@@ -214,12 +207,11 @@ func (s *Store) ListSensorSamples(ctx context.Context, missionID string, robotCo
 			ss.mission_id,
 			r.robot_code,
 			ss.sensor_id,
-			ss.channel_role,
-			ss.message_id,
-			ss.sequence,
-			ss.sent_at,
-			ss.received_at,
-			ss."values" AS "values",
+				ss.channel_role,
+				ss.message_id,
+				ss.sample_timestamp,
+				ss.received_at,
+				ss."values" AS "values",
 			ss.object_key,
 			ss.raw_payload
 		`).
@@ -255,23 +247,20 @@ func (s *Store) ListLatestSensorSamples(ctx context.Context, missionID string, r
 			sd.mission_id,
 			r.robot_code,
 			sd.sensor_id,
-			sd.channel_role AS descriptor_channel_role,
-			sd.display_name,
-			sd.sensor_type,
-			sd.value_type,
-			sd.unit,
-			sd.sample_rate_hz,
-			sd.enabled,
-			sd.metadata,
+				sd.channel_role AS descriptor_channel_role,
+				sd.display_name,
+				sd.sensor_type,
+				sd.unit,
+				sd.enabled,
+				sd.metadata,
 			sd.first_seen_at,
 			sd.last_seen_at,
 			ss.id AS sample_id,
-			ss.channel_role AS sample_channel_role,
-			ss.message_id,
-			ss.sequence,
-			ss.sent_at,
-			ss.received_at,
-			ss."values" AS "values",
+				ss.channel_role AS sample_channel_role,
+				ss.message_id,
+				ss.sample_timestamp,
+				ss.received_at,
+				ss."values" AS "values",
 			ss.object_key,
 			ss.raw_payload
 		FROM sensor_descriptors sd
@@ -292,18 +281,17 @@ func (s *Store) ListLatestSensorSamples(ctx context.Context, missionID string, r
 }
 
 func (s *Store) ensureSensorDescriptorIDsForSamples(ctx context.Context, envelope domain.SensorEnvelope, robotID string) (map[string]string, error) {
-	samplesBySensorID := map[string]domain.SensorSample{}
+	seenSensorIDs := map[string]struct{}{}
 	sensorIDs := make([]string, 0, len(envelope.Samples))
 	for _, sample := range envelope.Samples {
 		sensorID := strings.TrimSpace(sample.SensorID)
 		if sensorID == "" {
 			continue
 		}
-		if _, exists := samplesBySensorID[sensorID]; exists {
+		if _, exists := seenSensorIDs[sensorID]; exists {
 			continue
 		}
-		sample.SensorID = sensorID
-		samplesBySensorID[sensorID] = sample
+		seenSensorIDs[sensorID] = struct{}{}
 		sensorIDs = append(sensorIDs, sensorID)
 	}
 	if len(sensorIDs) == 0 {
@@ -316,41 +304,11 @@ func (s *Store) ensureSensorDescriptorIDsForSamples(ctx context.Context, envelop
 		return nil, err
 	}
 
-	records := make([]model.SensorDescriptorModel, 0)
 	for _, sensorID := range sensorIDs {
 		if descriptorIDs[sensorID] != "" {
 			continue
 		}
-		sample := samplesBySensorID[sensorID]
-		records = append(records, model.SensorDescriptorModel{
-			MissionID:   envelope.MissionID,
-			RobotID:     robotID,
-			SensorID:    sensorID,
-			ChannelRole: utils.FirstNonEmptyString(sample.ChannelRole, envelope.ChannelRole, "channel.telemetry"),
-			DisplayName: sensorID,
-			SensorType:  domain.InferSensorTypeFromID(sensorID),
-			ValueType:   domain.InferSensorValueType(sample),
-			Enabled:     true,
-			Metadata:    []byte(`{"source":"auto-sample"}`),
-			FirstSeenAt: envelope.ReceivedAt,
-			LastSeenAt:  envelope.ReceivedAt,
-		})
-	}
-	if len(records) > 0 {
-		if err := db.Clauses(clause.OnConflict{
-			Columns: []clause.Column{
-				{Name: "mission_id"},
-				{Name: "robot_id"},
-				{Name: "sensor_id"},
-			},
-			DoUpdates: clause.AssignmentColumns([]string{"last_seen_at"}),
-		}).Create(&records).Error; err != nil {
-			return nil, err
-		}
-		descriptorIDs, err = findSensorDescriptorIDs(db, envelope.MissionID, robotID, sensorIDs)
-		if err != nil {
-			return nil, err
-		}
+		return nil, fmt.Errorf("%w: sensor descriptor is required before sample sensorId %q", repo.ErrInvalidState, sensorID)
 	}
 	return descriptorIDs, nil
 }
@@ -370,38 +328,34 @@ func findSensorDescriptorIDs(db *gorm.DB, missionID string, robotID string, sens
 }
 
 type sensorDescriptorQueryRow struct {
-	ID           string
-	MissionID    string
-	RobotCode    string
-	SensorID     string
-	ChannelRole  string
-	DisplayName  string
-	SensorType   string
-	ValueType    string
-	Unit         *string
-	SampleRateHz *float64
-	Enabled      bool
-	Metadata     json.RawMessage
-	FirstSeenAt  time.Time
-	LastSeenAt   time.Time
+	ID          string
+	MissionID   string
+	RobotCode   string
+	SensorID    string
+	ChannelRole string
+	DisplayName string
+	SensorType  string
+	Unit        *string
+	Enabled     bool
+	Metadata    json.RawMessage
+	FirstSeenAt time.Time
+	LastSeenAt  time.Time
 }
 
 func (row sensorDescriptorQueryRow) toDomain() domain.SensorDescriptor {
 	return domain.SensorDescriptor{
-		ID:           row.ID,
-		MissionID:    row.MissionID,
-		RobotCode:    row.RobotCode,
-		SensorID:     row.SensorID,
-		ChannelRole:  row.ChannelRole,
-		DisplayName:  row.DisplayName,
-		SensorType:   row.SensorType,
-		ValueType:    row.ValueType,
-		Unit:         stringFromPointer(row.Unit),
-		SampleRateHz: row.SampleRateHz,
-		Enabled:      row.Enabled,
-		Metadata:     row.Metadata,
-		FirstSeenAt:  row.FirstSeenAt,
-		LastSeenAt:   row.LastSeenAt,
+		ID:          row.ID,
+		MissionID:   row.MissionID,
+		RobotCode:   row.RobotCode,
+		SensorID:    row.SensorID,
+		ChannelRole: row.ChannelRole,
+		DisplayName: row.DisplayName,
+		SensorType:  row.SensorType,
+		Unit:        stringFromPointer(row.Unit),
+		Enabled:     row.Enabled,
+		Metadata:    row.Metadata,
+		FirstSeenAt: row.FirstSeenAt,
+		LastSeenAt:  row.LastSeenAt,
 	}
 }
 
@@ -413,8 +367,7 @@ type sensorSampleQueryRow struct {
 	SensorID     string
 	ChannelRole  string
 	MessageID    *string
-	Sequence     *int64
-	SentAt       *time.Time
+	Timestamp    *time.Time `gorm:"column:sample_timestamp"`
 	ReceivedAt   time.Time
 	Values       json.RawMessage
 	ObjectKey    *string
@@ -430,8 +383,7 @@ func (row sensorSampleQueryRow) toDomain() domain.SensorSample {
 		SensorID:     row.SensorID,
 		ChannelRole:  row.ChannelRole,
 		MessageID:    stringFromPointer(row.MessageID),
-		Sequence:     int64FromPointer(row.Sequence),
-		SentAt:       row.SentAt,
+		Timestamp:    row.Timestamp,
 		ReceivedAt:   row.ReceivedAt,
 		Values:       row.Values,
 		ObjectKey:    stringFromPointer(row.ObjectKey),
@@ -447,9 +399,7 @@ type sensorLatestQueryRow struct {
 	DescriptorChannelRole string
 	DisplayName           string
 	SensorType            string
-	ValueType             string
 	Unit                  *string
-	SampleRateHz          *float64
 	Enabled               bool
 	Metadata              json.RawMessage
 	FirstSeenAt           time.Time
@@ -457,8 +407,7 @@ type sensorLatestQueryRow struct {
 	SampleID              *string
 	SampleChannelRole     *string
 	MessageID             *string
-	Sequence              *int64
-	SentAt                *time.Time
+	Timestamp             *time.Time `gorm:"column:sample_timestamp"`
 	ReceivedAt            *time.Time
 	Values                json.RawMessage
 	ObjectKey             *string
@@ -467,20 +416,18 @@ type sensorLatestQueryRow struct {
 
 func (row sensorLatestQueryRow) toDomain() domain.SensorLatest {
 	descriptor := domain.SensorDescriptor{
-		ID:           row.DescriptorID,
-		MissionID:    row.MissionID,
-		RobotCode:    row.RobotCode,
-		SensorID:     row.SensorID,
-		ChannelRole:  row.DescriptorChannelRole,
-		DisplayName:  row.DisplayName,
-		SensorType:   row.SensorType,
-		ValueType:    row.ValueType,
-		Unit:         stringFromPointer(row.Unit),
-		SampleRateHz: row.SampleRateHz,
-		Enabled:      row.Enabled,
-		Metadata:     row.Metadata,
-		FirstSeenAt:  row.FirstSeenAt,
-		LastSeenAt:   row.LastSeenAt,
+		ID:          row.DescriptorID,
+		MissionID:   row.MissionID,
+		RobotCode:   row.RobotCode,
+		SensorID:    row.SensorID,
+		ChannelRole: row.DescriptorChannelRole,
+		DisplayName: row.DisplayName,
+		SensorType:  row.SensorType,
+		Unit:        stringFromPointer(row.Unit),
+		Enabled:     row.Enabled,
+		Metadata:    row.Metadata,
+		FirstSeenAt: row.FirstSeenAt,
+		LastSeenAt:  row.LastSeenAt,
 	}
 	if row.SampleID == nil {
 		return domain.SensorLatest{Descriptor: descriptor}
@@ -497,8 +444,7 @@ func (row sensorLatestQueryRow) toDomain() domain.SensorLatest {
 		SensorID:     row.SensorID,
 		ChannelRole:  stringFromPointer(row.SampleChannelRole),
 		MessageID:    stringFromPointer(row.MessageID),
-		Sequence:     int64FromPointer(row.Sequence),
-		SentAt:       row.SentAt,
+		Timestamp:    row.Timestamp,
 		ReceivedAt:   receivedAt,
 		Values:       row.Values,
 		ObjectKey:    stringFromPointer(row.ObjectKey),
@@ -515,25 +461,11 @@ func optionalString(value string) *string {
 	return &value
 }
 
-func optionalInt64(value int64) *int64 {
-	if value == 0 {
-		return nil
-	}
-	return &value
-}
-
 func emptyJSONToNil(value json.RawMessage) json.RawMessage {
 	if len(value) == 0 {
 		return nil
 	}
 	return value
-}
-
-func int64FromPointer(value *int64) int64 {
-	if value == nil {
-		return 0
-	}
-	return *value
 }
 
 func (s *Store) resolveMissionID(ctx context.Context, missionIDOrCode string) (string, error) {

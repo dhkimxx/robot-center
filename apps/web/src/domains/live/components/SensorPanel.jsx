@@ -20,7 +20,7 @@ function formatMetricValue(value) {
 export function SensorPanel({ className = "", sensor }) {
   const metrics = createSensorMetrics(sensor);
   const meta = sensor
-    ? `${metrics.length}개 · ${formatDateTime(sensor.sentAt ?? sensor.receivedAt)}`
+    ? `${metrics.length}개 · ${formatDateTime(sensor.receivedAt)}`
     : "대기";
 
   return (
@@ -37,6 +37,7 @@ export function SensorPanel({ className = "", sensor }) {
               compact={metrics.length > 4}
               key={metric.key ?? `${metric.label}-${metric.unit}`}
               label={metric.label}
+              alarmLevel={metric.alarmLevel}
               value={formatMetricValue(metric.value)}
               unit={metric.unit}
             />

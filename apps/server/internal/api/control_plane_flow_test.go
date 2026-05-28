@@ -194,21 +194,17 @@ func TestControlPlaneFlow(t *testing.T) {
 		"channelRole": "channel.telemetry",
 		"robotCode":   robotCode,
 		"missionId":   missionID,
-		"sequence":    2,
-		"sentAt":      time.Now().UTC().Format(time.RFC3339Nano),
 		"descriptors": []map[string]any{
 			{
 				"sensorId":    "telemetry.position_1",
 				"sensorType":  "position",
 				"displayName": "GPS",
-				"valueType":   "object",
 				"enabled":     true,
 			},
 			{
 				"sensorId":    "telemetry.gas_1",
 				"sensorType":  "gas",
 				"displayName": "Gas",
-				"valueType":   "object",
 				"enabled":     true,
 			},
 		},
@@ -216,7 +212,6 @@ func TestControlPlaneFlow(t *testing.T) {
 			{
 				"sensorId":  "telemetry.position_1",
 				"timestamp": time.Now().UTC().Format(time.RFC3339Nano),
-				"sequence":  2,
 				"values": map[string]any{
 					"latitude":  37.402181,
 					"longitude": 127.106818,
@@ -225,7 +220,6 @@ func TestControlPlaneFlow(t *testing.T) {
 			{
 				"sensorId":  "telemetry.gas_1",
 				"timestamp": time.Now().UTC().Format(time.RFC3339Nano),
-				"sequence":  2,
 				"values": map[string]any{
 					"coPpm":         12.3,
 					"oxygenPercent": 20.8,
@@ -234,13 +228,69 @@ func TestControlPlaneFlow(t *testing.T) {
 		},
 	})
 
-	payloadOnlyStatus, _ := requestRawJSON(t, server.URL, http.MethodPost, "/api/sensor-samples", "", map[string]any{
-		"messageId":   "telemetry-legacy-payload",
+	missingSensorTypeStatus, _ := requestRawJSON(t, server.URL, http.MethodPost, "/api/sensor-samples", "", map[string]any{
+		"messageId":   "telemetry-missing-sensor-type",
 		"messageType": "telemetry",
 		"channelRole": "channel.telemetry",
 		"robotCode":   robotCode,
 		"missionId":   missionID,
-		"sequence":    3,
+		"descriptors": []map[string]any{
+			{
+				"sensorId":    "telemetry.temperature_1",
+				"displayName": "Temperature",
+				"enabled":     true,
+			},
+		},
+	})
+	if missingSensorTypeStatus != http.StatusBadRequest {
+		t.Fatalf("expected descriptor without sensorType to be rejected, got %d", missingSensorTypeStatus)
+	}
+
+	invalidSensorTypeStatus, _ := requestRawJSON(t, server.URL, http.MethodPost, "/api/sensor-samples", "", map[string]any{
+		"messageId":   "telemetry-invalid-sensor-type",
+		"messageType": "telemetry",
+		"channelRole": "channel.telemetry",
+		"robotCode":   robotCode,
+		"missionId":   missionID,
+		"descriptors": []map[string]any{
+			{
+				"sensorId":    "telemetry.custom_1",
+				"sensorType":  "custom",
+				"displayName": "Custom",
+				"enabled":     true,
+			},
+		},
+	})
+	if invalidSensorTypeStatus != http.StatusBadRequest {
+		t.Fatalf("expected descriptor with invalid sensorType to be rejected, got %d", invalidSensorTypeStatus)
+	}
+
+	sampleWithoutDescriptorStatus, _ := requestRawJSON(t, server.URL, http.MethodPost, "/api/sensor-samples", "", map[string]any{
+		"messageId":   "telemetry-sample-without-descriptor",
+		"messageType": "telemetry",
+		"channelRole": "channel.telemetry",
+		"robotCode":   robotCode,
+		"missionId":   missionID,
+		"samples": []map[string]any{
+			{
+				"sensorId":  "telemetry.unregistered_1",
+				"timestamp": time.Now().UTC().Format(time.RFC3339Nano),
+				"values": map[string]any{
+					"value": 1,
+				},
+			},
+		},
+	})
+	if sampleWithoutDescriptorStatus != http.StatusBadRequest {
+		t.Fatalf("expected sample without descriptor to be rejected, got %d", sampleWithoutDescriptorStatus)
+	}
+
+	payloadOnlyStatus, _ := requestRawJSON(t, server.URL, http.MethodPost, "/api/sensor-samples", "", map[string]any{
+		"messageId":   "telemetry-payload-only",
+		"messageType": "telemetry",
+		"channelRole": "channel.telemetry",
+		"robotCode":   robotCode,
+		"missionId":   missionID,
 		"payload": map[string]any{
 			"batteryPercent": 82,
 		},

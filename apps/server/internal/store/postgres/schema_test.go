@@ -17,14 +17,23 @@ func TestAutoMigrateRemovesLegacySensorSampleValueColumns(t *testing.T) {
 	store := newPostgresTestStore(t)
 
 	assertColumnPresent(t, store, "sensor_samples", "values")
+	assertColumnPresent(t, store, "sensor_samples", "sample_timestamp")
 	for _, columnName := range []string{
 		"numeric_value",
 		"text_value",
 		"bool_value",
 		"vector_value",
 		"object_value",
+		"sequence",
+		"sent_at",
 	} {
 		assertColumnMissing(t, store, "sensor_samples", columnName)
+	}
+	for _, columnName := range []string{
+		"value_type",
+		"sample_rate_hz",
+	} {
+		assertColumnMissing(t, store, "sensor_descriptors", columnName)
 	}
 }
 

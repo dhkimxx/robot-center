@@ -8,20 +8,18 @@ import (
 )
 
 type SensorDescriptorResponse struct {
-	ID           string          `json:"id"`
-	MissionID    string          `json:"missionId"`
-	RobotCode    string          `json:"robotCode"`
-	SensorID     string          `json:"sensorId"`
-	ChannelRole  string          `json:"channelRole"`
-	DisplayName  string          `json:"displayName"`
-	SensorType   string          `json:"sensorType"`
-	ValueType    string          `json:"valueType"`
-	Unit         string          `json:"unit,omitempty"`
-	SampleRateHz *float64        `json:"sampleRateHz,omitempty"`
-	Enabled      bool            `json:"enabled"`
-	Metadata     json.RawMessage `json:"metadata"`
-	FirstSeenAt  time.Time       `json:"firstSeenAt"`
-	LastSeenAt   time.Time       `json:"lastSeenAt"`
+	ID          string          `json:"id"`
+	MissionID   string          `json:"missionId"`
+	RobotCode   string          `json:"robotCode"`
+	SensorID    string          `json:"sensorId"`
+	ChannelRole string          `json:"channelRole"`
+	DisplayName string          `json:"displayName"`
+	SensorType  string          `json:"sensorType"`
+	Unit        string          `json:"unit,omitempty"`
+	Enabled     bool            `json:"enabled"`
+	Metadata    json.RawMessage `json:"metadata"`
+	FirstSeenAt time.Time       `json:"firstSeenAt"`
+	LastSeenAt  time.Time       `json:"lastSeenAt"`
 }
 
 type SensorSampleResponse struct {
@@ -32,8 +30,7 @@ type SensorSampleResponse struct {
 	SensorID     string          `json:"sensorId"`
 	ChannelRole  string          `json:"channelRole"`
 	MessageID    string          `json:"messageId,omitempty"`
-	Sequence     int64           `json:"sequence,omitempty"`
-	SentAt       *time.Time      `json:"sentAt,omitempty"`
+	Timestamp    *time.Time      `json:"timestamp,omitempty"`
 	ReceivedAt   time.Time       `json:"receivedAt"`
 	Values       json.RawMessage `json:"values,omitempty"`
 	ObjectKey    string          `json:"objectKey,omitempty"`
@@ -65,8 +62,7 @@ func SensorSample(sample domain.SensorSample) SensorSampleResponse {
 		SensorID:     sample.SensorID,
 		ChannelRole:  sample.ChannelRole,
 		MessageID:    sample.MessageID,
-		Sequence:     sample.Sequence,
-		SentAt:       sample.SentAt,
+		Timestamp:    sample.Timestamp,
 		ReceivedAt:   sample.ReceivedAt,
 		Values:       sample.Values,
 		ObjectKey:    sample.ObjectKey,

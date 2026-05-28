@@ -1,3 +1,5 @@
+import { SensorType, normalizeSensorType } from "./sensorTypes.js";
+
 const fieldDefinitions = {
   accuracyMeter: { label: "위치 오차", unit: "m", order: 46 },
   altitudeMeter: { label: "고도", unit: "m", order: 43 },
@@ -24,18 +26,22 @@ const segmentLabels = {
 const hiddenFieldNames = new Set(["latitude", "longitude", "positionAvailable"]);
 
 const sensorTypeOrders = {
-  gas: 10,
-  environment: 12,
-  temperature: 20,
-  humidity: 22,
-  battery: 30,
+  [SensorType.GAS]: 10,
+  [SensorType.TEMPERATURE]: 20,
+  [SensorType.HUMIDITY]: 22,
+  [SensorType.BATTERY]: 30,
   network: 35,
-  position: 40,
-  imu: 50,
-  odometry: 60,
-  point_cloud: 70,
+  [SensorType.POSITION]: 40,
+  [SensorType.IMU]: 50,
+  [SensorType.ODOMETRY]: 60,
+  [SensorType.POINT_CLOUD]: 70,
   spatial: 75,
-  unknown: 90
+  [SensorType.UNKNOWN]: 90
+};
+
+const sensorMetricStrategies = {
+  [SensorType.GAS]: appendGasSampleMetrics,
+  default: appendDefaultSampleMetrics
 };
 
 export function createSensorMetrics(sensor) {
@@ -57,9 +63,9 @@ export function createSensorMetrics(sensor) {
   appendObjectMetrics(metrics, seenMetricKeys, {
     displayName: "Payload",
     sensorId: "payload",
-    sensorType: "legacy",
+    sensorType: SensorType.UNKNOWN,
     unit: ""
-  }, sensor.payload, "", sensor.receivedAt ?? sensor.sentAt);
+  }, sensor.payload, "", sensor.receivedAt);
 
   return sortMetrics(metrics);
 }
@@ -77,7 +83,7 @@ export function createSensorMetricsFromSensorLatest(sensorLatest) {
       sensorId: item.sensorId ?? item.descriptor?.sensorId,
       sensorType: item.sensorType ?? item.descriptor?.sensorType,
       unit: item.unit ?? item.descriptor?.unit,
-      valueType: item.valueType ?? item.descriptor?.valueType
+      metadata: item.metadata ?? item.descriptor?.metadata
     };
     appendSampleMetrics(metrics, seenMetricKeys, descriptor, item.latestSample);
   }
@@ -102,14 +108,14 @@ export function mergeSensorSnapshots(previous, incoming) {
       ...(incoming.payload ?? {})
     },
     receivedAt: latestTimestamp(previous.receivedAt, incoming.receivedAt),
-    samples: mergeBySensorId(previous.samples, incoming.samples),
-    sentAt: latestTimestamp(previous.sentAt, incoming.sentAt)
+    samples: mergeBySensorId(previous.samples, incoming.samples)
   };
 }
 
 function normalizeExistingMetrics(metrics) {
   return sortMetrics(metrics.map((metric, index) => ({
     key: metric.key ?? `${metric.label}-${metric.unit ?? ""}-${index}`,
+    alarmLevel: metric.alarmLevel ?? "normal",
     label: metric.label,
     order: metric.order ?? index,
     receivedAt: metric.receivedAt,
@@ -133,18 +139,43 @@ function appendSampleMetrics(metrics, seenMetricKeys, descriptor, sample) {
     return;
   }
   const normalizedDescriptor = normalizeDescriptor(descriptor, sample);
-  const value = getSampleValue(sample);
-  const receivedAt = sample.receivedAt ?? sample.timestamp;
+  const strategy = sensorMetricStrategies[normalizedDescriptor.sensorType] ?? sensorMetricStrategies.default;
+  strategy(metrics, seenMetricKeys, normalizedDescriptor, sample);
+}
 
+function appendDefaultSampleMetrics(metrics, seenMetricKeys, descriptor, sample) {
+  const value = getSampleValue(sample);
+  const receivedAt = sample.timestamp ?? sample.receivedAt;
   if (value && typeof value === "object" && !Array.isArray(value)) {
-    appendObjectMetrics(metrics, seenMetricKeys, normalizedDescriptor, value, "", receivedAt);
+    appendObjectMetrics(metrics, seenMetricKeys, descriptor, value, "", receivedAt);
     return;
   }
 
-  appendMetric(metrics, seenMetricKeys, normalizedDescriptor, {
-    fieldPath: normalizedDescriptor.sensorId,
+  appendMetric(metrics, seenMetricKeys, descriptor, {
+    fieldPath: descriptor.sensorId,
     receivedAt,
     value
+  });
+}
+
+function appendGasSampleMetrics(metrics, seenMetricKeys, descriptor, sample) {
+  const value = getSampleValue(sample);
+  const receivedAt = sample.timestamp ?? sample.receivedAt;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    appendDefaultSampleMetrics(metrics, seenMetricKeys, descriptor, sample);
+    return;
+  }
+  const concentration = value.concentration;
+  if (concentration === null || concentration === undefined || concentration === "") {
+    appendDefaultSampleMetrics(metrics, seenMetricKeys, descriptor, sample);
+    return;
+  }
+  appendMetric(metrics, seenMetricKeys, descriptor, {
+    alarmLevel: evaluateThresholdAlarm(concentration, descriptor.metadata),
+    fieldPath: "concentration",
+    label: descriptor.displayName,
+    receivedAt,
+    value: concentration
   });
 }
 
@@ -170,13 +201,13 @@ function appendObjectMetrics(metrics, seenMetricKeys, descriptor, value, basePat
   });
 }
 
-function appendMetric(metrics, seenMetricKeys, descriptor, { fieldPath, receivedAt, value }) {
+function appendMetric(metrics, seenMetricKeys, descriptor, { alarmLevel = "normal", fieldPath, label, receivedAt, value }) {
   if (value === null || value === undefined || value === "") {
     return;
   }
   const fieldName = getLastPathSegment(fieldPath);
   const fieldDefinition = fieldDefinitions[fieldName];
-  const metricKey = fieldDefinition?.label ?? fieldPath;
+  const metricKey = label ?? fieldDefinition?.label ?? fieldPath;
   if (seenMetricKeys.has(metricKey)) {
     return;
   }
@@ -184,7 +215,8 @@ function appendMetric(metrics, seenMetricKeys, descriptor, { fieldPath, received
 
   metrics.push({
     key: `${descriptor.sensorId}:${fieldPath}`,
-    label: makeMetricLabel(descriptor, fieldPath, fieldDefinition),
+    alarmLevel,
+    label: label ?? makeMetricLabel(descriptor, fieldPath, fieldDefinition),
     order: fieldDefinition?.order ?? (sensorTypeOrders[descriptor.sensorType] ?? sensorTypeOrders.unknown),
     receivedAt,
     unit: fieldDefinition?.unit ?? descriptor.unit ?? "",
@@ -196,8 +228,9 @@ function normalizeDescriptor(descriptor, sample) {
   const sensorId = descriptor?.sensorId ?? sample?.sensorId ?? "sensor.unknown";
   return {
     displayName: descriptor?.displayName ?? sensorId,
+    metadata: descriptor?.metadata ?? {},
     sensorId,
-    sensorType: descriptor?.sensorType ?? inferSensorType(sensorId),
+    sensorType: normalizeSensorType(descriptor?.sensorType ?? inferSensorType(sensorId)),
     unit: descriptor?.unit ?? ""
   };
 }
@@ -232,6 +265,27 @@ function makeMetricLabel(descriptor, fieldPath, fieldDefinition) {
 
 function getLastPathSegment(fieldPath) {
   return fieldPath.split(".").at(-1) ?? fieldPath;
+}
+
+function evaluateThresholdAlarm(value, metadata = {}) {
+  if (typeof value !== "number") {
+    return "normal";
+  }
+  const criticalLow = numberOrNull(metadata.criticalLow);
+  const criticalHigh = numberOrNull(metadata.criticalHigh);
+  const warningLow = numberOrNull(metadata.warningLow);
+  const warningHigh = numberOrNull(metadata.warningHigh);
+  if ((criticalLow !== null && value <= criticalLow) || (criticalHigh !== null && value >= criticalHigh)) {
+    return "critical";
+  }
+  if ((warningLow !== null && value <= warningLow) || (warningHigh !== null && value >= warningHigh)) {
+    return "warning";
+  }
+  return "normal";
+}
+
+function numberOrNull(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function sortMetrics(metrics) {
@@ -269,25 +323,28 @@ function latestTimestamp(left, right) {
 function inferSensorType(sensorId) {
   const normalizedSensorId = String(sensorId).toLowerCase();
   if (normalizedSensorId.includes("position")) {
-    return "position";
+    return SensorType.POSITION;
   }
   if (normalizedSensorId.includes("imu")) {
-    return "imu";
+    return SensorType.IMU;
   }
   if (normalizedSensorId.includes("odometry")) {
-    return "odometry";
+    return SensorType.ODOMETRY;
   }
   if (normalizedSensorId.includes("battery")) {
-    return "battery";
+    return SensorType.BATTERY;
   }
   if (normalizedSensorId.includes("network")) {
     return "network";
   }
-  if (normalizedSensorId.includes("environment")) {
-    return "environment";
+  if (normalizedSensorId.includes("temperature")) {
+    return SensorType.TEMPERATURE;
+  }
+  if (normalizedSensorId.includes("humidity")) {
+    return SensorType.HUMIDITY;
   }
   if (normalizedSensorId.includes("gas")) {
-    return "gas";
+    return SensorType.GAS;
   }
-  return "unknown";
+  return SensorType.UNKNOWN;
 }

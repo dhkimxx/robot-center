@@ -6,20 +6,18 @@ import (
 )
 
 type SensorDescriptor struct {
-	ID           string          `json:"id"`
-	MissionID    string          `json:"missionId"`
-	RobotCode    string          `json:"robotCode"`
-	SensorID     string          `json:"sensorId"`
-	ChannelRole  string          `json:"channelRole"`
-	DisplayName  string          `json:"displayName"`
-	SensorType   string          `json:"sensorType"`
-	ValueType    string          `json:"valueType"`
-	Unit         string          `json:"unit,omitempty"`
-	SampleRateHz *float64        `json:"sampleRateHz,omitempty"`
-	Enabled      bool            `json:"enabled"`
-	Metadata     json.RawMessage `json:"metadata"`
-	FirstSeenAt  time.Time       `json:"firstSeenAt"`
-	LastSeenAt   time.Time       `json:"lastSeenAt"`
+	ID          string          `json:"id"`
+	MissionID   string          `json:"missionId"`
+	RobotCode   string          `json:"robotCode"`
+	SensorID    string          `json:"sensorId"`
+	ChannelRole string          `json:"channelRole"`
+	DisplayName string          `json:"displayName"`
+	SensorType  string          `json:"sensorType"`
+	Unit        string          `json:"unit,omitempty"`
+	Enabled     bool            `json:"enabled"`
+	Metadata    json.RawMessage `json:"metadata"`
+	FirstSeenAt time.Time       `json:"firstSeenAt"`
+	LastSeenAt  time.Time       `json:"lastSeenAt"`
 }
 
 type SensorSample struct {
@@ -30,8 +28,7 @@ type SensorSample struct {
 	SensorID     string          `json:"sensorId"`
 	ChannelRole  string          `json:"channelRole"`
 	MessageID    string          `json:"messageId,omitempty"`
-	Sequence     int64           `json:"sequence,omitempty"`
-	SentAt       *time.Time      `json:"sentAt,omitempty"`
+	Timestamp    *time.Time      `json:"timestamp,omitempty"`
 	ReceivedAt   time.Time       `json:"receivedAt"`
 	Values       json.RawMessage `json:"values,omitempty"`
 	ObjectKey    string          `json:"objectKey,omitempty"`
@@ -49,8 +46,6 @@ type SensorEnvelope struct {
 	RobotCode   string             `json:"robotCode"`
 	MissionID   string             `json:"missionId"`
 	ChannelRole string             `json:"channelRole"`
-	Sequence    int64              `json:"sequence,omitempty"`
-	SentAt      *time.Time         `json:"sentAt,omitempty"`
 	ReceivedAt  time.Time          `json:"receivedAt"`
 	Descriptors []SensorDescriptor `json:"descriptors,omitempty"`
 	Samples     []SensorSample     `json:"samples,omitempty"`

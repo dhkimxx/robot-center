@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"robot-center/apps/server/internal/api/dto"
 	"robot-center/apps/server/internal/domain"
+	"robot-center/apps/server/internal/store"
 	"robot-center/apps/server/internal/utils"
 	"strings"
 	"time"
@@ -63,6 +64,10 @@ func (s *Server) handleCreateSensorSamples(w http.ResponseWriter, r *http.Reques
 	}
 	samples, err := s.services.Sensors.SaveSensorEnvelope(r.Context(), envelope)
 	if err != nil {
+		if errors.Is(err, store.ErrInvalidState) || errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -72,25 +77,20 @@ func (s *Server) handleCreateSensorSamples(w http.ResponseWriter, r *http.Reques
 }
 
 type sensorDescriptorRequest struct {
-	SensorID     string         `json:"sensorId"`
-	ChannelRole  string         `json:"channelRole"`
-	DisplayName  string         `json:"displayName"`
-	SensorType   string         `json:"sensorType"`
-	ValueType    string         `json:"valueType"`
-	Unit         string         `json:"unit"`
-	SampleRateHz *float64       `json:"sampleRateHz"`
-	Enabled      bool           `json:"enabled"`
-	Metadata     map[string]any `json:"metadata"`
+	SensorID    string         `json:"sensorId"`
+	ChannelRole string         `json:"channelRole"`
+	DisplayName string         `json:"displayName"`
+	SensorType  string         `json:"sensorType"`
+	Unit        string         `json:"unit"`
+	Enabled     bool           `json:"enabled"`
+	Metadata    map[string]any `json:"metadata"`
 }
 
 type sensorSampleRequest struct {
 	SensorID    string     `json:"sensorId,omitempty"`
 	ChannelRole string     `json:"channelRole,omitempty"`
 	MessageID   string     `json:"messageId,omitempty"`
-	Sequence    int64      `json:"sequence,omitempty"`
 	Timestamp   *time.Time `json:"timestamp,omitempty"`
-	SentAt      *time.Time `json:"sentAt,omitempty"`
-	Quality     string     `json:"quality,omitempty"`
 	Values      any        `json:"values,omitempty"`
 	ObjectKey   string     `json:"objectKey,omitempty"`
 }
@@ -101,8 +101,6 @@ type sensorEnvelopeRequest struct {
 	RobotCode   string                    `json:"robotCode"`
 	MissionID   string                    `json:"missionId"`
 	ChannelRole string                    `json:"channelRole"`
-	Sequence    int64                     `json:"sequence"`
-	SentAt      *time.Time                `json:"sentAt"`
 	Descriptors []sensorDescriptorRequest `json:"descriptors"`
 	Samples     []sensorSampleRequest     `json:"samples"`
 }
@@ -136,8 +134,6 @@ func decodeSensorEnvelope(r *http.Request) (domain.SensorEnvelope, error) {
 		RobotCode:   request.RobotCode,
 		MissionID:   request.MissionID,
 		ChannelRole: request.ChannelRole,
-		Sequence:    request.Sequence,
-		SentAt:      request.SentAt,
 		ReceivedAt:  time.Now().UTC(),
 		RawPayload:  append(json.RawMessage(nil), rawPayload...),
 		Descriptors: make([]domain.SensorDescriptor, 0, len(request.Descriptors)),
@@ -148,18 +144,20 @@ func decodeSensorEnvelope(r *http.Request) (domain.SensorEnvelope, error) {
 		if sensorID == "" {
 			continue
 		}
+		sensorType, ok := domain.ParseSensorType(descriptor.SensorType)
+		if !ok {
+			return domain.SensorEnvelope{}, errors.New("descriptor sensorType is required and must be one of: battery, gas, humidity, imu, odometry, point_cloud, position, temperature")
+		}
 		envelope.Descriptors = append(envelope.Descriptors, domain.SensorDescriptor{
-			MissionID:    request.MissionID,
-			RobotCode:    request.RobotCode,
-			SensorID:     sensorID,
-			ChannelRole:  utils.FirstNonEmptyString(descriptor.ChannelRole, request.ChannelRole),
-			DisplayName:  utils.FirstNonEmptyString(descriptor.DisplayName, sensorID),
-			SensorType:   inferSensorType(sensorID, descriptor.SensorType),
-			ValueType:    utils.FirstNonEmptyString(descriptor.ValueType, "object"),
-			Unit:         strings.TrimSpace(descriptor.Unit),
-			SampleRateHz: descriptor.SampleRateHz,
-			Enabled:      descriptor.Enabled,
-			Metadata:     utils.RawJSONOrEmpty(descriptor.Metadata),
+			MissionID:   request.MissionID,
+			RobotCode:   request.RobotCode,
+			SensorID:    sensorID,
+			ChannelRole: utils.FirstNonEmptyString(descriptor.ChannelRole, request.ChannelRole),
+			DisplayName: utils.FirstNonEmptyString(descriptor.DisplayName, sensorID),
+			SensorType:  string(sensorType),
+			Unit:        strings.TrimSpace(descriptor.Unit),
+			Enabled:     descriptor.Enabled,
+			Metadata:    utils.RawJSONOrEmpty(descriptor.Metadata),
 		})
 	}
 	for _, sample := range request.Samples {
@@ -170,21 +168,13 @@ func decodeSensorEnvelope(r *http.Request) (domain.SensorEnvelope, error) {
 		if sample.Values == nil && strings.TrimSpace(sample.ObjectKey) == "" {
 			return domain.SensorEnvelope{}, errors.New("sample values or objectKey is required")
 		}
-		sentAt := sample.SentAt
-		if sentAt == nil {
-			sentAt = sample.Timestamp
-		}
-		if sentAt == nil {
-			sentAt = request.SentAt
-		}
 		envelope.Samples = append(envelope.Samples, domain.SensorSample{
 			MissionID:   request.MissionID,
 			RobotCode:   request.RobotCode,
 			SensorID:    sensorID,
 			ChannelRole: utils.FirstNonEmptyString(sample.ChannelRole, request.ChannelRole),
 			MessageID:   utils.FirstNonEmptyString(sample.MessageID, request.MessageID),
-			Sequence:    utils.FirstNonZeroInt64(sample.Sequence, request.Sequence),
-			SentAt:      sentAt,
+			Timestamp:   sample.Timestamp,
 			ReceivedAt:  envelope.ReceivedAt,
 			Values:      marshalSensorSampleValues(sample),
 			ObjectKey:   strings.TrimSpace(sample.ObjectKey),
@@ -195,35 +185,6 @@ func decodeSensorEnvelope(r *http.Request) (domain.SensorEnvelope, error) {
 		return domain.SensorEnvelope{}, errors.New("descriptors or samples are required")
 	}
 	return envelope, nil
-}
-
-func inferSensorType(sensorID string, explicitType string) string {
-	if strings.TrimSpace(explicitType) != "" {
-		return strings.TrimSpace(explicitType)
-	}
-	sensorID = strings.ToLower(strings.TrimSpace(sensorID))
-	switch {
-	case strings.Contains(sensorID, "position"):
-		return "position"
-	case strings.Contains(sensorID, "imu"):
-		return "imu"
-	case strings.Contains(sensorID, "odometry"):
-		return "odometry"
-	case strings.Contains(sensorID, "point_cloud"):
-		return "point_cloud"
-	case strings.Contains(sensorID, "battery"):
-		return "battery"
-	case strings.Contains(sensorID, "network"):
-		return "network"
-	case strings.Contains(sensorID, "temperature"):
-		return "temperature"
-	case strings.Contains(sensorID, "humidity"):
-		return "humidity"
-	case strings.Contains(sensorID, "gas"):
-		return "gas"
-	default:
-		return "unknown"
-	}
 }
 
 func marshalSensorSampleValues(sample sensorSampleRequest) json.RawMessage {

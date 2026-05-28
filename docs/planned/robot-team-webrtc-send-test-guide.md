@@ -27,6 +27,7 @@ history:
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: make robot team test slots self-service'
 - '2026-05-28 danya.kim <danya.kim@thundersoft.com>: clarify DataChannel lifecycle'
 - '2026-05-28 danya.kim <danya.kim@thundersoft.com>: keep the robot-team sharing guide focused on negotiation details'
+- '2026-05-28 danya.kim <danya.kim@thundersoft.com>: simplify sensor contract to descriptor metadata plus object values'
 ---
 
 # Robot Team WebRTC Send Test Guide
@@ -628,25 +629,40 @@ DataChannel 생성과 전송 시작 조건:
 {
   "messageId": "uuid",
   "messageType": "telemetry",
-  "sequence": 102,
-  "sentAt": "2026-05-27T05:00:00.000Z",
   "descriptors": [
     {
       "sensorId": "telemetry.position_1",
       "displayName": "GPS",
       "sensorType": "position",
-      "valueType": "object",
       "enabled": true
+    },
+    {
+      "sensorId": "telemetry.gas.co",
+      "displayName": "CO",
+      "sensorType": "gas",
+      "unit": "ppm",
+      "enabled": true,
+      "metadata": {
+        "warningHigh": 30,
+        "criticalHigh": 50
+      }
     }
   ],
   "samples": [
     {
       "sensorId": "telemetry.position_1",
-      "sequence": 102,
+      "timestamp": "2026-05-27T05:00:00.000Z",
       "values": {
         "latitude": 37.402183,
         "longitude": 127.106812,
         "accuracyMeter": 3.5
+      }
+    },
+    {
+      "sensorId": "telemetry.gas.co",
+      "timestamp": "2026-05-27T05:00:00.000Z",
+      "values": {
+        "concentration": 5
       }
     }
   ]
@@ -661,9 +677,7 @@ Telemetry envelope schema:
 | --- | --- | --- | --- | --- |
 | `messageId` | string | Recommended | UUID 또는 `robot-123-telemetry-102` | 메시지 추적 id |
 | `messageType` | string | Recommended | `telemetry` | telemetry channel 기본 타입 |
-| `sequence` | integer | Recommended | `102` | DataChannel message 증가값 |
-| `sentAt` | string(date-time) | Recommended | `2026-05-27T05:00:00.000Z` | 로봇 송신 시각 |
-| `descriptors` | array | No | SensorDescriptor list | 센서 metadata |
+| `descriptors` | array | Conditional | SensorDescriptor list | 센서 metadata. 새 `sensorId`를 처음 보낼 때는 필수 |
 | `samples` | array | No | SensorSample list | 실제 측정값 |
 
 SensorDescriptor schema:
@@ -672,24 +686,29 @@ SensorDescriptor schema:
 | --- | --- | --- | --- | --- |
 | `sensorId` | string | Yes | `telemetry.position_1`, `telemetry.battery_1`, `spatial.imu_1` | robot 내부에서 안정적으로 쓰는 sensor id |
 | `displayName` | string | Recommended | `GPS`, `Battery`, `IMU` | UI 표시 이름 |
-| `sensorType` | string | Recommended | `position`, `battery`, `environment`, `imu`, `odometry`, `point_cloud`, `gas`, `event` | 센서 계열 |
-| `valueType` | string | Recommended | `number`, `boolean`, `string`, `vector`, `object`, `object_ref` | sample 값 형태 |
+| `sensorType` | string | Yes | `position`, `battery`, `temperature`, `humidity`, `imu`, `odometry`, `point_cloud`, `gas` | 센서 계열. 관제 UI의 해석 전략 선택 키. 누락/오타는 서버가 거절 |
 | `unit` | string | No | `percent`, `celsius`, `ppm`, `m`, `m/s` | 표시 단위 |
-| `sampleRateHz` | number | No | `1`, `5`, `0.2` | canonical sampling rate |
 | `enabled` | boolean | No | `true`, `false` | UI/저장 대상으로 활성화할지 여부 |
-| `metadata` | object | No | `{ "frameId": "base_link" }` | frameId, axes 같은 부가 정보 |
+| `metadata` | object | No | `{ "frameId": "base_link" }` | frameId, axes, threshold 같은 부가 정보 |
 
 SensorSample schema:
 
 | Field | Type | Required | Values / Example | Description |
 | --- | --- | --- | --- | --- |
 | `sensorId` | string | Yes | `telemetry.position_1` | descriptor의 sensorId와 매칭 |
-| `sequence` | integer | Recommended | `102` | sample sequence |
-| `timestamp` | string(date-time) | No | `2026-05-27T05:00:00.000Z` | sample 측정 시각. sample `sentAt`보다 우선 |
-| `sentAt` | string(date-time) | No | `2026-05-27T05:00:00.000Z` | sample 송신 시각. 없으면 envelope `sentAt` 사용 |
-| `quality` | string | No | `good`, `normal`, `poor`, `unknown` | 로봇 측 품질값. 현재 typed sample field로는 저장하지 않음 |
-| `values` | any | Recommended | `{ "latitude": 37.402183 }` | 실제 측정값. `valueType`에 맞는 JSON number/string/boolean/object/vector 형태 |
+| `timestamp` | string(date-time) | Recommended | `2026-05-27T05:00:00.000Z` | sample 측정 시각 |
+| `values` | object | Recommended | `{ "latitude": 37.402183 }` | 실제 측정값. 모든 sensorType에서 object로 통일 |
 | `objectKey` | string | No | `missions/.../point_cloud.bin` | object storage 참조가 필요할 때 |
+
+DataChannel sensor payload에서 사용하지 않는 필드:
+
+| Field | 처리 |
+| --- | --- |
+| `valueType` | 보내지 않는다. `samples[].values`는 object로 통일한다. |
+| `quality` | 보내지 않는다. 품질/고장 상태가 필요하면 sensorType별 metadata 또는 별도 event 계약에서 다룬다. |
+| `sentAt` | 보내지 않는다. sample 측정 시각은 `samples[].timestamp`를 사용한다. |
+| `sequence` | 보내지 않는다. 메시지 추적은 `messageId`를 사용한다. |
+| `sampleRateHz` | 보내지 않는다. 필요한 경우 추후 metadata로 협의한다. |
 
 Position `values` 권장 필드:
 
@@ -701,13 +720,39 @@ Position `values` 권장 필드:
 | `accuracyMeter` | number | No | `3.5` | 위치 정확도 meter |
 | `headingDegree` | number | No | `90` | 진행 방향. 0-360 degree |
 
+Gas `values` 권장 필드:
+
+| Field | Type | Required | Example | Description |
+| --- | --- | --- | --- | --- |
+| `concentration` | number | Yes | `20.9` | 가스 농도. 단위는 descriptor `unit`을 사용 |
+
+Gas descriptor `metadata` threshold:
+
+| Field | Type | Required | Example | Description |
+| --- | --- | --- | --- | --- |
+| `criticalLow` | number | No | `18.0` | 이 값 이하이면 critical |
+| `warningLow` | number | No | `19.0` | 이 값 이하이면 warning |
+| `warningHigh` | number | No | `30` | 이 값 이상이면 warning |
+| `criticalHigh` | number | No | `50` | 이 값 이상이면 critical |
+
+가스 채널 매핑 예:
+
+```text
+gas_name      -> descriptor.displayName
+concentration -> sample.values.concentration
+unit          -> descriptor.unit
+low_alarm     -> descriptor.metadata.criticalLow
+high_alarm    -> descriptor.metadata.criticalHigh
+alarm_status  -> 보내지 않음. 관제 UI가 threshold 기준으로 계산
+```
+
 권장:
 
 - `channel.telemetry`는 1Hz 수준의 저속 상태값부터 시작한다.
 - GPS 위치는 `telemetry.position_1` 같은 안정적인 `sensorId`를 사용한다.
-- `sequence`는 DataChannel message 순서를 추적할 수 있게 증가시킨다.
-- `sentAt`은 로봇 송신 시각이다.
 - descriptor는 매번 보내도 되고, sensor 구성이 바뀔 때 다시 보내도 된다.
+- `sensorType`은 관제 UI 해석 전략 선택 키이며 descriptor 필수값이다. 새 타입이 필요하면 관제팀과 먼저 이름을 맞춘다.
+- `unknown`은 관제 내부 fallback용 예약값이다. 로봇팀 payload에서 보내지 않는다.
 
 ## 9. 통과 기준
 

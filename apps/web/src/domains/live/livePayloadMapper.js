@@ -15,11 +15,43 @@ function findSampleValues(payload, kind) {
   return sample?.values ?? null;
 }
 
+function findLatestSampleTimestamp(payload) {
+  return (payload?.samples ?? [])
+    .map((sample) => sample?.timestamp)
+    .filter(Boolean)
+    .sort((left, right) => Date.parse(right) - Date.parse(left))[0] ?? "";
+}
+
+function withReceivedAt(payload) {
+  return {
+    ...payload,
+    receivedAt: payload?.receivedAt ?? findLatestSampleTimestamp(payload)
+  };
+}
+
+function createTelemetryProjection(payload) {
+  const positionValues = findSampleValues(payload, "position");
+  if (!positionValues) {
+    return payload;
+  }
+  return {
+    ...payload,
+    payload: {
+      position: positionValues,
+      positionAvailable: true
+    }
+  };
+}
+
 function createTelemetrySensorProjection(payload) {
-  const environmentValues = findSampleValues(payload, "environment");
+  const positionValues = findSampleValues(payload, "position");
+  const temperatureValues = findSampleValues(payload, "temperature");
+  const humidityValues = findSampleValues(payload, "humidity");
   const batteryValues = findSampleValues(payload, "battery");
   const projectedPayload = {
-    ...(environmentValues ?? {}),
+    ...(positionValues ? { position: positionValues, positionAvailable: true } : {}),
+    ...(temperatureValues ?? {}),
+    ...(humidityValues ?? {}),
     ...(batteryValues ?? {})
   };
 
@@ -59,20 +91,22 @@ export function mapLiveDataChannelPayload(label, message) {
 
   const channelRole = normalizeChannelRole(label, payload);
   if (telemetryChannelRoles.has(channelRole)) {
+    const contextualPayload = withReceivedAt(payload);
     return {
       channelRole,
       ok: true,
-      sensor: createTelemetrySensorProjection(payload),
-      telemetry: payload
+      sensor: createTelemetrySensorProjection(contextualPayload),
+      telemetry: createTelemetryProjection(contextualPayload)
     };
   }
 
   if (spatialChannelRoles.has(channelRole)) {
+    const contextualPayload = withReceivedAt(payload);
     return {
       channelRole,
       eventMessage: createChannelEventMessage(channelRole, payload),
       ok: true,
-      sensor: payload
+      sensor: contextualPayload
     };
   }
 

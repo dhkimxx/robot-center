@@ -37,7 +37,7 @@ export function createTelemetryFromSensorLatest(sensorLatest, robotCode) {
     },
     receivedAt: item.latestSample?.receivedAt,
     robotCode: item.robotCode ?? robotCode,
-    sentAt: item.latestSample?.sentAt
+    timestamp: item.latestSample?.timestamp
   };
 }
 

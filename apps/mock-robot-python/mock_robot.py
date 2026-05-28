@@ -698,21 +698,25 @@ class MockRobot:
         return {
             "messageId": f"{self.robot_code}-telemetry-{self.sequence}",
             "messageType": "telemetry",
-            "sequence": self.sequence,
-            "sentAt": utc_now_iso(),
             "descriptors": [
                 {
                     "sensorId": "telemetry.position_1",
                     "sensorType": "position",
                     "displayName": "GPS",
-                    "sampleRateHz": 1,
                     "enabled": True,
                 },
                 {
-                    "sensorId": "telemetry.environment_1",
-                    "sensorType": "environment",
-                    "displayName": "Environment",
-                    "sampleRateHz": 1,
+                    "sensorId": "telemetry.temperature_1",
+                    "sensorType": "temperature",
+                    "displayName": "Temperature",
+                    "unit": "C",
+                    "enabled": True,
+                },
+                {
+                    "sensorId": "telemetry.humidity_1",
+                    "sensorType": "humidity",
+                    "displayName": "Humidity",
+                    "unit": "%",
                     "enabled": True,
                 },
                 {
@@ -720,16 +724,48 @@ class MockRobot:
                     "sensorType": "battery",
                     "displayName": "Battery",
                     "unit": "percent",
-                    "sampleRateHz": 1,
                     "enabled": True,
+                },
+                {
+                    "sensorId": "telemetry.gas.o2",
+                    "sensorType": "gas",
+                    "displayName": "O2",
+                    "unit": "%",
+                    "enabled": True,
+                    "metadata": {
+                        "warningLow": 19.0,
+                        "criticalLow": 18.0,
+                        "warningHigh": 22.5,
+                        "criticalHigh": 23.5,
+                    },
+                },
+                {
+                    "sensorId": "telemetry.gas.co",
+                    "sensorType": "gas",
+                    "displayName": "CO",
+                    "unit": "ppm",
+                    "enabled": True,
+                    "metadata": {
+                        "warningHigh": 30,
+                        "criticalHigh": 50,
+                    },
+                },
+                {
+                    "sensorId": "telemetry.gas.ch4",
+                    "sensorType": "gas",
+                    "displayName": "CH4",
+                    "unit": "ppm",
+                    "enabled": True,
+                    "metadata": {
+                        "warningHigh": 25,
+                        "criticalHigh": 50,
+                    },
                 },
             ],
             "samples": [
                 {
                     "sensorId": "telemetry.position_1",
                     "timestamp": utc_now_iso(),
-                    "sequence": self.sequence,
-                    "quality": "good",
                     "values": {
                         "latitude": latitude,
                         "longitude": longitude,
@@ -740,24 +776,38 @@ class MockRobot:
                     },
                 },
                 {
-                    "sensorId": "telemetry.environment_1",
+                    "sensorId": "telemetry.temperature_1",
                     "timestamp": utc_now_iso(),
-                    "sequence": self.sequence,
-                    "quality": "good",
                     "values": {
                         "temperatureCelsius": 28.5 + math.sin(self.sequence / 5) * 2,
+                    },
+                },
+                {
+                    "sensorId": "telemetry.humidity_1",
+                    "timestamp": utc_now_iso(),
+                    "values": {
                         "humidityPercent": 52.0 + math.cos(self.sequence / 8) * 5,
-                        "oxygenPercent": 20.7,
-                        "coPpm": 5 + self.sequence % 6,
-                        "ch4Ppm": 1 + self.sequence % 3,
                     },
                 },
                 {
                     "sensorId": "telemetry.battery_1",
                     "timestamp": utc_now_iso(),
-                    "sequence": self.sequence,
-                    "quality": "good",
                     "values": {"batteryPercent": self.current_battery_percent()},
+                },
+                {
+                    "sensorId": "telemetry.gas.o2",
+                    "timestamp": utc_now_iso(),
+                    "values": {"concentration": 20.7},
+                },
+                {
+                    "sensorId": "telemetry.gas.co",
+                    "timestamp": utc_now_iso(),
+                    "values": {"concentration": 5 + self.sequence % 6},
+                },
+                {
+                    "sensorId": "telemetry.gas.ch4",
+                    "timestamp": utc_now_iso(),
+                    "values": {"concentration": 1 + self.sequence % 3},
                 },
             ],
         }
@@ -766,8 +816,6 @@ class MockRobot:
         return {
             "messageId": f"{self.robot_code}-event-{self.sequence}",
             "messageType": "event.robot_heartbeat",
-            "sequence": self.sequence,
-            "sentAt": utc_now_iso(),
             "event": {
                 "kind": "robot_state_changed",
                 "severity": "info",
@@ -779,15 +827,11 @@ class MockRobot:
         return {
             "messageId": f"{self.robot_code}-spatial-{self.sequence}",
             "messageType": "spatial.status",
-            "sequence": self.sequence,
-            "sentAt": utc_now_iso(),
             "descriptors": [
                 {
                     "sensorId": "spatial.imu_1",
                     "sensorType": "imu",
                     "displayName": "IMU",
-                    "valueType": "object",
-                    "sampleRateHz": 5,
                     "enabled": True,
                     "metadata": {
                         "frameId": "base_link",
@@ -798,9 +842,7 @@ class MockRobot:
                     "sensorId": "spatial.odometry_1",
                     "sensorType": "odometry",
                     "displayName": "Odometry",
-                    "valueType": "object",
                     "unit": "m",
-                    "sampleRateHz": 5,
                     "enabled": True,
                     "metadata": {
                         "frameId": "odom",
@@ -810,8 +852,6 @@ class MockRobot:
                     "sensorId": "spatial.point_cloud_front_1",
                     "sensorType": "point_cloud",
                     "displayName": "Front Point Cloud",
-                    "valueType": "object_ref",
-                    "sampleRateHz": 0.2,
                     "enabled": False,
                     "metadata": {
                         "state": "unsupported",
@@ -823,8 +863,6 @@ class MockRobot:
                 {
                     "sensorId": "spatial.imu_1",
                     "timestamp": utc_now_iso(),
-                    "sequence": self.sequence,
-                    "quality": "mock",
                     "values": {
                         "linearAcceleration": {
                             "x": math.sin(self.sequence / 4) * 0.05,
@@ -841,8 +879,6 @@ class MockRobot:
                 {
                     "sensorId": "spatial.odometry_1",
                     "timestamp": utc_now_iso(),
-                    "sequence": self.sequence,
-                    "quality": "mock",
                     "values": {
                         "x": (self.sequence % 200) * 0.04,
                         "y": math.sin(self.sequence / 8) * 0.3,

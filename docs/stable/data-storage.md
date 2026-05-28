@@ -296,9 +296,7 @@ mission_id + robot_id + sensor_id
 | `channel_role` | text | yes | `channel.telemetry`, `channel.spatial` 등 |
 | `display_name` | text | yes | UI 표시명. 자동 생성 시 `sensor_id` |
 | `sensor_type` | text | yes | position, imu, gas, point_cloud, unknown 등 |
-| `value_type` | text | yes | number, boolean, string, vector, object, object_ref 등 |
 | `unit` | text | no | percent, ppm 등 |
-| `sample_rate_hz` | numeric | no | 기대 sampling rate |
 | `enabled` | boolean | yes | UI/저장 활성 여부 |
 | `metadata` | jsonb | yes | default `{}` |
 | `first_seen_at` | timestamptz | yes | default now |
@@ -331,10 +329,9 @@ Descriptor upsert 정책:
 | `sensor_id` | text | yes | descriptor 없이도 조회할 수 있게 중복 저장 |
 | `channel_role` | text | yes | `channel.telemetry`, `channel.spatial` 등 |
 | `message_id` | text | no | robot message id |
-| `sequence` | bigint | no | robot sequence |
-| `sent_at` | timestamptz | no | robot 송신 시각 |
+| `sample_timestamp` | timestamptz | no | robot 측 sample 측정 시각 |
 | `received_at` | timestamptz | yes | server 수신 시각, latest index 기준 |
-| `values` | jsonb | no | canonical sample value. number/string/boolean/object/vector 값을 JSON으로 저장 |
+| `values` | jsonb | no | canonical sample value. sensorType별 object 값을 JSON으로 저장 |
 | `object_key` | text | no | 대용량 object 참조 |
 | `raw_payload` | jsonb | yes | 원본 또는 정규화 전 payload |
 

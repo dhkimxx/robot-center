@@ -263,10 +263,8 @@ missionId + robotCode + sensorId
 | `sensorId` | robot 내부에서 안정적으로 쓰는 sensor slot id |
 | `channelRole` | 들어온 DataChannel 역할 |
 | `displayName` | UI 표시명 |
-| `sensorType` | position, imu, gas, point_cloud 등 센서 계열 |
-| `valueType` | number, boolean, string, vector, object, object_ref 등 값 형태 |
+| `sensorType` | position, imu, gas, point_cloud 등 센서 계열. 로봇 payload descriptor 필수값 |
 | `unit` | 표시 단위 |
-| `sampleRateHz` | 기대 sampling rate |
 | `enabled` | UI/저장 대상으로 활성화할지 여부 |
 | `metadata` | frameId, axes 같은 부가 정보 |
 | `firstSeenAt` / `lastSeenAt` | 최초/마지막 관측 시각 |
@@ -284,12 +282,12 @@ missionId + robotCode + sensorId
 | `robotCode` | sample을 보낸 robot |
 | `sensorId` | descriptor와 매칭되는 sensor id |
 | `channelRole` | telemetry/spatial/event 등 수신 채널 역할 |
-| `messageId` / `sequence` | 로봇 송신 순서 추적 |
-| `sentAt` / `receivedAt` | 로봇 송신 시각과 서버 수신 시각 |
-| `numericValue` / `textValue` / `boolValue` / `vectorValue` / `objectValue` / `objectKey` | 값 저장 슬롯 |
+| `messageId` | 메시지 추적 id |
+| `sample_timestamp` / `receivedAt` | sample 측정 시각과 서버 수신 시각 |
+| `values` / `objectKey` | object 기반 측정값 또는 object storage 참조 |
 | `rawPayload` | 원본 또는 정규화 전 payload snapshot |
 
-샘플만 들어오고 descriptor가 없으면 서버는 최소 descriptor를 자동 생성한다. 이때 `sensorId`, `channelRole`, 값 타입, 수신 시각을 기반으로 descriptor를 보완한다.
+샘플만 들어오고 descriptor가 없으면 서버는 기존 descriptor를 기준으로 저장한다. 새 sensorId를 처음 보낼 때는 descriptor를 함께 보내야 하며, descriptor의 `sensorType`은 필수다.
 
 최신 센서 조회는 반드시 다음 기준으로 분리한다.
 

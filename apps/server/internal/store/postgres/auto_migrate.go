@@ -69,10 +69,11 @@ func (s *Store) applyPostAutoMigrateDDL(db *gorm.DB) error {
 				AND sd.robot_id = ss.robot_id
 				AND sd.sensor_id = ss.sensor_id`,
 		`ALTER TABLE sensor_samples
-			ALTER COLUMN descriptor_id SET NOT NULL`,
+				ALTER COLUMN descriptor_id SET NOT NULL`,
 		sensorSampleValueColumnMigrationStatement(),
+		sensorContractCleanupMigrationStatement(),
 		`CREATE INDEX IF NOT EXISTS events_geom_idx
-			ON events USING gist(geom)`,
+				ON events USING gist(geom)`,
 		dropEmptyTableStatement("sensor_readings"),
 		dropEmptyTableStatement("telemetry_snapshots"),
 	}
@@ -89,8 +90,8 @@ func (s *Store) applyPostAutoMigrateDDL(db *gorm.DB) error {
 
 func sensorSampleValueColumnMigrationStatement() string {
 	return `DO $$
-		BEGIN
-			IF to_regclass('public.sensor_samples') IS NOT NULL THEN
+			BEGIN
+				IF to_regclass('public.sensor_samples') IS NOT NULL THEN
 				IF NOT EXISTS (
 					SELECT 1
 					FROM information_schema.columns
@@ -119,6 +120,53 @@ func sensorSampleValueColumnMigrationStatement() string {
 				ALTER TABLE sensor_samples DROP COLUMN IF EXISTS bool_value;
 				ALTER TABLE sensor_samples DROP COLUMN IF EXISTS vector_value;
 				ALTER TABLE sensor_samples DROP COLUMN IF EXISTS object_value;
+				END IF;
+			END $$`
+}
+
+func sensorContractCleanupMigrationStatement() string {
+	return `DO $$
+		BEGIN
+			IF to_regclass('public.sensor_samples') IS NOT NULL THEN
+				IF NOT EXISTS (
+					SELECT 1
+					FROM information_schema.columns
+					WHERE table_schema = 'public'
+						AND table_name = 'sensor_samples'
+						AND column_name = 'sample_timestamp'
+				) THEN
+					ALTER TABLE sensor_samples ADD COLUMN sample_timestamp timestamptz;
+				END IF;
+
+				IF EXISTS (
+					SELECT 1
+					FROM information_schema.columns
+					WHERE table_schema = 'public'
+						AND table_name = 'sensor_samples'
+						AND column_name = 'sent_at'
+				) THEN
+					UPDATE sensor_samples
+					SET sample_timestamp = sent_at
+					WHERE sample_timestamp IS NULL
+						AND sent_at IS NOT NULL;
+				END IF;
+
+				ALTER TABLE sensor_samples DROP COLUMN IF EXISTS sequence;
+				ALTER TABLE sensor_samples DROP COLUMN IF EXISTS sent_at;
+			END IF;
+
+			IF to_regclass('public.sensor_descriptors') IS NOT NULL THEN
+				IF to_regclass('public.sensor_samples') IS NOT NULL THEN
+					DELETE FROM sensor_samples
+					WHERE descriptor_id IN (
+						SELECT id FROM sensor_descriptors WHERE sensor_type IN ('environment', 'legacy')
+					);
+				END IF;
+
+				DELETE FROM sensor_descriptors WHERE sensor_type IN ('environment', 'legacy');
+
+				ALTER TABLE sensor_descriptors DROP COLUMN IF EXISTS value_type;
+				ALTER TABLE sensor_descriptors DROP COLUMN IF EXISTS sample_rate_hz;
 			END IF;
 		END $$`
 }
