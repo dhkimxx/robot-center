@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
+	"robot-center/apps/server/internal/service"
 	"strings"
 	"time"
 )
@@ -49,6 +51,7 @@ func (s *Server) handleSystemStatus(w http.ResponseWriter, r *http.Request) {
 			"minioEndpoint": s.config.MinIOEndpoint,
 			"minioBucket":   s.config.MinIOBucket,
 		},
+		"objectStorage": s.readObjectStorageStatus(requestContext),
 		"summary": map[string]int{
 			"robots":     len(robots),
 			"missions":   len(missions),
@@ -56,6 +59,53 @@ func (s *Server) handleSystemStatus(w http.ResponseWriter, r *http.Request) {
 			"recordings": len(recordings),
 		},
 		"sfuRooms": sfuRooms,
+	})
+}
+
+func (s *Server) readObjectStorageStatus(ctx context.Context) any {
+	if s.services.Storage == nil {
+		return map[string]any{
+			"status": "unavailable",
+			"bucket": s.config.MinIOBucket,
+		}
+	}
+	usage, err := s.services.Storage.GetObjectStorageUsage(ctx)
+	if err != nil {
+		return map[string]any{
+			"status": "unavailable",
+			"bucket": s.config.MinIOBucket,
+			"error":  err.Error(),
+		}
+	}
+	return usage
+}
+
+type clearObjectStorageRequest struct {
+	Confirmation string `json:"confirmation"`
+}
+
+func (s *Server) handleClearObjectStorage(w http.ResponseWriter, r *http.Request) {
+	var request clearObjectStorageRequest
+	if err := decodeJSON(r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	result, err := s.services.Storage.ClearObjectStorage(r.Context(), request.Confirmation)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrSystemActionForbidden):
+			writeError(w, http.StatusForbidden, err)
+		case errors.Is(err, service.ErrSystemActionConfirmationRequired):
+			writeError(w, http.StatusBadRequest, err)
+		default:
+			writeError(w, http.StatusInternalServerError, err)
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"objectStorage": result,
 	})
 }
 

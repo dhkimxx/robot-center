@@ -19,6 +19,7 @@ import {
   createTelemetryFromSensorLatest
 } from "../domains/live/sensorLatestMapper.js";
 import { useOperationStatuses } from "../domains/live/useOperationStatuses.js";
+import { clearObjectStorage } from "../api/systemApi.js";
 import { useControlCenterData } from "./useControlCenterData.js";
 import { useNotifications } from "./useNotifications.js";
 
@@ -123,6 +124,22 @@ export function useControlCenterController({
   const latestSensor = selectedLiveSession.sensor ?? latestServerSensorPanel;
   const latestPositionState = getTelemetryPositionState(latestTelemetry);
   const recordingsController = useRecordingsController();
+
+  const clearSystemObjectStorage = useCallback(async () => {
+    try {
+      const payload = await clearObjectStorage();
+      const result = payload.objectStorage ?? {};
+      showNotification(
+        `Object storage ${formatByteCount(result.deletedBytes ?? 0)} / ${result.deletedObjectCount ?? 0}개 삭제 완료`,
+        "success"
+      );
+      await loadAll();
+      return result;
+    } catch (error) {
+      showNotification(error instanceof Error ? error.message : "Object storage 정리 실패", "danger");
+      throw error;
+    }
+  }, [loadAll, showNotification]);
 
   useEffect(() => {
     const previousMissionCode = previousRouteMissionControlCodeRef.current;
@@ -325,8 +342,24 @@ export function useControlCenterController({
       selectedRobot: robotController.selectedRobot
     },
     systemRouteProps: {
+      onClearObjectStorage: clearSystemObjectStorage,
       statusError,
       systemStatus
     }
   };
+}
+
+function formatByteCount(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "0B";
+  }
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  const fractionDigits = value >= 10 || unitIndex === 0 ? 0 : 1;
+  return `${value.toFixed(fractionDigits)}${units[unitIndex]}`;
 }

@@ -12,6 +12,7 @@ type Services struct {
 	Sensors   *SensorService
 	Recording *RecordingService
 	Live      *LiveStatusService
+	Storage   *ObjectStorageAdminService
 
 	transactionRunner store.TransactionRunner
 }

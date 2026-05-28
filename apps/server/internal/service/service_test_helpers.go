@@ -232,6 +232,10 @@ func (s *recordingStoreSpy) ListLatestSensorSamples(_ context.Context, _ string,
 	return nil, nil
 }
 
+func (s *recordingStoreSpy) ResetObjectStorageMetadata(_ context.Context) (store.StorageMetadataResetResult, error) {
+	return store.StorageMetadataResetResult{}, nil
+}
+
 type recordingTransactionRunnerSpy struct {
 	repository store.Store
 	called     bool

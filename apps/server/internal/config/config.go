@@ -14,6 +14,8 @@ type AppServerConfig struct {
 	PostgresDSN               string
 	MinIOEndpoint             string
 	MinIOBucket               string
+	MinIOAccessKey            string
+	MinIOSecretKey            string
 	SFUWebSocketPublicBaseURL string
 	TURNPublicURL             string
 	TURNInternalURL           string
@@ -50,6 +52,8 @@ func LoadAppServerConfig() AppServerConfig {
 		PostgresDSN:               buildPostgresDSN(),
 		MinIOEndpoint:             getEnv("MINIO_ENDPOINT", "http://localhost:9000"),
 		MinIOBucket:               getEnv("MINIO_BUCKET", "robot-center"),
+		MinIOAccessKey:            getEnv("MINIO_ROOT_USER", "minioadmin"),
+		MinIOSecretKey:            getEnv("MINIO_ROOT_PASSWORD", "minioadmin"),
 		SFUWebSocketPublicBaseURL: getEnv("SFU_WS_PUBLIC_BASE_URL", legacySFUWebSocketBaseURL),
 		TURNPublicURL:             getEnv("TURN_PUBLIC_URL", legacyTURNURL),
 		TURNInternalURL:           getEnv("TURN_INTERNAL_URL", legacyTURNURL),

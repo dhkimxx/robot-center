@@ -19,6 +19,13 @@ type Server struct {
 
 func NewServerWithStore(cfg config.AppServerConfig, repository store.Store) *Server {
 	services := service.NewServices(repository)
+	services.Storage = service.NewObjectStorageAdminService(service.ObjectStorageAdminConfig{
+		Environment: cfg.Environment,
+		Endpoint:    cfg.MinIOEndpoint,
+		Bucket:      cfg.MinIOBucket,
+		AccessKey:   cfg.MinIOAccessKey,
+		SecretKey:   cfg.MinIOSecretKey,
+	}, repository)
 	server := &Server{
 		config:   cfg,
 		services: services,
@@ -53,6 +60,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	mux.HandleFunc("GET /api/system/status", s.handleSystemStatus)
+	mux.HandleFunc("POST /api/system/object-storage/clear", s.handleClearObjectStorage)
 	mux.HandleFunc("GET /api/rtc-config", s.handleRTCConfig)
 	mux.HandleFunc("GET /api/recording-targets", s.handleRecordingTargets)
 	mux.HandleFunc("GET /api/sensor-descriptors", s.handleListSensorDescriptors)

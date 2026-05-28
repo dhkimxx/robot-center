@@ -13,11 +13,13 @@ type RobotStore = port.RobotStore
 type MissionStore = port.MissionStore
 type SensorStore = port.SensorStore
 type RecordingStore = port.RecordingStore
+type StorageAdminStore = port.StorageAdminStore
 
 type RobotRepository = port.RobotStore
 type MissionRepository = port.MissionStore
 type SensorRepository = port.SensorStore
 type RecordingRepository = port.RecordingStore
+type StorageAdminRepository = port.StorageAdminStore
 type TransactionRunner = port.TransactionRunner
 
 type MissionStartConflict = port.MissionStartConflict
@@ -33,6 +35,7 @@ type RecordingTarget = port.RecordingTarget
 type RecordingSession = port.RecordingSession
 type CreateRecordingChunkInput = port.CreateRecordingChunkInput
 type RecordingUploadMetadata = port.RecordingUploadMetadata
+type StorageMetadataResetResult = port.StorageMetadataResetResult
 
 type PostgresConfig = postgresstore.Config
 type PostgresStore = postgresstore.Store
