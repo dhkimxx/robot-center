@@ -58,9 +58,9 @@ func TestControlPlaneFlow(t *testing.T) {
 	if _, ok := paths["/api/v1/robot/mission"]; !ok {
 		t.Fatalf("expected robot mission API in OpenAPI paths, got %#v", paths)
 	}
-	for _, privatePath := range []string{"/api/robot-gateway/mission", "/sfu/robot/ws", "/api/system/status", "/api/recorder/tick"} {
+	for _, privatePath := range []string{"/api/system/status", "/api/recorder/tick"} {
 		if _, ok := paths[privatePath]; ok {
-			t.Fatalf("OpenAPI should not publish private or deprecated path %s", privatePath)
+			t.Fatalf("OpenAPI should not publish removed or private path %s", privatePath)
 		}
 	}
 	swaggerResponse, err := http.Get(server.URL + "/api/docs")

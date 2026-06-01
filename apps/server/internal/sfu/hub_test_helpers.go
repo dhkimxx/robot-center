@@ -11,7 +11,7 @@ import (
 
 func newTestSFUServer(hub *Hub) *httptest.Server {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /sfu/robot/ws", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/v1/robot/sfu/ws", func(w http.ResponseWriter, r *http.Request) {
 		hub.ServePeer(w, r, PeerJoinRequest{
 			RoomID:    r.URL.Query().Get("room"),
 			Role:      "robot",

@@ -93,10 +93,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/robot/heartbeat", s.handleRobotAPIHeartbeat)
 	mux.HandleFunc("GET /api/v1/robot/mission", s.handleRobotAPIMission)
 	mux.HandleFunc("GET /api/v1/robot/sfu/ws", s.handleRobotSFUWebSocket)
-	// Deprecated compatibility aliases. Do not publish these in robot-facing docs.
-	mux.HandleFunc("POST /api/robot-gateway/heartbeat", s.handleRobotAPIHeartbeat)
-	mux.HandleFunc("GET /api/robot-gateway/mission", s.handleRobotAPIMission)
-	mux.HandleFunc("GET /sfu/robot/ws", s.handleRobotSFUWebSocket)
 	mux.HandleFunc("GET /sfu/operator/ws", s.handleOperatorSFUWebSocket)
 	mux.HandleFunc("GET /sfu/recorder/ws", s.handleRecorderSFUWebSocket)
 

@@ -53,9 +53,9 @@ func TestHubSummarizesMultiPublisherMissionRoom(t *testing.T) {
 	defer server.Close()
 
 	websocketURL := "ws" + strings.TrimPrefix(server.URL, "http")
-	robotA := dialPeer(t, websocketURL+"/sfu/robot/ws?room=mission-001&robotCode=robot-001")
+	robotA := dialPeer(t, websocketURL+"/api/v1/robot/sfu/ws?room=mission-001&robotCode=robot-001")
 	defer robotA.Close()
-	robotB := dialPeer(t, websocketURL+"/sfu/robot/ws?room=mission-001&robotCode=robot-002")
+	robotB := dialPeer(t, websocketURL+"/api/v1/robot/sfu/ws?room=mission-001&robotCode=robot-002")
 	defer robotB.Close()
 	operator := dialPeer(t, websocketURL+"/sfu/operator/ws?room=mission-001")
 	defer operator.Close()

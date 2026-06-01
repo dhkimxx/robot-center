@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestLegacySFUWebSocketEndpointIsDisabled(t *testing.T) {
+func TestGenericSFUWebSocketEndpointIsDisabled(t *testing.T) {
 	server := newTestSFUServer(NewHub())
 	defer server.Close()
 
@@ -16,7 +16,7 @@ func TestLegacySFUWebSocketEndpointIsDisabled(t *testing.T) {
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusNotFound {
-		t.Fatalf("expected legacy /sfu/ws endpoint to be disabled, got %d", response.StatusCode)
+		t.Fatalf("expected generic /sfu/ws endpoint to be disabled, got %d", response.StatusCode)
 	}
 }
 
@@ -25,7 +25,7 @@ func TestHubAnnouncesServerPeerAndRoomPeers(t *testing.T) {
 	defer server.Close()
 
 	websocketURL := "ws" + strings.TrimPrefix(server.URL, "http")
-	robot := dialPeer(t, websocketURL+"/sfu/robot/ws?room=mission-001&robotCode=robot-001")
+	robot := dialPeer(t, websocketURL+"/api/v1/robot/sfu/ws?room=mission-001&robotCode=robot-001")
 	defer robot.Close()
 	operator := dialPeer(t, websocketURL+"/sfu/operator/ws?room=mission-001")
 	defer operator.Close()

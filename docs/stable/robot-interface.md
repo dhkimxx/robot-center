@@ -107,7 +107,7 @@ Robot API의 scope:
 
 서버는 token으로 `robotCode`를 resolve한다. Robot Gateway는 `robotCode`, `robotId`, `sessionId`, `roomId`를 request query, WebSocket message, DataChannel payload에 넣지 않는다.
 
-백엔드는 `/api/docs`에서 Swagger UI를 제공하고 `/api/docs/openapi.json`에서 OpenAPI JSON을 제공한다. 이 문서에는 로봇 런타임용 `/api/v1/robot/*`, 로봇 관리 API, 임무 관리 API를 노출하며, deprecated alias나 recorder/system 내부 API는 포함하지 않는다.
+백엔드는 `/api/docs`에서 Swagger UI를 제공하고 `/api/docs/openapi.json`에서 OpenAPI JSON을 제공한다. 이 문서에는 로봇 런타임용 `/api/v1/robot/*`, 로봇 관리 API, 임무 관리 API를 노출하며, recorder/system 내부 API는 포함하지 않는다.
 
 ## 6. REST API
 
@@ -285,7 +285,7 @@ DataChannel lifecycle 계약:
 - SDK가 callback 대신 state polling을 사용하면 `readyState == open` 또는 동일 의미의 상태를 확인한 뒤 send한다.
 - app-server SFU의 `lastDataAt`은 DataChannel open 시각이 아니라 실제 payload 수신 시각이다.
 
-DataChannel label은 위 canonical 값만 사용한다. `telemetry`, `sensor`, `spatial` 같은 짧은 alias는 Robot Gateway 계약이 아니다.
+DataChannel label은 위 canonical 값만 사용한다.
 
 DataChannel 메시지는 공통 envelope를 사용한다. sensor 저장 대상인 `channel.telemetry`, `channel.spatial` 메시지는 `descriptors` 또는 `samples`를 포함해야 한다.
 
