@@ -255,8 +255,8 @@ docker compose \
 - `app-server`, `recorder-worker`, `turn`, `postgres`, `minio` container가 running/healthy
 - `http://192.168.20.12:18080` UI 접속 가능
 - `/api/v1/system/status` OK
-- `/api/v1/system/docs` 접속 가능
-- `/api/v1/system/openapi.json`에 `/api/v1/system/status`, `/api/v1/recorder/tick`, `/api/v1/operator/sensor-latest`, `/api/v1/operator/sfu/ws`, `/api/v1/recorder/sfu/ws` path 포함
+- `/swagger/index.html` 접속 가능
+- `/swagger/openapi.json`에 `/api/v1/system/status`, `/api/v1/recorder/tick`, `/api/v1/operator/sensor-latest`, `/api/v1/operator/sfu/ws`, `/api/v1/recorder/sfu/ws` path 포함
 - `/api/v1/operator/rtc-config`가 `192.168.20.12` public URL을 반환
 - robot 생성과 connection-info 조회 가능
 - mission 생성과 start 가능

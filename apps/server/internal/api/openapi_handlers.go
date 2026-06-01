@@ -21,7 +21,7 @@ const swaggerUIHTML = `<!doctype html>
   <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
   <script>
     window.ui = SwaggerUIBundle({
-      url: "/api/v1/system/openapi.json",
+      url: "/swagger/openapi.json",
       dom_id: "#swagger-ui",
       deepLinking: true,
       persistAuthorization: true
@@ -34,6 +34,12 @@ func (s *Server) handleSwaggerUI(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(swaggerUIHTML))
+}
+
+func redirectTo(path string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, path, http.StatusMovedPermanently)
+	}
 }
 
 func (s *Server) handleOpenAPIJSON(w http.ResponseWriter, _ *http.Request) {
@@ -74,8 +80,8 @@ func (s *Server) openAPISpec() map[string]any {
 		},
 		"paths": map[string]any{
 			"/healthz":                                 openAPIHealthPath(),
-			"/api/v1/system/docs":                      openAPIDocsPath(),
-			"/api/v1/system/openapi.json":              openAPIOpenAPIJSONPath(),
+			"/swagger/index.html":                      openAPIDocsPath(),
+			"/swagger/openapi.json":                    openAPIOpenAPIJSONPath(),
 			"/api/v1/system/status":                    openAPISystemStatusPath(),
 			"/api/v1/system/object-storage/clear":      openAPIObjectStorageClearPath(),
 			"/api/v1/operator/rtc-config":              openAPIRTCConfigPath(),

@@ -107,7 +107,7 @@ Robot API의 scope:
 
 서버는 token으로 `robotCode`를 resolve한다. Robot Gateway는 `robotCode`, `robotId`, `sessionId`, `roomId`를 request query, WebSocket message, DataChannel payload에 넣지 않는다.
 
-백엔드는 `/api/v1/system/docs`에서 Swagger UI를 제공하고 `/api/v1/system/openapi.json`에서 OpenAPI JSON을 제공한다. OpenAPI는 관제 서버의 전체 HTTP/WebSocket API reference이며, robot runtime, robot/mission 관리, sensor, recording, system, SFU endpoint를 모두 포함한다. 단 Robot Gateway 구현 계약은 이 문서의 `/api/v1/robot/*` REST/WebSocket API와 DataChannel 계약을 기준으로 한다.
+백엔드는 `/swagger/index.html`에서 Swagger UI를 제공하고 `/swagger/openapi.json`에서 OpenAPI JSON을 제공한다. OpenAPI는 관제 서버의 전체 HTTP/WebSocket API reference이며, robot runtime, robot/mission 관리, sensor, recording, system, SFU endpoint를 모두 포함한다. 단 Robot Gateway 구현 계약은 이 문서의 `/api/v1/robot/*` REST/WebSocket API와 DataChannel 계약을 기준으로 한다.
 
 ## 6. REST API
 

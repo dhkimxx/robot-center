@@ -87,8 +87,8 @@ GET  /api/v1/robot/sfu/ws?room={missionCode}
 ```text
 serverUrl: http://192.168.20.12:18080
 operatorUi: http://192.168.20.12:18080
-apiDocs: http://192.168.20.12:18080/api/v1/system/docs
-openapiJson: http://192.168.20.12:18080/api/v1/system/openapi.json
+apiDocs: http://192.168.20.12:18080/swagger/index.html
+openapiJson: http://192.168.20.12:18080/swagger/openapi.json
 missionCode: 각 테스트자가 직접 생성
 missionStatus: active로 시작 후 테스트
 ```
