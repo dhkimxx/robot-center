@@ -31,11 +31,11 @@ public final class RobotCenterApiClient {
         JSONObject body = new JSONObject()
             .put("state", state)
             .put("sentAt", Instant.now().toString());
-        post("/api/robot-gateway/heartbeat", body);
+        post("/api/v1/robot/heartbeat", body);
     }
 
     public RobotMissionConfig fetchMission() throws IOException, JSONException {
-        JSONObject response = get("/api/robot-gateway/mission");
+        JSONObject response = get("/api/v1/robot/mission");
         String missionStatus = response.optString("missionStatus", "none");
         if (!"active".equals(missionStatus)) {
             return new RobotMissionConfig(

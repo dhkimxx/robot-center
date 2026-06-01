@@ -2,8 +2,10 @@ package config
 
 import "strings"
 
+const RobotAPISFUWebSocketPath = "/api/v1/robot/sfu/ws"
+
 func (c AppServerConfig) SFURobotWebSocketURL() string {
-	return joinWebSocketPath(c.SFUWebSocketPublicBaseURL, "/sfu/robot/ws")
+	return joinWebSocketPath(c.SFUWebSocketPublicBaseURL, RobotAPISFUWebSocketPath)
 }
 
 func (c AppServerConfig) SFUOperatorWebSocketURL() string {

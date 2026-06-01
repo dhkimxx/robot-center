@@ -56,7 +56,7 @@ def websocket_url_with_room(base_url: str, room_id: str) -> str:
 def robot_signaling_url_from_server_url(server_url: str) -> str:
     split_url = urlsplit(server_url)
     scheme = "wss" if split_url.scheme == "https" else "ws"
-    return urlunsplit((scheme, split_url.netloc, "/sfu/robot/ws", "", ""))
+    return urlunsplit((scheme, split_url.netloc, "/api/v1/robot/sfu/ws", "", ""))
 
 
 def strip_non_relay_candidates(sdp: str) -> str:
@@ -426,7 +426,6 @@ class MockRobot:
             "missionId": mission_id,
             "missionCode": mission_code,
             "missionStatus": "active",
-            "roomId": room_id,
             "sfu": {
                 "signalingUrl": websocket_url_with_room(signaling_url, room_id),
                 "iceTransportPolicy": rtc_config.get("iceTransportPolicy", "relay"),
@@ -447,13 +446,16 @@ class MockRobot:
             ]
         return rtc_config.get("iceServers", [])
 
+    def mission_room_id(self, mission: dict[str, Any]) -> str:
+        return str(mission.get("roomId") or mission.get("missionCode") or "")
+
     async def wait_for_active_mission(self) -> dict[str, Any]:
         while not self.stop_event.is_set():
             mission = await self.fetch_active_mission()
             if mission:
                 self.log(
                     "mission active: "
-                    f"{mission.get('missionCode')} room={mission.get('roomId')}"
+                    f"{mission.get('missionCode')} room={self.mission_room_id(mission)}"
                 )
                 return mission
             self.log("waiting for active mission")
@@ -461,7 +463,7 @@ class MockRobot:
         raise asyncio.CancelledError
 
     async def fetch_active_mission(self) -> dict[str, Any]:
-        mission = await self.get_json("/api/robot-gateway/mission")
+        mission = await self.get_json("/api/v1/robot/mission")
         if mission.get("missionStatus") == "active":
             return mission
         return {}
@@ -473,7 +475,7 @@ class MockRobot:
             "networkQuality": "mock-local",
             "sentAt": utc_now_iso(),
         }
-        await self.post_json("/api/robot-gateway/heartbeat", payload)
+        await self.post_json("/api/v1/robot/heartbeat", payload)
 
     async def connect_signaling(self) -> None:
         signaling_url = self.mission["sfu"]["signalingUrl"]

@@ -6,7 +6,7 @@ It follows the same control-plane and media-plane path as the robot sample:
 
 ```text
 Python Mock Robot
-1. heartbeat -> robot-gateway REST
+1. heartbeat -> robot-scoped REST
 2. active mission lookup
 3. SFU signaling WebSocket connect
 4. WebRTC offer send

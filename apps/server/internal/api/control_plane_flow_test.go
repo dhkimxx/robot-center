@@ -7,6 +7,7 @@ import (
 	"robot-center/apps/server/internal/config"
 	"robot-center/apps/server/internal/sfu"
 	"robot-center/apps/server/internal/testsupport/postgrestest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -41,6 +42,28 @@ func TestControlPlaneFlow(t *testing.T) {
 	components := systemStatus["components"].([]any)
 	if !componentHasStatus(components, "recorder-worker", "ok") {
 		t.Fatalf("expected recorder-worker component status ok, got %#v", components)
+	}
+	openAPI := requestJSON[map[string]any](t, server.URL, http.MethodGet, "/api/docs/openapi.json", "", nil)
+	info := openAPI["info"].(map[string]any)
+	if !strings.Contains(info["description"].(string), "관제 서버") {
+		t.Fatalf("expected Korean OpenAPI description, got %#v", info)
+	}
+	paths := openAPI["paths"].(map[string]any)
+	if _, ok := paths["/api/v1/robot/mission"]; !ok {
+		t.Fatalf("expected robot mission API in OpenAPI paths, got %#v", paths)
+	}
+	for _, privatePath := range []string{"/api/robot-gateway/mission", "/sfu/robot/ws", "/api/system/status", "/api/recorder/tick"} {
+		if _, ok := paths[privatePath]; ok {
+			t.Fatalf("OpenAPI should not publish private or deprecated path %s", privatePath)
+		}
+	}
+	swaggerResponse, err := http.Get(server.URL + "/api/docs")
+	if err != nil {
+		t.Fatalf("request Swagger UI: %v", err)
+	}
+	defer swaggerResponse.Body.Close()
+	if swaggerResponse.StatusCode != http.StatusOK || !strings.Contains(swaggerResponse.Header.Get("Content-Type"), "text/html") {
+		t.Fatalf("expected Swagger UI HTML response, got %s %s", swaggerResponse.Status, swaggerResponse.Header.Get("Content-Type"))
 	}
 	createRobotPayload := requestJSON[map[string]any](t, server.URL, http.MethodPost, "/api/robots", "", map[string]any{
 		"displayName": "Test Robot",
@@ -85,15 +108,21 @@ func TestControlPlaneFlow(t *testing.T) {
 		t.Fatalf("expected archived robot to be hidden, got %#v", robotsPayload)
 	}
 
-	requestJSON[map[string]any](t, server.URL, http.MethodPost, "/api/robot-gateway/heartbeat", robotToken, map[string]any{
+	heartbeatPayload := requestJSON[map[string]any](t, server.URL, http.MethodPost, "/api/v1/robot/heartbeat", robotToken, map[string]any{
 		"state":  "online",
 		"sentAt": time.Now().UTC().Format(time.RFC3339Nano),
 	})
-	requestJSON[map[string]any](t, server.URL, http.MethodPost, "/api/robot-gateway/heartbeat", supportRobotToken, map[string]any{
+	if heartbeatPayload["robotCode"] != robotCode {
+		t.Fatalf("expected robot API heartbeat to expose token-authenticated robotCode, got %#v", heartbeatPayload)
+	}
+	if _, ok := heartbeatPayload["robotId"]; ok {
+		t.Fatalf("robot API heartbeat should not expose internal robotId, got %#v", heartbeatPayload)
+	}
+	requestJSON[map[string]any](t, server.URL, http.MethodPost, "/api/v1/robot/heartbeat", supportRobotToken, map[string]any{
 		"state":  "online",
 		"sentAt": time.Now().UTC().Format(time.RFC3339Nano),
 	})
-	heartbeatWithRobotCodeStatus, _ := requestRawJSON(t, server.URL, http.MethodPost, "/api/robot-gateway/heartbeat", robotToken, map[string]any{
+	heartbeatWithRobotCodeStatus, _ := requestRawJSON(t, server.URL, http.MethodPost, "/api/v1/robot/heartbeat", robotToken, map[string]any{
 		"robotCode": robotCode,
 		"state":     "online",
 	})
@@ -146,25 +175,21 @@ func TestControlPlaneFlow(t *testing.T) {
 		t.Fatalf("expected conflict robot %s active in %s, got %#v", robotCode, missionCode, conflict)
 	}
 
-	missionPayload := requestJSON[map[string]any](t, server.URL, http.MethodGet, "/api/robot-gateway/mission", robotToken, nil)
+	missionPayload := requestJSON[map[string]any](t, server.URL, http.MethodGet, "/api/v1/robot/mission", robotToken, nil)
 	if missionPayload["missionStatus"] != "active" {
 		t.Fatalf("expected active robot mission, got %#v", missionPayload)
 	}
-	if missionPayload["robotCode"] != robotCode {
-		t.Fatalf("expected token-authenticated robotCode, got %#v", missionPayload)
-	}
-	if missionPayload["roomId"] != missionCode {
-		t.Fatalf("expected gateway roomId to be missionCode, got %#v", missionPayload)
-	}
-	if _, ok := missionPayload["legacyRoomId"]; ok {
-		t.Fatalf("legacyRoomId should not be exposed, got %#v", missionPayload)
+	for _, internalField := range []string{"missionId", "robotCode", "roomId", "legacyRoomId", "videoPolicy"} {
+		if _, ok := missionPayload[internalField]; ok {
+			t.Fatalf("robot API mission should not expose %s, got %#v", internalField, missionPayload)
+		}
 	}
 	sfuPayload := missionPayload["sfu"].(map[string]any)
 	if _, ok := sfuPayload["publisherToken"]; ok {
 		t.Fatalf("publisherToken should not be exposed in the P0 robot contract, got %#v", missionPayload)
 	}
-	if sfuPayload["signalingUrl"] != "ws://center.local/sfu/robot/ws?room="+missionCode {
-		t.Fatalf("expected role-specific robot signaling URL, got %#v", sfuPayload)
+	if sfuPayload["signalingUrl"] != "ws://center.local/api/v1/robot/sfu/ws?room="+missionCode {
+		t.Fatalf("expected robot API signaling URL, got %#v", sfuPayload)
 	}
 	assertStringListEqual(t, missionPayload["tracks"], []string{
 		sfu.StreamRoleTrackVideo1,
@@ -178,12 +203,12 @@ func TestControlPlaneFlow(t *testing.T) {
 		sfu.StreamRoleChannelEvent,
 		sfu.StreamRoleChannelControl,
 	})
-	missionRobotCodeQueryStatus, _ := requestRawJSON(t, server.URL, http.MethodGet, "/api/robot-gateway/mission?robotCode="+supportRobotCode, robotToken, nil)
+	missionRobotCodeQueryStatus, _ := requestRawJSON(t, server.URL, http.MethodGet, "/api/v1/robot/mission?robotCode="+supportRobotCode, robotToken, nil)
 	if missionRobotCodeQueryStatus != http.StatusBadRequest {
 		t.Fatalf("expected robotCode query to be rejected, got %d", missionRobotCodeQueryStatus)
 	}
-	supportMissionPayload := requestJSON[map[string]any](t, server.URL, http.MethodGet, "/api/robot-gateway/mission", supportRobotToken, nil)
-	if supportMissionPayload["missionStatus"] != "active" || supportMissionPayload["roomId"] != missionCode {
+	supportMissionPayload := requestJSON[map[string]any](t, server.URL, http.MethodGet, "/api/v1/robot/mission", supportRobotToken, nil)
+	if supportMissionPayload["missionStatus"] != "active" || supportMissionPayload["missionCode"] != missionCode {
 		t.Fatalf("expected active support robot mission in shared room, got %#v", supportMissionPayload)
 	}
 
@@ -364,7 +389,7 @@ func TestControlPlaneFlow(t *testing.T) {
 		t.Fatalf("expected ended mission, got %#v", endedMission)
 	}
 	assertStringListEqual(t, endedMission["robotCodes"], []string{robotCode, supportRobotCode})
-	endedGatewayPayload := requestJSON[map[string]any](t, server.URL, http.MethodGet, "/api/robot-gateway/mission", supportRobotToken, nil)
+	endedGatewayPayload := requestJSON[map[string]any](t, server.URL, http.MethodGet, "/api/v1/robot/mission", supportRobotToken, nil)
 	if endedGatewayPayload["missionStatus"] != "none" {
 		t.Fatalf("expected no active support robot mission after end, got %#v", endedGatewayPayload)
 	}

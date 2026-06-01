@@ -1,7 +1,7 @@
 ---
 title: "robot-team-webrtc-send-test-guide"
 created: 2026-05-27
-updated: '2026-05-28'
+updated: '2026-06-01'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>"]
 type: "guide"
@@ -11,7 +11,6 @@ history:
 - "2026-05-27 danya.kim <danya.kim@thundersoft.com>: split robot team WebRTC send guide from dev-server deployment runbook"
 - "2026-05-27 danya.kim <danya.kim@thundersoft.com>: made guide self-contained for robot team sharing"
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: sync robot team WebRTC guide with current gateway and sensor API contract'
-- '2026-05-27 danya.kim <danya.kim@thundersoft.com>: clarify recorder storage boundaries for event and control data channels'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: align robot team WebRTC guide with canonical REST token contract and no publisher token'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: remove publisher token from robot team P0 guide'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: update robot team guide to role-specific SFU endpoint'
@@ -30,6 +29,9 @@ history:
 - '2026-05-28 danya.kim <danya.kim@thundersoft.com>: simplify sensor contract to structured descriptors plus object values'
 - '2026-05-28 danya.kim <danya.kim@thundersoft.com>: remove descriptor metadata and move gas channel alarm fields into sample values'
 - '2026-05-28 danya.kim <danya.kim@thundersoft.com>: clarify telemetry-only payload schema contract for robot team send test'
+- '2026-06-01 danya.kim <danya.kim@thundersoft.com>: separate robot-facing API namespace and remove internal diagnostics from robot guide'
+- '2026-06-01 danya.kim <danya.kim@thundersoft.com>: clarify /api/v1/robot self-scope API boundary'
+- '2026-06-01 danya.kim <danya.kim@thundersoft.com>: add Swagger API docs URL for robot team field reference'
 ---
 
 # Robot Team WebRTC Send Test Guide
@@ -38,7 +40,7 @@ history:
 
 이 문서는 로봇팀이 실제 Robot Gateway/Publisher에서 관제 서버로 WebRTC 영상과 센서 데이터를 송신할 때 필요한 연동 절차를 정의한다.
 
-현재 관제 시스템은 임무 단위 WebRTC room을 만들고, 로봇은 해당 room에 publisher로 접속한다. 관제 UI와 recorder는 같은 room에 subscriber로 접속해 로봇의 영상, 오디오, telemetry, sensor 데이터를 수신한다.
+현재 관제 시스템은 임무 단위 WebRTC room을 만들고, 로봇은 해당 room에 publisher로 접속한다. 로봇팀은 이 문서의 `/api/v1/robot/*` REST API와 Robot WebSocket signaling 계약만 구현하면 된다.
 
 이 문서 하나만 보고 테스트를 진행할 수 있도록 서버 주소, REST API, WebRTC signaling, media track, DataChannel, 통과 기준을 함께 정리한다.
 
@@ -48,8 +50,8 @@ history:
 - 로봇이 자신에게 배정된 active mission을 조회할 수 있는가
 - 로봇이 mission room에 WebRTC publisher로 접속할 수 있는가
 - 관제 서버가 로봇의 RGB/Thermal/Audio track을 수신할 수 있는가
-- 관제 서버가 telemetry DataChannel 메시지를 수신하고 저장할 수 있는가
-- 관제 UI에서 영상, 위치, 센서값, 녹화 상태를 확인할 수 있는가
+- 관제 서버가 telemetry DataChannel 메시지를 수신할 수 있는가
+- 관제 UI에서 영상, 위치, 센서값을 확인할 수 있는가
 
 이 테스트에서 제외하는 것:
 
@@ -58,6 +60,26 @@ history:
 - HTTPS/WSS 운영화
 - 장기 운영 인증/권한 정책
 
+### 1.1 Robot API 경계
+
+로봇 런타임이 직접 호출하는 API는 `/api/v1/robot/*` 하위로 제한한다.
+
+```text
+POST /api/v1/robot/heartbeat
+GET  /api/v1/robot/mission
+GET  /api/v1/robot/sfu/ws?room={missionCode}
+```
+
+이 API들은 모두 `Authorization: Bearer {robotToken}`으로 인증한다. 서버는 token으로 robot identity를 판단하므로 로봇 런타임은 request body, query, WebSocket message, DataChannel payload에 `robotCode`, `robotId`, `sessionId`, `roomId`를 넣지 않는다.
+
+`/api/v1/robot/*` 응답은 인증된 자기 로봇이 지금 publish하는 데 필요한 정보만 포함한다.
+
+- active mission이 없으면 `missionStatus=none`만 기준으로 재시도한다.
+- active mission이 있으면 자기 로봇에 배정된 `missionCode`, `sfu.signalingUrl`, `turnServers`, `tracks`, `dataChannels`만 사용한다.
+- 다른 robot, 다른 mission, 관제 UI 상태, 저장/녹화 상태, 내부 worker health 정보는 로봇 API 계약에 포함하지 않는다.
+
+이 문서의 `/api/robots`, `/api/missions` 호출은 개발서버에서 테스트 slot을 직접 만들기 위한 편의 절차다. 실제 Robot Gateway/Publisher 런타임 루프는 `/api/v1/robot/*`만 호출한다.
+
 ## 2. 테스트 서버 접속 정보
 
 현재 임시 개발서버는 배포 완료 상태다.
@@ -65,10 +87,13 @@ history:
 ```text
 serverUrl: http://192.168.20.12:18080
 operatorUi: http://192.168.20.12:18080
-recorderHealthUrl: http://192.168.20.12:18082/healthz
+apiDocs: http://192.168.20.12:18080/api/docs
+openapiJson: http://192.168.20.12:18080/api/docs/openapi.json
 missionCode: 각 테스트자가 직접 생성
 missionStatus: active로 시작 후 테스트
 ```
+
+Swagger UI와 OpenAPI JSON은 API 필드 설명을 화면으로 확인하기 위한 보조 자료다. 이 문서는 로봇팀 공유용 기준 문서이므로, 테스트 절차와 WebRTC/DataChannel 계약은 아래 내용을 우선 기준으로 삼는다.
 
 현재 관제팀 재현 결과:
 
@@ -77,9 +102,8 @@ verifiedAt: 2026-05-27 18:01 KST
 verifiedWith: Android Robot app 2 devices
 robot-001: heartbeat OK, mission OK, WebSocket joined, relay ICE CONNECTED/COMPLETED
 robot-002: heartbeat OK, mission OK, WebSocket joined, relay ICE CONNECTED/COMPLETED
-app-server SFU: mission-001 room, robotCount 2, recorderCount 1
-recorder-worker: iceState connected, trackCount 6, dataChannelCount 4, appendFailedCount 0
-recording files: rgb.h264, thermal.h264, audio.ogg, telemetry.jsonl created per robot
+app-server SFU: mission-001 room, robotCount 2
+관제 UI: RGB/Thermal/Audio, telemetry 수신 확인
 ```
 
 `robot-001`, `robot-002`, `mission-001`은 관제팀이 Android Robot app 2대로 검증한 baseline slot이다. 여러 명이 동시에 테스트할 때는 이 공용 slot을 재사용하지 않는다.
@@ -110,7 +134,7 @@ TURN 서버는 다음 값으로 기동 중이다.
 }
 ```
 
-로봇 구현에서는 TURN 값을 하드코딩하지 말고 `GET /api/robot-gateway/mission` 응답의 `turnServers`를 그대로 `RTCPeerConnection.iceServers`에 넣는다. 위 값은 네트워크 디버깅과 수동 테스트를 위한 현재 서버 값이다.
+로봇 구현에서는 TURN 값을 하드코딩하지 말고 `GET /api/v1/robot/mission` 응답의 `turnServers`를 그대로 `RTCPeerConnection.iceServers`에 넣는다. 위 값은 네트워크 디버깅과 수동 테스트를 위한 현재 서버 값이다.
 
 이 문서의 주소는 모두 로봇팀 단말에서 접근하는 public address 기준이다. Docker 내부에서 쓰는 `app-server`, `turn` 같은 service DNS는 관제 서버 내부 구현값이며 로봇팀 구현에 사용하지 않는다.
 
@@ -121,7 +145,6 @@ TURN 서버는 다음 값으로 기동 중이다.
 | REST API / Web UI / WebSocket signaling | `192.168.20.12:18080/tcp` |
 | TURN allocation | `192.168.20.12:3478/udp`, `192.168.20.12:3478/tcp` |
 | TURN relay port range | `192.168.20.12:49160-49300/udp`, `192.168.20.12:49160-49300/tcp` |
-| Recorder health check | `192.168.20.12:18082/tcp` |
 
 ### 2.1 개인 테스트용 robot과 mission 생성
 
@@ -199,12 +222,12 @@ printf 'SERVER_URL=%s\nROBOT_CODE=%s\nROBOT_TOKEN=%s\nMISSION_CODE=%s\n' \
 생성 확인:
 
 ```bash
-curl -fsS "$SERVER_URL/api/robot-gateway/mission" \
+curl -fsS "$SERVER_URL/api/v1/robot/mission" \
   -H "Authorization: Bearer $ROBOT_TOKEN" \
   | python3 -m json.tool
 ```
 
-정상이라면 `missionStatus`는 `active`, `missionCode`는 방금 생성한 값, `sfu.signalingUrl`은 `ws://192.168.20.12:18080/sfu/robot/ws?room={MISSION_CODE}` 형태다.
+정상이라면 `missionStatus`는 `active`, `missionCode`는 방금 생성한 값, `sfu.signalingUrl`은 `ws://192.168.20.12:18080/api/v1/robot/sfu/ws?room={MISSION_CODE}` 형태다.
 
 ### 2.2 빠른 접속 확인
 
@@ -218,7 +241,7 @@ ROBOT_TOKEN='<2.1에서 생성한 robotToken>'
 Heartbeat:
 
 ```bash
-curl -fsS -X POST "$SERVER_URL/api/robot-gateway/heartbeat" \
+curl -fsS -X POST "$SERVER_URL/api/v1/robot/heartbeat" \
   -H "Authorization: Bearer $ROBOT_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{
@@ -231,20 +254,12 @@ curl -fsS -X POST "$SERVER_URL/api/robot-gateway/heartbeat" \
 Active mission 조회:
 
 ```bash
-curl -fsS "$SERVER_URL/api/robot-gateway/mission" \
+curl -fsS "$SERVER_URL/api/v1/robot/mission" \
   -H "Authorization: Bearer $ROBOT_TOKEN" \
   | python3 -m json.tool
 ```
 
-현재 정상 응답이면 `missionStatus`는 `active`, `missionCode`는 2.1에서 생성한 값, `sfu.signalingUrl`은 `ws://192.168.20.12:18080/sfu/robot/ws?room={missionCode}`로 내려온다.
-
-RTC 설정 확인:
-
-```bash
-curl -fsS "$SERVER_URL/api/rtc-config" | python3 -m json.tool
-```
-
-현재 정상 응답이면 `signalingUrl`은 `ws://192.168.20.12:18080/sfu/operator/ws`, `turnServers[0].urls[0]`은 `turn:192.168.20.12:3478?transport=udp`, `iceTransportPolicy`는 `relay`다.
+현재 정상 응답이면 `missionStatus`는 `active`, `missionCode`는 2.1에서 생성한 값, `sfu.signalingUrl`은 `ws://192.168.20.12:18080/api/v1/robot/sfu/ws?room={missionCode}`로 내려온다.
 
 ## 3. 전체 연결 구조
 
@@ -254,7 +269,7 @@ Robot Gateway/Publisher
   -> REST active mission lookup
   -> WebRTC signaling WebSocket
   -> app-server internal SFU
-  -> Browser 관제 UI / recorder-worker
+  -> Browser 관제 UI
 ```
 
 역할:
@@ -264,13 +279,13 @@ Robot Gateway/Publisher
 | Robot Gateway/Publisher | media track과 DataChannel을 publish |
 | app-server | REST API, robot token 검증, mission 관리, WebRTC signaling, SFU |
 | Browser 관제 UI | operator subscriber, 선택한 robotCode의 live stream 표시 |
-| recorder-worker | recorder subscriber, 모든 robotCode의 media/data 저장 |
 | TURN | relay-only ICE 경로 |
+
+관제 서버 내부 저장/녹화 진단 API는 로봇팀 구현 계약에 포함하지 않는다. 로봇팀은 `/api/v1/robot/*` 응답과 WebSocket signaling 메시지만 기준으로 삼는다.
 
 WebRTC room 규칙:
 
 - room id는 `missionCode`다.
-- `roomId`는 `missionCode`와 같아야 한다.
 - `robotCode`는 room id에 합치지 않는다.
 - 같은 mission room에 여러 robot publisher가 동시에 들어올 수 있다.
 - robot identity는 REST token으로 mission 조회 시 검증하고, SFU publish 단계에서는 active mission assignment를 서버가 다시 확인한다.
@@ -326,7 +341,7 @@ Common error response body:
 
 ```yaml
 method: POST
-path: /api/robot-gateway/heartbeat
+path: /api/v1/robot/heartbeat
 auth: Bearer token required
 contentType: application/json
 ```
@@ -362,7 +377,6 @@ Request example:
 
 | Field | Type | Values / Example | Description |
 | --- | --- | --- | --- |
-| `robotId` | string(uuid) | `8f0e4c69-8c9b-40ef-a3fe-7b8a7ad9a111` | 관제 서버 내부 robot id |
 | `robotCode` | string | `robot-123` | heartbeat가 반영된 robot code |
 | `status` | string | `online`, `offline`, `fault` | 서버가 저장한 장치 상태. `state` 정규화 결과 |
 | `serverTime` | string(date-time) | `2026-05-27T05:00:00.120Z` | 서버 응답 시각 |
@@ -371,7 +385,6 @@ Request example:
 
 ```json
 {
-  "robotId": "8f0e4c69-8c9b-40ef-a3fe-7b8a7ad9a111",
   "robotCode": "robot-123",
   "status": "online",
   "serverTime": "2026-05-27T05:00:00.120Z"
@@ -398,7 +411,7 @@ Client behavior:
 
 ```yaml
 method: GET
-path: /api/robot-gateway/mission
+path: /api/v1/robot/mission
 auth: Bearer token required
 ```
 
@@ -412,7 +425,7 @@ Request example:
 
 ```yaml
 method: GET
-url: http://192.168.20.12:18080/api/robot-gateway/mission
+url: http://192.168.20.12:18080/api/v1/robot/mission
 headers:
   Authorization: Bearer {robotToken}
 ```
@@ -421,8 +434,8 @@ headers:
 
 ```json
 {
-  "missionId": null,
-  "missionStatus": "none"
+  "missionStatus": "none",
+  "serverTime": "2026-06-01T01:30:00.000Z"
 }
 ```
 
@@ -430,13 +443,11 @@ headers:
 
 ```json
 {
-  "missionId": "a8c2d4e1-25ef-4720-8d8c-2f4f5d0a1001",
   "missionCode": "mission-123",
   "missionStatus": "active",
-  "robotCode": "robot-123",
-  "roomId": "mission-123",
+  "serverTime": "2026-06-01T01:30:00.000Z",
   "sfu": {
-    "signalingUrl": "ws://192.168.20.12:18080/sfu/robot/ws?room=mission-123",
+    "signalingUrl": "ws://192.168.20.12:18080/api/v1/robot/sfu/ws?room=mission-123",
     "iceTransportPolicy": "relay"
   },
   "turnServers": [
@@ -447,10 +458,7 @@ headers:
     }
   ],
   "tracks": ["track.video_1", "track.video_2", "track.audio_1", "track.audio_2"],
-  "dataChannels": ["channel.telemetry", "channel.spatial", "channel.event", "channel.control"],
-  "videoPolicy": {
-    "mode": "robot_defined"
-  }
+  "dataChannels": ["channel.telemetry", "channel.spatial", "channel.event", "channel.control"]
 }
 ```
 
@@ -458,19 +466,16 @@ Active mission response schema:
 
 | Field | Type | Values / Example | Description |
 | --- | --- | --- | --- |
-| `missionId` | string(uuid) | `a8c2d4e1-25ef-4720-8d8c-2f4f5d0a1001` | 관제 서버 내부 mission id |
 | `missionCode` | string | `mission-123` | 사람이 읽는 mission code이며 WebRTC room id |
 | `missionStatus` | string | `active`, `none` | gateway mission 조회 응답에서는 `active`이면 WebRTC publish 가능. `none`은 active mission 없음. 내부 mission lifecycle 값은 `ready`, `active`, `ended` |
-| `robotCode` | string | `robot-123` | token으로 인증된 robot code. 로깅과 WebRTC publisher identity에 사용 |
-| `roomId` | string | `mission-123` | WebRTC room id. `missionCode`와 같아야 함 |
-| `sfu.signalingUrl` | string | `ws://192.168.20.12:18080/sfu/robot/ws?room=mission-123` | Robot publisher WebSocket URL. client가 재구성하지 않고 그대로 사용 |
+| `serverTime` | string(date-time) | `2026-06-01T01:30:00.000Z` | 서버 응답 시각 |
+| `sfu.signalingUrl` | string | `ws://192.168.20.12:18080/api/v1/robot/sfu/ws?room=mission-123` | Robot publisher WebSocket URL. client가 재구성하지 않고 그대로 사용 |
 | `sfu.iceTransportPolicy` | string | `relay` | 현재 `relay`만 사용 |
 | `turnServers[].urls` | string[] | `["turn:192.168.20.12:3478?transport=udp"]` | TURN URL 목록 |
 | `turnServers[].username` | string | `robot-center-turn` | TURN username |
 | `turnServers[].credential` | string | `rc-turn-2026-0527` | TURN password |
 | `tracks` | string[] | `track.video_1`, `track.video_2`, `track.audio_1`, `track.audio_2` | canonical media track slot 목록 |
 | `dataChannels` | string[] | `channel.telemetry`, `channel.spatial`, `channel.event`, `channel.control` | canonical DataChannel label 목록 |
-| `videoPolicy.mode` | string | `robot_defined` | 해상도/FPS는 로봇 송신 설정을 따름 |
 
 Error responses:
 
@@ -484,7 +489,7 @@ Client behavior:
 - `missionStatus=none`이면 WebRTC publish를 시작하지 않는다.
 - active mission이 없을 때도 heartbeat와 mission 조회를 계속 재시도한다.
 - active mission이 오면 `sfu.signalingUrl`, `turnServers`를 그대로 사용한다.
-- `roomId`는 `missionCode`와 같아야 한다.
+- `robotCode`, `robotId`, `sessionId`, `roomId`를 request query나 signaling payload에 별도로 넣지 않는다.
 
 ## 6. WebRTC Signaling
 
@@ -506,7 +511,7 @@ headers:
 
 ```yaml
 method: GET
-url: ws://192.168.20.12:18080/sfu/robot/ws?room=mission-123
+url: ws://192.168.20.12:18080/api/v1/robot/sfu/ws?room=mission-123
 headers:
   Authorization: Bearer {robotToken}
 ```
@@ -589,10 +594,10 @@ ICE candidate payload는 browser/Pion 표준 candidate 필드를 사용한다.
 
 | Label | Expected messageType | 용도 |
 | --- | --- | --- |
-| `channel.telemetry` | `telemetry` | GPS, battery, 환경값 같은 저속 상태. recorder-worker가 sensor API로 저장 |
-| `channel.spatial` | `spatial` 또는 domain-specific type | IMU, odometry, point cloud descriptor. recorder-worker가 sensor API로 저장 |
-| `channel.event` | `event` 또는 domain-specific type | alarm, fault, detection, mission event. 현재 recorder-worker 저장 대상은 아님 |
-| `channel.control` | reserved | reserved control/ack side channel. 현재 recorder-worker 저장 대상은 아님 |
+| `channel.telemetry` | `telemetry` | GPS, battery, 가스 같은 저속 상태. 이번 테스트에서 payload schema 확정 |
+| `channel.spatial` | `spatial` 또는 domain-specific type | IMU, odometry, point cloud descriptor. 이번 테스트에서는 label 예약 |
+| `channel.event` | `event` 또는 domain-specific type | alarm, fault, detection, mission event. 이번 테스트에서는 label 예약 |
+| `channel.control` | reserved | reserved control/ack side channel. 이번 테스트에서는 label 예약 |
 
 ### 8.1 Payload schema 확정 범위
 
@@ -648,10 +653,8 @@ DataChannel 생성과 전송 시작 조건:
 | SFU `detected` | 로봇 offer의 DataChannel/SCTP 협상이 서버에 도달함 |
 | SFU `open` | 로봇 publisher와 SFU 사이 DataChannel이 실제 OPEN됨 |
 | SFU `lastMessageAt` | SFU가 로봇 DataChannel payload를 실제 수신함 |
-| recorder `open` | SFU가 recorder subscriber로 만든 downstream DataChannel이 OPEN됨 |
-| recorder `lastDataAt` | recorder가 SFU에서 forward된 payload를 실제 수신함 |
 
-`lastDataAt`은 DataChannel open 시각이 아니라, 실제 메시지 수신 시각이다.
+로봇팀은 Robot Publisher local open callback과 SFU publisher 구간 상태만 기준으로 본다. 관제 내부 subscriber/downstream 상태는 로봇팀 판정 기준이 아니다.
 
 ### 8.3 `channel.telemetry` payload schema
 
@@ -787,26 +790,21 @@ Robot gateway:
 
 - heartbeat 성공
 - mission 조회가 `missionStatus=active` 반환
-- `roomId == missionCode`
+- mission 응답의 `sfu.signalingUrl`로 WebSocket 연결
 - WebSocket signaling 연결 성공
 
 SFU/WebRTC:
 
-- `/api/system/status`의 `sfuRooms`에 mission room 표시
-- 해당 room의 `robotCount`가 송신 로봇 수와 일치
-- published tracks에 `robotCode:track.video_1` 표시
 - Robot publisher ICE state가 `connected` 또는 `completed`
-- `GET /api/missions/{missionCode}/live-status`에서 robot별 `stream.state=streaming`
-- recorder-worker health에서 `iceState=connected`, 해당 robot의 track/data 수신 시각 확인
-- recorder-worker health에서 `appendFailedCount=0`
+- Robot publisher local DataChannel `channel.telemetry` open callback 발생
+- Robot publisher에서 RGB/Thermal/Audio track 송신 시작
+- Robot publisher에서 telemetry 첫 payload send 성공
 
-Sensor/UI:
+관제팀 확인:
 
-- `sensor-latest`에 robotCode별 sensor 목록 표시
+- 관제 UI에서 RGB/Thermal 영상 표시
 - GPS/position sample이 있으면 관제 UI 위치 영역에 표시
-- RGB/Thermal 영상이 live 화면에 표시
-- recording 상태가 `recording` 또는 기대 상태로 표시
-- recorder runtime 또는 object storage에 robot별 recording artifact가 생성됨
+- telemetry sample이 있으면 관제 UI 센서 영역에 표시
 
 ## 10. 장애 대응
 
@@ -817,11 +815,9 @@ Sensor/UI:
 | WebSocket 400 | mission 응답의 `sfu.signalingUrl`을 사용하지 않았거나 필수 query 누락 |
 | `publish-error` | robot이 active mission에 배정되지 않았거나 room이 missionCode와 다름 |
 | ICE `failed` | mission 응답의 `turnServers` 사용 여부, UDP 3478, relay port range, 방화벽, relay candidate 생성 여부 |
-| room은 보이나 영상 없음 | track publish, codec negotiation, track label/order |
+| WebSocket은 연결됐지만 영상 없음 | track publish, codec negotiation, track label/order |
 | 영상은 보이나 센서 없음 | DataChannel label, open 상태, payload envelope |
 | 센서는 오나 위치 없음 | position sensorId/value shape |
-| recorder가 idle | recorder-worker join, active recording target, ICE state |
-| recorder는 connected인데 저장 실패 | recorder health의 `appendFailedCount`, `lastAppendError`, recording artifact 생성 여부 |
 
 ## 11. 로봇팀이 관제팀에 공유할 로그
 
@@ -846,15 +842,14 @@ Sensor/UI:
 
 - 테스트 일시
 - robotCode
-- missionCode, missionId
+- missionCode
 - 로봇팀 publisher 버전
 - heartbeat 결과
 - signaling 연결 결과
 - ICE state
 - track 수와 DataChannel 수
 - RGB/Thermal 표시 여부
-- sensor-latest 저장 여부
-- recorder chunk 생성 여부
+- telemetry send 여부
 - 실패 로그와 재현 절차
 
 ## 13. 질문과 답변
@@ -868,11 +863,11 @@ Sensor/UI:
 | Robot 생성 | HTTP | `POST http://192.168.20.12:18080/api/robots` |
 | Mission 생성 | HTTP | `POST http://192.168.20.12:18080/api/missions` |
 | Mission 시작 | HTTP | `POST http://192.168.20.12:18080/api/missions/{missionCode}/start` |
-| Heartbeat | HTTP | `POST http://192.168.20.12:18080/api/robot-gateway/heartbeat` |
-| Active mission 조회 | HTTP | `GET http://192.168.20.12:18080/api/robot-gateway/mission` |
+| Heartbeat | HTTP | `POST http://192.168.20.12:18080/api/v1/robot/heartbeat` |
+| Active mission 조회 | HTTP | `GET http://192.168.20.12:18080/api/v1/robot/mission` |
 | Robot WebRTC signaling | WebSocket | mission 조회 응답의 `sfu.signalingUrl` |
 
-`missionCode=mission-123` 예시의 signaling URL은 `ws://192.168.20.12:18080/sfu/robot/ws?room=mission-123` 형태다. 로봇 구현은 이 값을 직접 조립하지 말고 mission 조회 응답의 `sfu.signalingUrl`을 그대로 사용한다.
+`missionCode=mission-123` 예시의 signaling URL은 `ws://192.168.20.12:18080/api/v1/robot/sfu/ws?room=mission-123` 형태다. 로봇 구현은 이 값을 직접 조립하지 말고 mission 조회 응답의 `sfu.signalingUrl`을 그대로 사용한다.
 
 ### Q2. WebSocket인가, HTTP POST인가?
 
@@ -970,6 +965,6 @@ token은 HTTP header에 넣는다. URL query, WebSocket message payload, DataCha
 | `robot_id` | No | 관제 서버 내부 UUID다. 로봇팀 구현 입력값으로 쓰지 않는다. |
 | `robotCode` | 직접 입력 최소화 | token으로 서버가 판단한다. 화면/로그 식별용으로만 다룬다. WebSocket query에 붙이지 않는다. |
 | `session_id` | No | 클라이언트가 만들 필요 없다. WebSocket join 후 서버가 `peerId`를 내려준다. |
-| `room_id` | Yes, but response-driven | room id는 `missionCode`와 같은 값이다. 직접 새로 정하지 말고 mission 응답의 `roomId` 또는 `sfu.signalingUrl`을 사용한다. |
+| `room_id` | No separate input | room id는 `missionCode`와 같은 값이며 `sfu.signalingUrl` query에 포함되어 내려온다. 직접 새로 정하지 않는다. |
 
-정리하면, 테스트 시작 전 필요한 고정 입력값은 `serverUrl`이다. `POST /api/robots`로 자기 테스트용 `robotCode`와 `robotToken`을 만들고, `POST /api/missions`와 start API로 자기 테스트용 `missionCode`를 만든다. Robot publisher 실행 시에는 `serverUrl`과 `robotToken`을 보관하면 되고, active mission이 있으면 서버가 `robotCode`, `missionCode`, `roomId`, `sfu.signalingUrl`, `turnServers`를 응답으로 내려준다.
+정리하면, 테스트 시작 전 필요한 고정 입력값은 `serverUrl`이다. `POST /api/robots`로 자기 테스트용 `robotCode`와 `robotToken`을 만들고, `POST /api/missions`와 start API로 자기 테스트용 `missionCode`를 만든다. Robot publisher 실행 시에는 `serverUrl`과 `robotToken`을 보관하면 되고, active mission이 있으면 서버가 `missionCode`, `sfu.signalingUrl`, `turnServers`를 응답으로 내려준다.

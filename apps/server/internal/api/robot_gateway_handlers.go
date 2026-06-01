@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"robot-center/apps/server/internal/domain"
 	"robot-center/apps/server/internal/sfu"
 	"robot-center/apps/server/internal/store"
 	"robot-center/apps/server/internal/utils"
@@ -18,7 +19,7 @@ type heartbeatRequest struct {
 	SentAt         time.Time `json:"sentAt"`
 }
 
-func (s *Server) handleRobotGatewayHeartbeat(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleRobotAPIHeartbeat(w http.ResponseWriter, r *http.Request) {
 	var request heartbeatRequest
 	if err := decodeJSON(r, &request); err != nil {
 		writeError(w, http.StatusBadRequest, err)
@@ -37,16 +38,15 @@ func (s *Server) handleRobotGatewayHeartbeat(w http.ResponseWriter, r *http.Requ
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"robotId":    robot.ID,
 		"robotCode":  robot.RobotCode,
 		"status":     robot.DeviceState,
 		"serverTime": time.Now().UTC().Format(time.RFC3339Nano),
 	})
 }
 
-func (s *Server) handleRobotGatewayMission(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleRobotAPIMission(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(r.URL.Query().Get("robotCode")) != "" {
-		writeError(w, http.StatusBadRequest, errors.New("robotCode query is not allowed for robot gateway mission lookup"))
+		writeError(w, http.StatusBadRequest, errors.New("robotCode query is not allowed for robot API mission lookup"))
 		return
 	}
 	mission, found, err := s.services.Missions.FindActiveMissionForRobot(r.Context(), bearerToken(r))
@@ -56,20 +56,21 @@ func (s *Server) handleRobotGatewayMission(w http.ResponseWriter, r *http.Reques
 	}
 	if !found {
 		writeJSON(w, http.StatusOK, map[string]any{
-			"missionId":     nil,
 			"missionStatus": "none",
+			"serverTime":    time.Now().UTC().Format(time.RFC3339Nano),
 		})
 		return
 	}
 
+	writeJSON(w, http.StatusOK, s.robotMissionResponse(mission))
+}
+
+func (s *Server) robotMissionResponse(mission domain.Mission) map[string]any {
 	roomID := mission.MissionCode
-	robotCode := mission.RobotCode
-	writeJSON(w, http.StatusOK, map[string]any{
-		"missionId":     mission.ID,
+	return map[string]any{
 		"missionCode":   mission.MissionCode,
 		"missionStatus": mission.Status,
-		"robotCode":     robotCode,
-		"roomId":        roomID,
+		"serverTime":    time.Now().UTC().Format(time.RFC3339Nano),
 		"sfu": map[string]any{
 			"signalingUrl":       s.config.SFURobotWebSocketURL() + "?room=" + url.QueryEscape(roomID),
 			"iceTransportPolicy": "relay",
@@ -93,10 +94,7 @@ func (s *Server) handleRobotGatewayMission(w http.ResponseWriter, r *http.Reques
 			sfu.StreamRoleChannelEvent,
 			sfu.StreamRoleChannelControl,
 		},
-		"videoPolicy": map[string]string{
-			"mode": "robot_defined",
-		},
-	})
+	}
 }
 
 func bearerToken(r *http.Request) string {
