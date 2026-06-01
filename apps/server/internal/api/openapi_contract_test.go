@@ -24,8 +24,6 @@ func TestOpenAPIContractUsesRoleBasedPaths(t *testing.T) {
 	paths := openAPI["paths"].(map[string]any)
 	expectedPaths := []string{
 		"/healthz",
-		"/swagger/index.html",
-		"/swagger/openapi.json",
 		"/api/v1/system/status",
 		"/api/v1/system/object-storage/clear",
 		"/api/v1/operator/rtc-config",
@@ -65,8 +63,8 @@ func TestOpenAPIContractUsesRoleBasedPaths(t *testing.T) {
 		}
 	}
 	for path := range paths {
-		if path != "/healthz" && !strings.HasPrefix(path, "/api/v1/") && !strings.HasPrefix(path, "/swagger/") {
-			t.Fatalf("expected role-based /api/v1 path, /swagger path, or /healthz, got %s", path)
+		if path != "/healthz" && !strings.HasPrefix(path, "/api/v1/") {
+			t.Fatalf("expected role-based /api/v1 path or /healthz, got %s", path)
 		}
 		if strings.Contains(path, "/api/v1/recoder/") {
 			t.Fatalf("recoder typo must not be documented, got %s", path)

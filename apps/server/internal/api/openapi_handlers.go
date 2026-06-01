@@ -36,12 +36,6 @@ func (s *Server) handleSwaggerUI(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write([]byte(swaggerUIHTML))
 }
 
-func redirectTo(path string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, path, http.StatusMovedPermanently)
-	}
-}
-
 func (s *Server) handleOpenAPIJSON(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, s.openAPISpec())
 }
@@ -80,8 +74,6 @@ func (s *Server) openAPISpec() map[string]any {
 		},
 		"paths": map[string]any{
 			"/healthz":                                 openAPIHealthPath(),
-			"/swagger/index.html":                      openAPIDocsPath(),
-			"/swagger/openapi.json":                    openAPIOpenAPIJSONPath(),
 			"/api/v1/system/status":                    openAPISystemStatusPath(),
 			"/api/v1/system/object-storage/clear":      openAPIObjectStorageClearPath(),
 			"/api/v1/operator/rtc-config":              openAPIRTCConfigPath(),
@@ -164,18 +156,6 @@ func openAPIServerURL(publicURL string) string {
 func openAPIHealthPath() map[string]any {
 	return map[string]any{
 		"get": openAPIOperation("시스템 API", "getHealth", "서버 health 확인", "app-server health 상태를 반환합니다.", "HealthResponse", ""),
-	}
-}
-
-func openAPIDocsPath() map[string]any {
-	return map[string]any{
-		"get": openAPIOperation("시스템 API", "getSwaggerDocs", "Swagger UI 조회", "관제 서버 OpenAPI 문서를 확인하는 Swagger UI HTML을 반환합니다.", "", ""),
-	}
-}
-
-func openAPIOpenAPIJSONPath() map[string]any {
-	return map[string]any{
-		"get": openAPIOperation("시스템 API", "getOpenAPIJSON", "OpenAPI JSON 조회", "관제 서버 HTTP/WebSocket API OpenAPI JSON을 반환합니다.", "", ""),
 	}
 }
 
