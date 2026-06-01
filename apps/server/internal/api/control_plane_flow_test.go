@@ -55,12 +55,39 @@ func TestControlPlaneFlow(t *testing.T) {
 		}
 	}
 	paths := openAPI["paths"].(map[string]any)
-	if _, ok := paths["/api/v1/robot/mission"]; !ok {
-		t.Fatalf("expected robot mission API in OpenAPI paths, got %#v", paths)
-	}
-	for _, privatePath := range []string{"/api/system/status", "/api/recorder/tick"} {
-		if _, ok := paths[privatePath]; ok {
-			t.Fatalf("OpenAPI should not publish removed or private path %s", privatePath)
+	for _, expectedPath := range []string{
+		"/healthz",
+		"/api/system/status",
+		"/api/system/object-storage/clear",
+		"/api/rtc-config",
+		"/api/recording-targets",
+		"/api/sensor-descriptors",
+		"/api/sensor-samples",
+		"/api/sensor-latest",
+		"/api/recordings",
+		"/api/recorder/tick",
+		"/api/recorder/finalization-jobs/claim",
+		"/api/recorder/finalization-jobs/{jobID}/completed",
+		"/api/recorder/finalization-jobs/{jobID}/partial",
+		"/api/recorder/finalization-jobs/{jobID}/failed",
+		"/api/recorder/chunks/{chunkID}/uploaded",
+		"/api/recorder/chunks/{chunkID}/files/{fileType}/uploaded",
+		"/api/robots",
+		"/api/robots/{robotCode}",
+		"/api/robots/{robotCode}/connection-info",
+		"/api/robots/{robotCode}/connection-token",
+		"/api/missions",
+		"/api/missions/{missionCode}/live-status",
+		"/api/missions/{missionCode}/start",
+		"/api/missions/{missionCode}/end",
+		"/api/v1/robot/heartbeat",
+		"/api/v1/robot/mission",
+		"/api/v1/robot/sfu/ws",
+		"/sfu/operator/ws",
+		"/sfu/recorder/ws",
+	} {
+		if _, ok := paths[expectedPath]; !ok {
+			t.Fatalf("expected OpenAPI path %s, got %#v", expectedPath, paths)
 		}
 	}
 	swaggerResponse, err := http.Get(server.URL + "/api/docs")
