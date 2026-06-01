@@ -21,7 +21,7 @@ const swaggerUIHTML = `<!doctype html>
   <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
   <script>
     window.ui = SwaggerUIBundle({
-      url: "/api/docs/openapi.json",
+      url: "/api/v1/system/openapi.json",
       dom_id: "#swagger-ui",
       deepLinking: true,
       persistAuthorization: true
@@ -46,7 +46,7 @@ func (s *Server) openAPISpec() map[string]any {
 		"info": map[string]any{
 			"title":       "Robot Center API",
 			"version":     "0.1.0",
-			"description": "관제 서버 API 문서입니다. 로봇 런타임 API는 `/api/v1/robot/*` 하위 경로로 분리되며, robotToken으로 인증된 자기 로봇 범위의 정보만 반환합니다.",
+			"description": "관제 서버 API 문서입니다. API는 actor 책임 기준으로 `/api/v1/robot/*`, `/api/v1/recorder/*`, `/api/v1/operator/*`, `/api/v1/system/*` namespace로 분리됩니다.",
 		},
 		"servers": []map[string]any{
 			{
@@ -57,84 +57,77 @@ func (s *Server) openAPISpec() map[string]any {
 		"tags": []map[string]any{
 			{
 				"name":        "시스템 API",
-				"description": "관제 서버 상태, WebRTC 설정, 운영성 작업 API입니다.",
+				"description": "전체 시스템 상태, 운영성 작업, API 문서 endpoint입니다.",
 			},
 			{
-				"name":        "로봇 런타임 API",
+				"name":        "로봇 API",
 				"description": "로봇이 운용 중 호출하는 Bearer token 기반 API입니다. 서버는 token으로 로봇 신원을 판별합니다.",
 			},
 			{
-				"name":        "로봇 관리 API",
-				"description": "관제에서 로봇을 등록하고 연결 정보를 관리하는 API입니다.",
+				"name":        "Recorder API",
+				"description": "recorder-worker가 녹화 대상 조회, chunk 상태 보고, 센서 payload 저장에 사용하는 내부 API입니다.",
 			},
 			{
-				"name":        "임무 관리 API",
-				"description": "관제에서 임무를 생성하고 상태를 전환하는 API입니다.",
-			},
-			{
-				"name":        "센서 API",
-				"description": "센서 descriptor, sample, latest 조회와 저장 API입니다.",
-			},
-			{
-				"name":        "녹화 API",
-				"description": "녹화 chunk 조회와 recorder-worker callback API입니다.",
-			},
-			{
-				"name":        "SFU WebSocket",
-				"description": "관제 UI와 recorder-worker의 WebRTC signaling WebSocket endpoint입니다.",
+				"name":        "Operator API",
+				"description": "관제 브라우저가 로봇, 임무, 실시간 상태, 센서, 녹화 조회와 WebRTC subscribe에 사용하는 API입니다.",
 			},
 		},
 		"paths": map[string]any{
-			"/healthz":                              openAPIHealthPath(),
-			"/api/system/status":                    openAPISystemStatusPath(),
-			"/api/system/object-storage/clear":      openAPIObjectStorageClearPath(),
-			"/api/rtc-config":                       openAPIRTCConfigPath(),
-			"/api/recording-targets":                openAPIRecordingTargetsPath(),
-			"/api/sensor-descriptors":               openAPISensorDescriptorsPath(),
-			"/api/sensor-samples":                   openAPISensorSamplesPath(),
-			"/api/sensor-latest":                    openAPISensorLatestPath(),
-			"/api/recordings":                       openAPIRecordingsPath(),
-			"/api/recorder/tick":                    openAPIRecorderTickPath(),
-			"/api/recorder/finalization-jobs/claim": openAPIRecorderFinalizationJobsClaimPath(),
-			"/api/recorder/finalization-jobs/{jobID}/completed": openAPIRecorderFinalizationJobStatusPath(
+			"/healthz":                                 openAPIHealthPath(),
+			"/api/v1/system/docs":                      openAPIDocsPath(),
+			"/api/v1/system/openapi.json":              openAPIOpenAPIJSONPath(),
+			"/api/v1/system/status":                    openAPISystemStatusPath(),
+			"/api/v1/system/object-storage/clear":      openAPIObjectStorageClearPath(),
+			"/api/v1/operator/rtc-config":              openAPIRTCConfigPath(),
+			"/api/v1/operator/sensor-descriptors":      openAPISensorDescriptorsPath(),
+			"/api/v1/operator/sensor-samples":          openAPISensorSamplesPath(),
+			"/api/v1/operator/sensor-latest":           openAPISensorLatestPath(),
+			"/api/v1/operator/recordings":              openAPIRecordingsPath(),
+			"/api/v1/recorder/recording-targets":       openAPIRecordingTargetsPath(),
+			"/api/v1/recorder/tick":                    openAPIRecorderTickPath(),
+			"/api/v1/recorder/finalization-jobs/claim": openAPIRecorderFinalizationJobsClaimPath(),
+			"/api/v1/recorder/finalization-jobs/{jobID}/completed": openAPIRecorderFinalizationJobStatusPath(
 				"markRecorderFinalizationJobCompleted",
 				"녹화 finalization job 완료 처리",
 			),
-			"/api/recorder/finalization-jobs/{jobID}/partial": openAPIRecorderFinalizationJobStatusPath(
+			"/api/v1/recorder/finalization-jobs/{jobID}/partial": openAPIRecorderFinalizationJobStatusPath(
 				"markRecorderFinalizationJobPartial",
 				"녹화 finalization job 부분 완료 처리",
 			),
-			"/api/recorder/finalization-jobs/{jobID}/failed": openAPIRecorderFinalizationJobStatusPath(
+			"/api/v1/recorder/finalization-jobs/{jobID}/failed": openAPIRecorderFinalizationJobStatusPath(
 				"markRecorderFinalizationJobFailed",
 				"녹화 finalization job 실패 처리",
 			),
-			"/api/recorder/chunks/{chunkID}/uploaded":                  openAPIRecorderChunkUploadedPath(),
-			"/api/recorder/chunks/{chunkID}/files/{fileType}/uploaded": openAPIRecorderFileUploadedPath(),
-			"/api/v1/robot/heartbeat":                                  openAPIRobotHeartbeatPath(),
-			"/api/v1/robot/mission":                                    openAPIRobotMissionPath(),
-			"/api/v1/robot/sfu/ws":                                     openAPIRobotSFUWebSocketPath(),
-			"/api/robots":                                              openAPIRobotsPath(),
-			"/api/robots/{robotCode}":                                  openAPIRobotItemPath(),
-			"/api/robots/{robotCode}/connection-info":                  openAPIRobotConnectionInfoPath(),
-			"/api/robots/{robotCode}/connection-token":                 openAPIRobotConnectionTokenPath(),
-			"/api/missions":                                            openAPIMissionsPath(),
-			"/api/missions/{missionCode}/live-status":                  openAPIMissionLiveStatusPath(),
-			"/api/missions/{missionCode}/start": openAPIMissionStatePath(
+			"/api/v1/recorder/chunks/{chunkID}/uploaded":                  openAPIRecorderChunkUploadedPath(),
+			"/api/v1/recorder/chunks/{chunkID}/files/{fileType}/uploaded": openAPIRecorderFileUploadedPath(),
+			"/api/v1/recorder/sensor-samples":                             openAPIRecorderSensorSamplesPath(),
+			"/api/v1/robot/heartbeat":                                     openAPIRobotHeartbeatPath(),
+			"/api/v1/robot/mission":                                       openAPIRobotMissionPath(),
+			"/api/v1/robot/sfu/ws":                                        openAPIRobotSFUWebSocketPath(),
+			"/api/v1/operator/robots":                                     openAPIRobotsPath(),
+			"/api/v1/operator/robots/{robotCode}":                         openAPIRobotItemPath(),
+			"/api/v1/operator/robots/{robotCode}/connection-info":         openAPIRobotConnectionInfoPath(),
+			"/api/v1/operator/robots/{robotCode}/connection-token":        openAPIRobotConnectionTokenPath(),
+			"/api/v1/operator/missions":                                   openAPIMissionsPath(),
+			"/api/v1/operator/missions/{missionCode}/live-status":         openAPIMissionLiveStatusPath(),
+			"/api/v1/operator/missions/{missionCode}/start": openAPIMissionStatePath(
 				"startMission",
 				"임무 시작",
 				"ready 상태의 임무를 active 상태로 전환합니다. 로봇은 `/api/v1/robot/mission`에서 자기 token에 연결된 active 임무만 조회합니다.",
 			),
-			"/api/missions/{missionCode}/end": openAPIMissionStatePath(
+			"/api/v1/operator/missions/{missionCode}/end": openAPIMissionStatePath(
 				"endMission",
 				"임무 종료",
 				"active 임무를 ended 상태로 전환하고 해당 임무의 SFU room을 닫습니다.",
 			),
-			"/sfu/operator/ws": openAPISFUWebSocketPath(
+			"/api/v1/operator/sfu/ws": openAPISFUWebSocketPath(
+				"Operator API",
 				"openOperatorSFUWebSocket",
 				"관제 UI SFU WebSocket 연결",
 				"관제 UI operator peer가 mission room에 subscribe하기 위한 WebSocket endpoint입니다.",
 			),
-			"/sfu/recorder/ws": openAPISFUWebSocketPath(
+			"/api/v1/recorder/sfu/ws": openAPISFUWebSocketPath(
+				"Recorder API",
 				"openRecorderSFUWebSocket",
 				"Recorder SFU WebSocket 연결",
 				"recorder-worker peer가 mission room에 subscribe하기 위한 WebSocket endpoint입니다.",
@@ -168,6 +161,18 @@ func openAPIHealthPath() map[string]any {
 	}
 }
 
+func openAPIDocsPath() map[string]any {
+	return map[string]any{
+		"get": openAPIOperation("시스템 API", "getSwaggerDocs", "Swagger UI 조회", "관제 서버 OpenAPI 문서를 확인하는 Swagger UI HTML을 반환합니다.", "", ""),
+	}
+}
+
+func openAPIOpenAPIJSONPath() map[string]any {
+	return map[string]any{
+		"get": openAPIOperation("시스템 API", "getOpenAPIJSON", "OpenAPI JSON 조회", "관제 서버 HTTP/WebSocket API OpenAPI JSON을 반환합니다.", "", ""),
+	}
+}
+
 func openAPISystemStatusPath() map[string]any {
 	return map[string]any{
 		"get": openAPIOperation("시스템 API", "getSystemStatus", "시스템 상태 조회", "app-server, recorder-worker, storage, SFU room 상태 요약을 반환합니다.", "SystemStatusResponse", ""),
@@ -182,76 +187,80 @@ func openAPIObjectStorageClearPath() map[string]any {
 
 func openAPIRTCConfigPath() map[string]any {
 	return map[string]any{
-		"get": openAPIOperation("시스템 API", "getRTCConfig", "관제 WebRTC 설정 조회", "관제 UI operator peer가 사용할 signaling URL과 ICE 서버 설정을 반환합니다.", "RTCConfigResponse", ""),
+		"get": openAPIOperation("Operator API", "getRTCConfig", "관제 WebRTC 설정 조회", "관제 UI operator peer가 사용할 signaling URL과 ICE 서버 설정을 반환합니다.", "RTCConfigResponse", ""),
 	}
 }
 
 func openAPIRecordingTargetsPath() map[string]any {
 	return map[string]any{
-		"get": openAPIOperation("녹화 API", "listRecordingTargets", "녹화 대상 임무 조회", "recorder-worker가 구독해야 하는 active mission 목록을 반환합니다.", "RecordingTargetsResponse", ""),
+		"get": openAPIOperation("Recorder API", "listRecordingTargets", "녹화 대상 임무 조회", "recorder-worker가 구독해야 하는 active mission 목록을 반환합니다.", "RecordingTargetsResponse", ""),
 	}
 }
 
 func openAPISensorDescriptorsPath() map[string]any {
 	return map[string]any{
-		"get":  openAPIOperationWithParameters("센서 API", "listSensorDescriptors", "센서 descriptor 조회", "missionId, robotCode 조건으로 센서 descriptor 목록을 조회합니다.", "SensorDescriptorsResponse", "", openAPISensorQueryParameters(false)),
-		"post": openAPIOperation("센서 API", "createSensorDescriptors", "센서 descriptor/sample 저장", "DataChannel sensor envelope를 저장합니다. /api/sensor-samples POST와 같은 처리 경로를 사용합니다.", "SensorSamplesResponse", "SensorEnvelopeRequest"),
+		"get": openAPIOperationWithParameters("Operator API", "listSensorDescriptors", "센서 descriptor 조회", "missionId, robotCode 조건으로 센서 descriptor 목록을 조회합니다.", "SensorDescriptorsResponse", "", openAPISensorQueryParameters(false)),
 	}
 }
 
 func openAPISensorSamplesPath() map[string]any {
 	return map[string]any{
-		"get":  openAPIOperationWithParameters("센서 API", "listSensorSamples", "센서 sample 조회", "missionId, robotCode, sensorId 조건과 limit으로 센서 sample 목록을 조회합니다.", "SensorSamplesResponse", "", append(openAPISensorQueryParameters(false), openAPIQueryParameter("sensorId", "조회할 sensorId", false), openAPIIntegerQueryParameter("limit", "조회 개수 제한", false))),
-		"post": openAPIOperation("센서 API", "createSensorSamples", "센서 sample 저장", "DataChannel sensor envelope를 저장합니다.", "SensorSamplesResponse", "SensorEnvelopeRequest"),
+		"get": openAPIOperationWithParameters("Operator API", "listSensorSamples", "센서 sample 조회", "missionId, robotCode, sensorId 조건과 limit으로 센서 sample 목록을 조회합니다.", "SensorSamplesResponse", "", append(openAPISensorQueryParameters(false), openAPIQueryParameter("sensorId", "조회할 sensorId", false), openAPIIntegerQueryParameter("limit", "조회 개수 제한", false))),
+	}
+}
+
+func openAPIRecorderSensorSamplesPath() map[string]any {
+	return map[string]any{
+		"post": openAPIOperation("Recorder API", "createSensorSamples", "센서 sample 저장", "recorder-worker가 DataChannel sensor envelope를 저장합니다.", "SensorSamplesResponse", "SensorEnvelopeRequest"),
 	}
 }
 
 func openAPISensorLatestPath() map[string]any {
 	return map[string]any{
-		"get": openAPIOperationWithParameters("센서 API", "listSensorLatest", "센서 latest 조회", "missionId, robotCode 조건으로 센서별 최신 sample을 조회합니다.", "SensorLatestEnvelope", "", openAPISensorQueryParameters(false)),
+		"get": openAPIOperationWithParameters("Operator API", "listSensorLatest", "센서 latest 조회", "missionId, robotCode 조건으로 센서별 최신 sample을 조회합니다.", "SensorLatestEnvelope", "", openAPISensorQueryParameters(false)),
 	}
 }
 
 func openAPIRecordingsPath() map[string]any {
 	return map[string]any{
-		"get": openAPIOperation("녹화 API", "listRecordings", "녹화 chunk 조회", "저장된 recording chunk와 파일 상태 목록을 반환합니다.", "RecordingsResponse", ""),
+		"get": openAPIOperation("Operator API", "listRecordings", "녹화 chunk 조회", "저장된 recording chunk와 파일 상태 목록을 반환합니다.", "RecordingsResponse", ""),
 	}
 }
 
 func openAPIRecorderTickPath() map[string]any {
 	return map[string]any{
-		"post": openAPIOperation("녹화 API", "applyRecorderTick", "녹화 tick 반영", "recorder-worker가 mission/robot 기준 chunk 생성을 요청합니다.", "RecordingTickResponse", "RecorderTickRequest"),
+		"post": openAPIOperation("Recorder API", "applyRecorderTick", "녹화 tick 반영", "recorder-worker가 mission/robot 기준 chunk 생성을 요청합니다.", "RecordingTickResponse", "RecorderTickRequest"),
 	}
 }
 
 func openAPIRecorderFinalizationJobsClaimPath() map[string]any {
 	return map[string]any{
-		"post": openAPIOperation("녹화 API", "claimRecorderFinalizationJobs", "녹화 finalization job claim", "recorder-worker가 처리할 finalization job을 claim합니다.", "RecorderFinalizationJobsResponse", "RecorderFinalizationClaimRequest"),
+		"post": openAPIOperation("Recorder API", "claimRecorderFinalizationJobs", "녹화 finalization job claim", "recorder-worker가 처리할 finalization job을 claim합니다.", "RecorderFinalizationJobsResponse", "RecorderFinalizationClaimRequest"),
 	}
 }
 
 func openAPIRecorderFinalizationJobStatusPath(operationID string, summary string) map[string]any {
 	return map[string]any{
-		"post": openAPIOperationWithParameters("녹화 API", operationID, summary, "recorder-worker가 finalization job 처리 결과를 보고합니다.", "OKResponse", "RecorderFinalizationStatusRequest", []map[string]any{openAPIPathParameter("jobID", "finalization job ID")}),
+		"post": openAPIOperationWithParameters("Recorder API", operationID, summary, "recorder-worker가 finalization job 처리 결과를 보고합니다.", "OKResponse", "RecorderFinalizationStatusRequest", []map[string]any{openAPIPathParameter("jobID", "finalization job ID")}),
 	}
 }
 
 func openAPIRecorderChunkUploadedPath() map[string]any {
 	return map[string]any{
-		"post": openAPIOperationWithParameters("녹화 API", "markRecorderChunkUploaded", "녹화 chunk 업로드 완료", "recorder-worker가 chunk manifest 업로드 완료를 보고합니다.", "RecordingChunkEnvelope", "RecorderUploadRequest", []map[string]any{openAPIPathParameter("chunkID", "recording chunk ID")}),
+		"post": openAPIOperationWithParameters("Recorder API", "markRecorderChunkUploaded", "녹화 chunk 업로드 완료", "recorder-worker가 chunk manifest 업로드 완료를 보고합니다.", "RecordingChunkEnvelope", "RecorderUploadRequest", []map[string]any{openAPIPathParameter("chunkID", "recording chunk ID")}),
 	}
 }
 
 func openAPIRecorderFileUploadedPath() map[string]any {
 	return map[string]any{
-		"post": openAPIOperationWithParameters("녹화 API", "markRecorderFileUploaded", "녹화 파일 업로드 완료", "recorder-worker가 chunk의 개별 파일 업로드 완료를 보고합니다.", "RecordingChunkEnvelope", "RecorderUploadRequest", []map[string]any{openAPIPathParameter("chunkID", "recording chunk ID"), openAPIPathParameter("fileType", "업로드된 파일 타입")}),
+		"post": openAPIOperationWithParameters("Recorder API", "markRecorderFileUploaded", "녹화 파일 업로드 완료", "recorder-worker가 chunk의 개별 파일 업로드 완료를 보고합니다.", "RecordingChunkEnvelope", "RecorderUploadRequest", []map[string]any{openAPIPathParameter("chunkID", "recording chunk ID"), openAPIPathParameter("fileType", "업로드된 파일 타입")}),
 	}
 }
 
 func openAPIRobotHeartbeatPath() map[string]any {
 	return map[string]any{
 		"post": map[string]any{
-			"tags":        []string{"로봇 런타임 API"},
+			"tags":        []string{"로봇 API"},
 			"operationId": "sendRobotHeartbeat",
 			"summary":     "로봇 heartbeat 전송",
 			"description": "로봇이 자신의 현재 상태를 주기적으로 관제 서버에 보고합니다. Authorization Bearer token으로 로봇을 식별하므로 요청 body에 robotCode를 넣지 않습니다.",
@@ -276,7 +285,7 @@ func openAPIRobotHeartbeatPath() map[string]any {
 func openAPIRobotMissionPath() map[string]any {
 	return map[string]any{
 		"get": map[string]any{
-			"tags":        []string{"로봇 런타임 API"},
+			"tags":        []string{"로봇 API"},
 			"operationId": "getRobotMission",
 			"summary":     "내 active 임무 조회",
 			"description": "robotToken에 연결된 로봇의 active 임무만 조회합니다. 다른 로봇이나 다른 임무 정보는 반환하지 않으며 robotCode 쿼리 파라미터는 허용하지 않습니다.",
@@ -293,7 +302,7 @@ func openAPIRobotMissionPath() map[string]any {
 func openAPIRobotSFUWebSocketPath() map[string]any {
 	return map[string]any{
 		"get": map[string]any{
-			"tags":        []string{"로봇 런타임 API"},
+			"tags":        []string{"로봇 API"},
 			"operationId": "openRobotSFUWebSocket",
 			"summary":     "로봇 SFU WebSocket 연결",
 			"description": "WebRTC signaling용 WebSocket upgrade 엔드포인트입니다. `/api/v1/robot/mission` 응답의 `sfu.signalingUrl` 값을 그대로 사용합니다. robotCode, sessionId, roomId는 별도로 전달하지 않습니다.",
@@ -319,9 +328,9 @@ func openAPIRobotSFUWebSocketPath() map[string]any {
 
 func openAPIRobotsPath() map[string]any {
 	return map[string]any{
-		"get": openAPIOperation("로봇 관리 API", "listRobots", "로봇 목록 조회", "관제 서버에 등록된 로봇 목록을 반환합니다.", "RobotsResponse", ""),
+		"get": openAPIOperation("Operator API", "listRobots", "로봇 목록 조회", "관제 서버에 등록된 로봇 목록을 반환합니다.", "RobotsResponse", ""),
 		"post": map[string]any{
-			"tags":        []string{"로봇 관리 API"},
+			"tags":        []string{"Operator API"},
 			"operationId": "createRobot",
 			"summary":     "로봇 등록",
 			"description": "관제 서버에 로봇을 등록하고 로봇 런타임이 사용할 연결 정보를 발급합니다. 이 API는 관리 API이며 로봇 런타임이 직접 호출하지 않습니다.",
@@ -344,28 +353,28 @@ func openAPIRobotsPath() map[string]any {
 func openAPIRobotItemPath() map[string]any {
 	parameters := []map[string]any{openAPIPathParameter("robotCode", "로봇 코드")}
 	return map[string]any{
-		"patch":  openAPIOperationWithParameters("로봇 관리 API", "updateRobot", "로봇 수정", "로봇 표시 이름과 모델명을 수정합니다.", "RobotEnvelope", "UpdateRobotRequest", parameters),
-		"delete": openAPIOperationWithParameters("로봇 관리 API", "archiveRobot", "로봇 보관 처리", "로봇을 active 목록에서 제외합니다.", "RobotEnvelope", "", parameters),
+		"patch":  openAPIOperationWithParameters("Operator API", "updateRobot", "로봇 수정", "로봇 표시 이름과 모델명을 수정합니다.", "RobotEnvelope", "UpdateRobotRequest", parameters),
+		"delete": openAPIOperationWithParameters("Operator API", "archiveRobot", "로봇 보관 처리", "로봇을 active 목록에서 제외합니다.", "RobotEnvelope", "", parameters),
 	}
 }
 
 func openAPIRobotConnectionInfoPath() map[string]any {
 	return map[string]any{
-		"get": openAPIOperationWithParameters("로봇 관리 API", "getRobotConnectionInfo", "로봇 연결 정보 조회", "로봇 런타임 접속에 필요한 serverUrl, robotCode, robotToken을 조회합니다.", "RobotConnectionInfoEnvelope", "", []map[string]any{openAPIPathParameter("robotCode", "로봇 코드")}),
+		"get": openAPIOperationWithParameters("Operator API", "getRobotConnectionInfo", "로봇 연결 정보 조회", "로봇 런타임 접속에 필요한 serverUrl, robotCode, robotToken을 조회합니다.", "RobotConnectionInfoEnvelope", "", []map[string]any{openAPIPathParameter("robotCode", "로봇 코드")}),
 	}
 }
 
 func openAPIRobotConnectionTokenPath() map[string]any {
 	return map[string]any{
-		"post": openAPIOperationWithParameters("로봇 관리 API", "rotateRobotConnectionToken", "로봇 token 재발급", "로봇 런타임 API용 robotToken을 재발급합니다.", "RobotConnectionInfoEnvelope", "", []map[string]any{openAPIPathParameter("robotCode", "로봇 코드")}),
+		"post": openAPIOperationWithParameters("Operator API", "rotateRobotConnectionToken", "로봇 token 재발급", "로봇 API용 robotToken을 재발급합니다.", "RobotConnectionInfoEnvelope", "", []map[string]any{openAPIPathParameter("robotCode", "로봇 코드")}),
 	}
 }
 
 func openAPIMissionsPath() map[string]any {
 	return map[string]any{
-		"get": openAPIOperation("임무 관리 API", "listMissions", "임무 목록 조회", "관제 서버에 등록된 임무 목록을 반환합니다.", "MissionsResponse", ""),
+		"get": openAPIOperation("Operator API", "listMissions", "임무 목록 조회", "관제 서버에 등록된 임무 목록을 반환합니다.", "MissionsResponse", ""),
 		"post": map[string]any{
-			"tags":        []string{"임무 관리 API"},
+			"tags":        []string{"Operator API"},
 			"operationId": "createMission",
 			"summary":     "임무 생성",
 			"description": "임무를 생성하고 하나 이상의 로봇을 배정합니다. 여러 로봇을 배정할 때는 robotCodes 배열을 사용합니다.",
@@ -388,14 +397,14 @@ func openAPIMissionsPath() map[string]any {
 
 func openAPIMissionLiveStatusPath() map[string]any {
 	return map[string]any{
-		"get": openAPIOperationWithParameters("임무 관리 API", "getMissionLiveStatus", "임무 live status 조회", "임무에 배정된 로봇의 연결, 스트림, 녹화 상태를 반환합니다.", "MissionLiveStatusResponse", "", []map[string]any{openAPIPathParameter("missionCode", "임무 코드")}),
+		"get": openAPIOperationWithParameters("Operator API", "getMissionLiveStatus", "임무 live status 조회", "임무에 배정된 로봇의 연결, 스트림, 녹화 상태를 반환합니다.", "MissionLiveStatusResponse", "", []map[string]any{openAPIPathParameter("missionCode", "임무 코드")}),
 	}
 }
 
 func openAPIMissionStatePath(operationID string, summary string, description string) map[string]any {
 	return map[string]any{
 		"post": map[string]any{
-			"tags":        []string{"임무 관리 API"},
+			"tags":        []string{"Operator API"},
 			"operationId": operationID,
 			"summary":     summary,
 			"description": description,
@@ -417,10 +426,10 @@ func openAPIMissionStatePath(operationID string, summary string, description str
 	}
 }
 
-func openAPISFUWebSocketPath(operationID string, summary string, description string) map[string]any {
+func openAPISFUWebSocketPath(tag string, operationID string, summary string, description string) map[string]any {
 	return map[string]any{
 		"get": map[string]any{
-			"tags":        []string{"SFU WebSocket"},
+			"tags":        []string{tag},
 			"operationId": operationID,
 			"summary":     summary,
 			"description": description,
@@ -446,12 +455,17 @@ func openAPIOperationWithParameters(tag string, operationID string, summary stri
 		"summary":     summary,
 		"description": description,
 		"responses": map[string]any{
-			"200": openAPIJSONResponse("요청이 성공했습니다.", "#/components/schemas/"+responseSchema),
 			"400": openAPIErrorResponse("요청 값이 잘못됐습니다."),
 			"404": openAPIErrorResponse("대상을 찾을 수 없습니다."),
 			"409": openAPIErrorResponse("현재 상태에서 요청을 처리할 수 없습니다."),
 			"500": openAPIErrorResponse("서버 내부 오류입니다."),
 		},
+	}
+	responses := operation["responses"].(map[string]any)
+	if responseSchema == "" {
+		responses["200"] = map[string]any{"description": "요청이 성공했습니다."}
+	} else {
+		responses["200"] = openAPIJSONResponse("요청이 성공했습니다.", "#/components/schemas/"+responseSchema)
 	}
 	if len(parameters) > 0 {
 		operation["parameters"] = parameters
@@ -560,8 +574,8 @@ func openAPIHealthResponseSchema() map[string]any {
 func openAPIRTCConfigResponseSchema() map[string]any {
 	return openAPIObjectSchema("관제 WebRTC 설정 응답입니다.", map[string]any{
 		"mode":                 openAPIStringProperty("WebRTC 모드입니다.", "sfu"),
-		"signalingUrl":         openAPIStringProperty("operator signaling URL입니다.", "ws://center.local/sfu/operator/ws"),
-		"operatorSignalingUrl": openAPIStringProperty("operator signaling URL입니다.", "ws://center.local/sfu/operator/ws"),
+		"signalingUrl":         openAPIStringProperty("operator signaling URL입니다.", "ws://center.local/api/v1/operator/sfu/ws"),
+		"operatorSignalingUrl": openAPIStringProperty("operator signaling URL입니다.", "ws://center.local/api/v1/operator/sfu/ws"),
 		"iceTransportPolicy":   openAPIStringProperty("ICE transport policy입니다.", "relay"),
 		"iceServers": map[string]any{
 			"type":  "array",
@@ -924,7 +938,7 @@ func openAPIRobotConnectionInfoSchema() map[string]any {
 		"properties": map[string]any{
 			"serverUrl":  openAPIStringProperty("관제 서버 public URL입니다.", "http://center.example.com"),
 			"robotCode":  openAPIStringProperty("생성된 로봇 코드입니다. 런타임 API에서는 식별용 파라미터로 보내지 않습니다.", "robot-004"),
-			"robotToken": openAPIStringProperty("로봇 런타임 API Authorization Bearer token 값입니다.", "rb_p0_example"),
+			"robotToken": openAPIStringProperty("로봇 API Authorization Bearer token 값입니다.", "rb_p0_example"),
 		},
 	}
 }

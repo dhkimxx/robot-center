@@ -1,11 +1,11 @@
 import { requestJson } from "./controlCenterApi.js";
 
 export function fetchRtcConfig() {
-  return requestJson("/api/rtc-config");
+  return requestJson("/api/v1/operator/rtc-config");
 }
 
 export function fetchMissionLiveStatus(missionCode) {
-  return requestJson(`/api/missions/${encodeURIComponent(missionCode)}/live-status`);
+  return requestJson(`/api/v1/operator/missions/${encodeURIComponent(missionCode)}/live-status`);
 }
 
 export function fetchSensorLatest(missionId, robotCode = "") {
@@ -13,5 +13,5 @@ export function fetchSensorLatest(missionId, robotCode = "") {
   if (robotCode) {
     params.set("robotCode", robotCode);
   }
-  return requestJson(`/api/sensor-latest?${params.toString()}`);
+  return requestJson(`/api/v1/operator/sensor-latest?${params.toString()}`);
 }

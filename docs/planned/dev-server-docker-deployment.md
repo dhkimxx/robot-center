@@ -1,7 +1,7 @@
 ---
 title: "dev-server-docker-deployment"
 created: 2026-05-27
-updated: '2026-05-27'
+updated: '2026-06-01'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>"]
 type: "runbook"
@@ -13,6 +13,7 @@ history:
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: separate public robot-facing and internal docker WebRTC addresses'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: document docker TURN NAT mapping and verified recorder runtime volume'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: expand TURN relay range for repeated WebRTC reconnect tests'
+- '2026-06-01 danya.kim <danya.kim@thundersoft.com>: update dev-server verification endpoints to role-based /api/v1 namespaces'
 ---
 
 # Dev Server Docker Deployment
@@ -156,8 +157,8 @@ docker compose \
 
 ```bash
 curl -fsS http://127.0.0.1:18080/healthz | python3 -m json.tool
-curl -fsS http://127.0.0.1:18080/api/system/status | python3 -m json.tool
-curl -fsS http://127.0.0.1:18080/api/rtc-config | python3 -m json.tool
+curl -fsS http://127.0.0.1:18080/api/v1/system/status | python3 -m json.tool
+curl -fsS http://127.0.0.1:18080/api/v1/operator/rtc-config | python3 -m json.tool
 curl -fsS http://127.0.0.1:18082/healthz | python3 -m json.tool
 ```
 
@@ -165,13 +166,13 @@ curl -fsS http://127.0.0.1:18082/healthz | python3 -m json.tool
 
 ```bash
 curl -fsS http://192.168.20.12:18080/healthz
-curl -fsS http://192.168.20.12:18080/api/rtc-config
+curl -fsS http://192.168.20.12:18080/api/v1/operator/rtc-config
 ```
 
-`/api/rtc-config`는 다음 public address를 반환해야 한다.
+`/api/v1/operator/rtc-config`는 다음 public address를 반환해야 한다.
 
 ```text
-signalingUrl: ws://192.168.20.12:18080/sfu/operator/ws
+signalingUrl: ws://192.168.20.12:18080/api/v1/operator/sfu/ws
 TURN URL: turn:192.168.20.12:3478?transport=udp
 iceTransportPolicy: relay
 ```
@@ -191,7 +192,7 @@ docker compose --env-file .env.dev-server -f deploy/docker-compose.yml --profile
 Robot 생성:
 
 ```bash
-curl -fsS -X POST http://127.0.0.1:18080/api/robots \
+curl -fsS -X POST http://127.0.0.1:18080/api/v1/operator/robots \
   -H 'Content-Type: application/json' \
   -d '{"displayName":"Robot Team Test 1","modelName":"Robot Team Gateway"}' \
   | python3 -m json.tool
@@ -200,7 +201,7 @@ curl -fsS -X POST http://127.0.0.1:18080/api/robots \
 Mission 생성:
 
 ```bash
-curl -fsS -X POST http://127.0.0.1:18080/api/missions \
+curl -fsS -X POST http://127.0.0.1:18080/api/v1/operator/missions \
   -H 'Content-Type: application/json' \
   -d '{
     "name": "Robot Team WebRTC Smoke",
@@ -214,7 +215,7 @@ curl -fsS -X POST http://127.0.0.1:18080/api/missions \
 Mission 시작:
 
 ```bash
-curl -fsS -X POST http://127.0.0.1:18080/api/missions/mission-001/start \
+curl -fsS -X POST http://127.0.0.1:18080/api/v1/operator/missions/mission-001/start \
   | python3 -m json.tool
 ```
 
@@ -225,7 +226,7 @@ curl -fsS -X POST http://127.0.0.1:18080/api/missions/mission-001/start \
 테스트 mission 종료:
 
 ```bash
-curl -fsS -X POST http://127.0.0.1:18080/api/missions/mission-001/end \
+curl -fsS -X POST http://127.0.0.1:18080/api/v1/operator/missions/mission-001/end \
   | python3 -m json.tool
 ```
 
@@ -253,10 +254,10 @@ docker compose \
 
 - `app-server`, `recorder-worker`, `turn`, `postgres`, `minio` container가 running/healthy
 - `http://192.168.20.12:18080` UI 접속 가능
-- `/api/system/status` OK
-- `/api/docs` 접속 가능
-- `/api/docs/openapi.json`에 `/api/system/status`, `/api/recorder/tick`, `/api/sensor-latest`, `/sfu/operator/ws`, `/sfu/recorder/ws` path 포함
-- `/api/rtc-config`가 `192.168.20.12` public URL을 반환
+- `/api/v1/system/status` OK
+- `/api/v1/system/docs` 접속 가능
+- `/api/v1/system/openapi.json`에 `/api/v1/system/status`, `/api/v1/recorder/tick`, `/api/v1/operator/sensor-latest`, `/api/v1/operator/sfu/ws`, `/api/v1/recorder/sfu/ws` path 포함
+- `/api/v1/operator/rtc-config`가 `192.168.20.12` public URL을 반환
 - robot 생성과 connection-info 조회 가능
 - mission 생성과 start 가능
 - Android Robot 2대 기준 heartbeat, mission 조회, WebSocket join, relay ICE connected 확인

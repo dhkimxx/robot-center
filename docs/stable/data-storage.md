@@ -499,7 +499,7 @@ Upload 상태 갱신:
 
 처리 규칙:
 
-- recorder-worker는 `POST /api/recorder/finalization-jobs/claim`으로 job을 claim한다.
+- recorder-worker는 `POST /api/v1/recorder/finalization-jobs/claim`으로 job을 claim한다.
 - DB claim은 row lock과 `SKIP LOCKED`를 사용해 여러 worker가 동시에 같은 job을 처리하지 않게 한다.
 - worker는 local spool에서 H264/Opus/DataChannel snapshot을 만들고 MP4/JSONL/manifest를 MinIO에 업로드한다.
 - 하나 이상의 media/data artifact가 업로드되고 manifest가 업로드되면 chunk는 `uploaded`, job은 `completed`가 된다.
@@ -522,7 +522,7 @@ Scale-out 주의:
 Live 관제 화면은 다음 API의 합성 결과를 기준으로 한다.
 
 ```http
-GET /api/missions/{missionCode}/live-status
+GET /api/v1/operator/missions/{missionCode}/live-status
 ```
 
 상태 판단 기준:
@@ -703,10 +703,10 @@ Browser
 2. app-server AutoMigrate 완료
 3. robot-001, robot-002 등록
 4. active mission에 두 robot assignment 존재
-5. `/api/missions/{missionCode}/live-status`에서 robot별 publisher/track/DataChannel 관측
+5. `/api/v1/operator/missions/{missionCode}/live-status`에서 robot별 publisher/track/DataChannel 관측
 6. sensor_descriptors가 robotCode + sensorId 기준으로 분리
 7. sensor_samples가 telemetry/spatial payload를 저장
-8. /api/sensor-latest가 같은 sensorId를 robot별로 분리
+8. /api/v1/operator/sensor-latest가 같은 sensorId를 robot별로 분리
 9. recording_chunks가 robot별 chunk를 생성
 10. storage_objects가 업로드 완료 파일만 object metadata로 보유
 11. MinIO bucket에 manifest/media/jsonl artifact 존재
@@ -716,6 +716,6 @@ Browser
 최근 확인된 기준:
 
 - `mission-005` room에서 `robot-001`, `robot-002`가 동시에 publish 가능
-- `/api/sensor-latest?missionId=mission-005`는 robot별 sensor row를 분리
+- `/api/v1/operator/sensor-latest?missionId=mission-005`는 robot별 sensor row를 분리
 - `channel.control`은 Python mock에서 자동 payload를 보내지 않음
 - recorder-worker는 `channel.telemetry`, `channel.spatial`을 PostgreSQL sensor API로 저장

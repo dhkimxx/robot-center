@@ -18,7 +18,7 @@ func newTestSFUServer(hub *Hub) *httptest.Server {
 			RobotCode: r.URL.Query().Get("robotCode"),
 		})
 	})
-	mux.HandleFunc("GET /sfu/operator/ws", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/v1/operator/sfu/ws", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("robotCode") != "" {
 			http.Error(w, "robotCode query is not allowed for operator websocket", http.StatusBadRequest)
 			return
@@ -28,7 +28,7 @@ func newTestSFUServer(hub *Hub) *httptest.Server {
 			Role:   "operator",
 		})
 	})
-	mux.HandleFunc("GET /sfu/recorder/ws", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/v1/recorder/sfu/ws", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("robotCode") != "" {
 			http.Error(w, "robotCode query is not allowed for recorder websocket", http.StatusBadRequest)
 			return

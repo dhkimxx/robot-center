@@ -54,8 +54,8 @@ Authorization: Bearer {robotToken}
 
 ```http
 GET /api/v1/robot/sfu/ws?room={missionCode}
-GET /sfu/operator/ws?room={missionCode}
-GET /sfu/recorder/ws?room={missionCode}
+GET /api/v1/operator/sfu/ws?room={missionCode}
+GET /api/v1/recorder/sfu/ws?room={missionCode}
 ```
 
 Robot:
@@ -124,12 +124,12 @@ turn:
 
 - app-server와 same-origin cookie 기반 session
 - `HttpOnly`, `Secure`, `SameSite=Lax` 또는 배포 구조에 맞는 SameSite 설정
-- `/sfu/operator/ws` handshake에서 session cookie 검증
+- `/api/v1/operator/sfu/ws` handshake에서 session cookie 검증
 
 대안:
 
 - REST API로 짧은 수명의 operator WS ticket 발급
-- `/sfu/operator/ws?room={missionCode}&ticket={ticket}` 형태로 연결
+- `/api/v1/operator/sfu/ws?room={missionCode}&ticket={ticket}` 형태로 연결
 - query ticket은 로그 노출 위험이 있으므로 TTL을 짧게 두고 기본안으로 쓰지 않는다.
 
 ### 3.3 Recorder는 service token을 사용한다
@@ -137,7 +137,7 @@ turn:
 recorder-worker는 server-side client이므로 WebSocket handshake에 `Authorization` header를 넣을 수 있다.
 
 ```http
-GET /sfu/recorder/ws?room={missionCode}
+GET /api/v1/recorder/sfu/ws?room={missionCode}
 Authorization: Bearer {recorderServiceToken}
 ```
 
@@ -150,7 +150,7 @@ service token은 `.env` 또는 secret manager로 관리한다.
 P0 내부 테스트:
 
 ```http
-GET /sfu/operator/ws?room={missionCode}
+GET /api/v1/operator/sfu/ws?room={missionCode}
 Cookie: operator session
 ```
 
@@ -169,13 +169,13 @@ Cookie: operator session
 P0 내부 테스트:
 
 ```http
-GET /sfu/recorder/ws?room={missionCode}
+GET /api/v1/recorder/sfu/ws?room={missionCode}
 ```
 
 향후 인증 활성화 시:
 
 ```http
-GET /sfu/recorder/ws?room={missionCode}
+GET /api/v1/recorder/sfu/ws?room={missionCode}
 Authorization: Bearer {recorderServiceToken}
 ```
 
@@ -253,7 +253,7 @@ Authorization: Bearer {recorderServiceToken}
 
 목표:
 
-- `/sfu/recorder/ws`를 service token으로 보호한다.
+- `/api/v1/recorder/sfu/ws`를 service token으로 보호한다.
 - recorder-worker만 recorder role로 join할 수 있게 한다.
 
 변경 대상:
@@ -275,7 +275,7 @@ RECORDER_WS_TOKEN=server-managed-recorder-token
 
 - app-server config에 `RecorderWebSocketToken` 추가
 - recorder-worker config에 같은 token 추가
-- `/sfu/recorder/ws` handler에서 `Authorization: Bearer {RECORDER_WS_TOKEN}` 검증
+- `/api/v1/recorder/sfu/ws` handler에서 `Authorization: Bearer {RECORDER_WS_TOKEN}` 검증
 - recorder-worker WebSocket dial에 Authorization header 추가
 
 검증:
@@ -290,7 +290,7 @@ RECORDER_WS_TOKEN=server-managed-recorder-token
 
 목표:
 
-- `/sfu/operator/ws`를 관제 사용자 session으로 보호한다.
+- `/api/v1/operator/sfu/ws`를 관제 사용자 session으로 보호한다.
 - 향후 사용자/권한 체계가 들어와도 endpoint 변경 없이 확장한다.
 
 전제:
@@ -375,7 +375,7 @@ role별 subject:
 응답 위치:
 
 - Robot: `GET /api/v1/robot/mission`의 `turnServers`
-- Operator: `GET /api/rtc-config`의 `iceServers`
+- Operator: `GET /api/v1/operator/rtc-config`의 `iceServers`
 - Recorder: recorder-worker config 또는 app-server에서 발급받은 recorder RTC config
 
 검증:
@@ -408,7 +408,7 @@ role별 subject:
 
 - 초기 TTL은 `30m` 이상으로 둔다.
 - robot은 mission 재조회로 새 credential을 받는다.
-- operator는 `/api/rtc-config` 재조회로 새 credential을 받는다.
+- operator는 `/api/v1/operator/rtc-config` 재조회로 새 credential을 받는다.
 - recorder는 tick/reconnect 전에 새 credential을 받는다.
 
 ### 6.3 Clock skew
@@ -460,7 +460,7 @@ verify: robot/operator/recorder 모두 relay ICE candidate로 연결
 Operator WebSocket:
 
 ```text
-verify: /sfu/operator/ws?room={missionCode} role query 없이 연결
+verify: /api/v1/operator/sfu/ws?room={missionCode} role query 없이 연결
 verify: robotCode query는 400
 verify: auth disabled mode에서 UI live 연결 성공
 verify: session mode에서 session 없으면 401
@@ -470,7 +470,7 @@ verify: session mode에서 session 있으면 select-robot 및 track/data 수신 
 Recorder WebSocket:
 
 ```text
-verify: /sfu/recorder/ws?room={missionCode} role query 없이 연결
+verify: /api/v1/recorder/sfu/ws?room={missionCode} role query 없이 연결
 verify: token 없으면 401
 verify: 잘못된 token이면 401
 verify: 올바른 RECORDER_WS_TOKEN이면 join 성공

@@ -28,6 +28,7 @@ history:
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: fix malformed frontmatter history entry'
 - '2026-06-01 danya.kim <danya.kim@thundersoft.com>: update robot-facing signaling path to /api/v1/robot/sfu/ws'
 - '2026-06-01 danya.kim <danya.kim@thundersoft.com>: clarify robot-facing API namespace and self-scope boundary'
+- '2026-06-01 danya.kim <danya.kim@thundersoft.com>: document role-based API namespaces for robot, recorder, operator, and system actors'
 ---
 
 # Architecture
@@ -158,11 +159,26 @@ mission-005 room
 GET /api/v1/robot/sfu/ws?room={missionCode}
 Authorization: Bearer {robotToken}
 
-GET /sfu/operator/ws?room={missionCode}
-GET /sfu/recorder/ws?room={missionCode}
+GET /api/v1/operator/sfu/ws?room={missionCode}
+GET /api/v1/recorder/sfu/ws?room={missionCode}
 ```
 
 Robot-facing API는 `/api/v1/robot/*` 하위로 분리한다. 이 namespace는 Bearer `robotToken`으로 인증된 자기 로봇 전용 API이며, 응답에는 해당 로봇이 publish하는 데 필요한 active mission, signaling, TURN, track/DataChannel 계약만 포함한다. 다른 robot/mission 목록, 관제 UI 상태, recorder/internal runtime 상태는 이 namespace에 노출하지 않는다.
+
+### 4.3 API Namespace Ownership
+
+HTTP/WebSocket API는 호출 주체의 책임과 협력 관계가 path에 드러나도록 actor namespace를 사용한다.
+
+| Namespace | Caller | Responsibility |
+| --- | --- | --- |
+| `/api/v1/robot/*` | Robot Gateway / mock robot | 인증된 자기 로봇의 heartbeat, active mission 조회, SFU publish 연결 |
+| `/api/v1/recorder/*` | recorder-worker | 녹화 대상 조회, recording tick, finalization job, upload callback, DataChannel sensor 저장, recorder SFU subscribe 연결 |
+| `/api/v1/operator/*` | 관제 브라우저 | 로봇/임무 운영, live 상태 조회, 센서/녹화 조회, operator SFU subscribe 연결 |
+| `/api/v1/system/*` | 운영자 / 배포 검증 / 진단 도구 | 시스템 상태, Swagger/OpenAPI 문서, 위험한 운영성 작업 |
+
+`/api/v1/common/*`은 현재 사용하지 않는다. 호출 주체가 불명확한 API를 `common`으로 밀어 넣으면 책임 경계가 흐려지므로, 둘 이상의 actor가 실제로 같은 계약을 공유해야 할 때만 새로 정의한다.
+
+Robot Gateway는 `/api/v1/operator/*`, `/api/v1/recorder/*`, `/api/v1/system/*`를 호출하지 않는다. recorder-worker는 `/api/v1/recorder/*`와 내부 health/runtime 흐름에만 의존한다. 관제 브라우저는 사용자 조작과 화면 표시를 위해 `/api/v1/operator/*`를 사용하고, 시스템 진단/운영성 작업만 `/api/v1/system/*`를 사용한다.
 
 역할:
 
@@ -467,7 +483,7 @@ MinIO object key는 UI가 직접 조합하지 않는다. UI는 app-server API가
 관제 Live 화면에서 `송출`, `녹화`, `연결` 상태를 표시할 때의 기준 API는 다음이다.
 
 ```http
-GET /api/missions/{missionCode}/live-status
+GET /api/v1/operator/missions/{missionCode}/live-status
 ```
 
 이 API는 app-server가 다음 runtime/source를 합성해 만든다.
@@ -524,7 +540,7 @@ sequenceDiagram
   participant SFU as app-server/SFU
 
   Browser->>App: mission / rtc config 조회
-  Browser->>SFU: /sfu/operator/ws?room=missionCode
+  Browser->>SFU: /api/v1/operator/sfu/ws?room=missionCode
   Browser->>SFU: select robotCode
   SFU-->>Browser: offer(selected robot tracks/data)
   Browser-->>SFU: answer
@@ -544,7 +560,7 @@ sequenceDiagram
   participant DB as PostgreSQL
 
   Rec->>App: recording targets 조회
-  Rec->>SFU: /sfu/recorder/ws?room=missionCode
+  Rec->>SFU: /api/v1/recorder/sfu/ws?room=missionCode
   SFU-->>Rec: offer(all robot tracks/data)
   Rec-->>SFU: answer
   SFU-->>Rec: all robot media/data
@@ -604,11 +620,11 @@ sequenceDiagram
   participant Rec as recorder-worker
   participant Minio as MinIO
 
-  UI->>App: POST /api/missions/{missionCode}/end
+  UI->>App: POST /api/v1/operator/missions/{missionCode}/end
   App->>DB: mission ended / mission_robots completed
   App->>DB: 미완료 recording_chunks -> finalizing
   App->>DB: recording_finalization_jobs queued
-  Rec->>App: POST /api/recorder/finalization-jobs/claim
+  Rec->>App: POST /api/v1/recorder/finalization-jobs/claim
   App->>DB: job processing lock 획득
   App-->>Rec: chunk + object key
   Rec->>Rec: local media spool close / muxing

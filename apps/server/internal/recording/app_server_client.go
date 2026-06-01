@@ -62,7 +62,7 @@ func NewHTTPAppServerClient(baseURL string, httpClient *http.Client) *HTTPAppSer
 }
 
 func (c *HTTPAppServerClient) FetchRecordingTargets(ctx context.Context) ([]domain.Mission, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, joinURL(c.baseURL, "/api/recording-targets"), nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, joinURL(c.baseURL, "/api/v1/recorder/recording-targets"), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func (c *HTTPAppServerClient) CreateRecordingTick(ctx context.Context, target do
 		return domain.RecordingTickResult{}, err
 	}
 
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, joinURL(c.baseURL, "/api/recorder/tick"), &buffer)
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, joinURL(c.baseURL, "/api/v1/recorder/tick"), &buffer)
 	if err != nil {
 		return domain.RecordingTickResult{}, err
 	}
@@ -127,7 +127,7 @@ func (c *HTTPAppServerClient) ClaimRecordingFinalizationJobs(ctx context.Context
 		return nil, err
 	}
 
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, joinURL(c.baseURL, "/api/recorder/finalization-jobs/claim"), &buffer)
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, joinURL(c.baseURL, "/api/v1/recorder/finalization-jobs/claim"), &buffer)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +160,7 @@ func (c *HTTPAppServerClient) MarkRecordingFinalizationJobFailed(ctx context.Con
 }
 
 func (c *HTTPAppServerClient) MarkRecordingFileUploaded(ctx context.Context, chunkID string, fileType string, sizeBytes int64, uploadContext RecordingUploadContext) error {
-	request, err := c.newUploadNotificationRequest(ctx, joinURL(c.baseURL, "/api/recorder/chunks/"+chunkID+"/files/"+fileType+"/uploaded"), sizeBytes, uploadContext)
+	request, err := c.newUploadNotificationRequest(ctx, joinURL(c.baseURL, "/api/v1/recorder/chunks/"+chunkID+"/files/"+fileType+"/uploaded"), sizeBytes, uploadContext)
 	if err != nil {
 		return err
 	}
@@ -176,7 +176,7 @@ func (c *HTTPAppServerClient) MarkRecordingFileUploaded(ctx context.Context, chu
 }
 
 func (c *HTTPAppServerClient) MarkRecordingChunkUploaded(ctx context.Context, chunkID string, sizeBytes int64, uploadContext RecordingUploadContext) error {
-	request, err := c.newUploadNotificationRequest(ctx, joinURL(c.baseURL, "/api/recorder/chunks/"+chunkID+"/uploaded"), sizeBytes, uploadContext)
+	request, err := c.newUploadNotificationRequest(ctx, joinURL(c.baseURL, "/api/v1/recorder/chunks/"+chunkID+"/uploaded"), sizeBytes, uploadContext)
 	if err != nil {
 		return err
 	}
@@ -195,7 +195,7 @@ func (c *HTTPAppServerClient) PostDataChannelPayload(ctx context.Context, label 
 	var path string
 	switch label {
 	case "channel.telemetry", "channel.spatial":
-		path = "/api/sensor-samples"
+		path = "/api/v1/recorder/sensor-samples"
 	default:
 		return nil
 	}
@@ -238,7 +238,7 @@ func (c *HTTPAppServerClient) postRecordingFinalizationStatus(ctx context.Contex
 	if err := json.NewEncoder(&buffer).Encode(body); err != nil {
 		return err
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, joinURL(c.baseURL, "/api/recorder/finalization-jobs/"+jobID+"/"+status), &buffer)
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, joinURL(c.baseURL, "/api/v1/recorder/finalization-jobs/"+jobID+"/"+status), &buffer)
 	if err != nil {
 		return err
 	}

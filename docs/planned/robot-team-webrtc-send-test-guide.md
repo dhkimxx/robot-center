@@ -78,7 +78,7 @@ GET  /api/v1/robot/sfu/ws?room={missionCode}
 - active mission이 있으면 자기 로봇에 배정된 `missionCode`, `sfu.signalingUrl`, `turnServers`, `tracks`, `dataChannels`만 사용한다.
 - 다른 robot, 다른 mission, 관제 UI 상태, 저장/녹화 상태, 내부 worker health 정보는 로봇 API 계약에 포함하지 않는다.
 
-이 문서의 `/api/robots`, `/api/missions` 호출은 개발서버에서 테스트 slot을 직접 만들기 위한 편의 절차다. 실제 Robot Gateway/Publisher 런타임 루프는 `/api/v1/robot/*`만 호출한다.
+이 문서의 `/api/v1/operator/robots`, `/api/v1/operator/missions` 호출은 개발서버에서 테스트 slot을 직접 만들기 위한 편의 절차다. 실제 Robot Gateway/Publisher 런타임 루프는 `/api/v1/robot/*`만 호출한다.
 
 ## 2. 테스트 서버 접속 정보
 
@@ -87,8 +87,8 @@ GET  /api/v1/robot/sfu/ws?room={missionCode}
 ```text
 serverUrl: http://192.168.20.12:18080
 operatorUi: http://192.168.20.12:18080
-apiDocs: http://192.168.20.12:18080/api/docs
-openapiJson: http://192.168.20.12:18080/api/docs/openapi.json
+apiDocs: http://192.168.20.12:18080/api/v1/system/docs
+openapiJson: http://192.168.20.12:18080/api/v1/system/openapi.json
 missionCode: 각 테스트자가 직접 생성
 missionStatus: active로 시작 후 테스트
 ```
@@ -159,7 +159,7 @@ Robot 생성:
 
 ```bash
 ROBOT_RESPONSE="$(
-  curl -fsS -X POST "$SERVER_URL/api/robots" \
+  curl -fsS -X POST "$SERVER_URL/api/v1/operator/robots" \
     -H 'Content-Type: application/json' \
     -d '{
       "displayName": "'"$TEST_OWNER"'",
@@ -186,7 +186,7 @@ Mission 생성:
 
 ```bash
 MISSION_RESPONSE="$(
-  curl -fsS -X POST "$SERVER_URL/api/missions" \
+  curl -fsS -X POST "$SERVER_URL/api/v1/operator/missions" \
     -H 'Content-Type: application/json' \
     -d '{
       "name": "'"$TEST_OWNER"' WebRTC send test",
@@ -208,7 +208,7 @@ printf 'MISSION_CODE=%s\n' "$MISSION_CODE"
 Mission 시작:
 
 ```bash
-curl -fsS -X POST "$SERVER_URL/api/missions/$MISSION_CODE/start" \
+curl -fsS -X POST "$SERVER_URL/api/v1/operator/missions/$MISSION_CODE/start" \
   | python3 -m json.tool
 ```
 
@@ -860,9 +860,9 @@ SFU/WebRTC:
 
 | Purpose | Protocol | Endpoint |
 | --- | --- | --- |
-| Robot 생성 | HTTP | `POST http://192.168.20.12:18080/api/robots` |
-| Mission 생성 | HTTP | `POST http://192.168.20.12:18080/api/missions` |
-| Mission 시작 | HTTP | `POST http://192.168.20.12:18080/api/missions/{missionCode}/start` |
+| Robot 생성 | HTTP | `POST http://192.168.20.12:18080/api/v1/operator/robots` |
+| Mission 생성 | HTTP | `POST http://192.168.20.12:18080/api/v1/operator/missions` |
+| Mission 시작 | HTTP | `POST http://192.168.20.12:18080/api/v1/operator/missions/{missionCode}/start` |
 | Heartbeat | HTTP | `POST http://192.168.20.12:18080/api/v1/robot/heartbeat` |
 | Active mission 조회 | HTTP | `GET http://192.168.20.12:18080/api/v1/robot/mission` |
 | Robot WebRTC signaling | WebSocket | mission 조회 응답의 `sfu.signalingUrl` |
@@ -967,4 +967,4 @@ token은 HTTP header에 넣는다. URL query, WebSocket message payload, DataCha
 | `session_id` | No | 클라이언트가 만들 필요 없다. WebSocket join 후 서버가 `peerId`를 내려준다. |
 | `room_id` | No separate input | room id는 `missionCode`와 같은 값이며 `sfu.signalingUrl` query에 포함되어 내려온다. 직접 새로 정하지 않는다. |
 
-정리하면, 테스트 시작 전 필요한 고정 입력값은 `serverUrl`이다. `POST /api/robots`로 자기 테스트용 `robotCode`와 `robotToken`을 만들고, `POST /api/missions`와 start API로 자기 테스트용 `missionCode`를 만든다. Robot publisher 실행 시에는 `serverUrl`과 `robotToken`을 보관하면 되고, active mission이 있으면 서버가 `missionCode`, `sfu.signalingUrl`, `turnServers`를 응답으로 내려준다.
+정리하면, 테스트 시작 전 필요한 고정 입력값은 `serverUrl`이다. `POST /api/v1/operator/robots`로 자기 테스트용 `robotCode`와 `robotToken`을 만들고, `POST /api/v1/operator/missions`와 start API로 자기 테스트용 `missionCode`를 만든다. Robot publisher 실행 시에는 `serverUrl`과 `robotToken`을 보관하면 되고, active mission이 있으면 서버가 `missionCode`, `sfu.signalingUrl`, `turnServers`를 응답으로 내려준다.

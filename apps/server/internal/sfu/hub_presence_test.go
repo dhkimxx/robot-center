@@ -27,7 +27,7 @@ func TestHubAnnouncesServerPeerAndRoomPeers(t *testing.T) {
 	websocketURL := "ws" + strings.TrimPrefix(server.URL, "http")
 	robot := dialPeer(t, websocketURL+"/api/v1/robot/sfu/ws?room=mission-001&robotCode=robot-001")
 	defer robot.Close()
-	operator := dialPeer(t, websocketURL+"/sfu/operator/ws?room=mission-001")
+	operator := dialPeer(t, websocketURL+"/api/v1/operator/sfu/ws?room=mission-001")
 	defer operator.Close()
 
 	if message := readMessage(t, robot); message.Type != "joined" {
@@ -56,7 +56,7 @@ func TestOperatorEndpointRejectsRobotCodeQuery(t *testing.T) {
 	defer server.Close()
 
 	websocketURL := "ws" + strings.TrimPrefix(server.URL, "http")
-	conn, response, err := dialPeerResponse(t, websocketURL+"/sfu/operator/ws?room=mission-001&robotCode=robot-001")
+	conn, response, err := dialPeerResponse(t, websocketURL+"/api/v1/operator/sfu/ws?room=mission-001&robotCode=robot-001")
 	if conn != nil {
 		conn.Close()
 	}

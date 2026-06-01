@@ -5,31 +5,31 @@ function robotPath(robotCode) {
 }
 
 export function fetchRobots() {
-  return requestJson("/api/robots");
+  return requestJson("/api/v1/operator/robots");
 }
 
 export function createRobotRequest(robotForm) {
-  return requestJson("/api/robots", {
+  return requestJson("/api/v1/operator/robots", {
     method: "POST",
     body: JSON.stringify(robotForm)
   });
 }
 
 export function fetchRobotConnectionInfo(robotCode) {
-  return requestJson(`/api/robots/${robotPath(robotCode)}/connection-info`);
+  return requestJson(`/api/v1/operator/robots/${robotPath(robotCode)}/connection-info`);
 }
 
 export function updateRobotRequest(robotCode, robotEditForm) {
-  return requestJson(`/api/robots/${robotPath(robotCode)}`, {
+  return requestJson(`/api/v1/operator/robots/${robotPath(robotCode)}`, {
     method: "PATCH",
     body: JSON.stringify(robotEditForm)
   });
 }
 
 export function rotateRobotConnectionToken(robotCode) {
-  return requestJson(`/api/robots/${robotPath(robotCode)}/connection-token`, { method: "POST" });
+  return requestJson(`/api/v1/operator/robots/${robotPath(robotCode)}/connection-token`, { method: "POST" });
 }
 
 export function archiveRobotRequest(robotCode) {
-  return requestJson(`/api/robots/${robotPath(robotCode)}`, { method: "DELETE" });
+  return requestJson(`/api/v1/operator/robots/${robotPath(robotCode)}`, { method: "DELETE" });
 }

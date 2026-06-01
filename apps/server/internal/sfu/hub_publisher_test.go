@@ -57,9 +57,9 @@ func TestHubSummarizesMultiPublisherMissionRoom(t *testing.T) {
 	defer robotA.Close()
 	robotB := dialPeer(t, websocketURL+"/api/v1/robot/sfu/ws?room=mission-001&robotCode=robot-002")
 	defer robotB.Close()
-	operator := dialPeer(t, websocketURL+"/sfu/operator/ws?room=mission-001")
+	operator := dialPeer(t, websocketURL+"/api/v1/operator/sfu/ws?room=mission-001")
 	defer operator.Close()
-	recorder := dialPeer(t, websocketURL+"/sfu/recorder/ws?room=mission-001")
+	recorder := dialPeer(t, websocketURL+"/api/v1/recorder/sfu/ws?room=mission-001")
 	defer recorder.Close()
 
 	summary := waitForRoomSummary(t, hub, "mission-001")

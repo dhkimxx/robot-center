@@ -67,7 +67,7 @@ function createTestClient(overrides = {}) {
     robotCode: "robot-001",
     rtcConfig: {
       iceServers: [],
-      signalingUrl: "ws://127.0.0.1/sfu/operator/ws"
+      signalingUrl: "ws://127.0.0.1/api/v1/operator/sfu/ws"
     },
     ...overrides
   });
