@@ -93,7 +93,7 @@ missionCode: 각 테스트자가 직접 생성
 missionStatus: active로 시작 후 테스트
 ```
 
-Swagger UI와 OpenAPI JSON은 API 필드 설명을 화면으로 확인하기 위한 보조 자료다. 이 문서는 로봇팀 공유용 기준 문서이므로, 테스트 절차와 WebRTC/DataChannel 계약은 아래 내용을 우선 기준으로 삼는다.
+Swagger UI와 OpenAPI JSON은 관제 서버 전체 API field reference다. 로봇팀 구현 계약은 이 문서의 `/api/v1/robot/*` REST/WebSocket API와 WebRTC/DataChannel 계약만 기준으로 삼는다.
 
 현재 관제팀 재현 결과:
 
