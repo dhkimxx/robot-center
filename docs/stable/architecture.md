@@ -29,6 +29,7 @@ history:
 - '2026-06-01 danya.kim <danya.kim@thundersoft.com>: update robot-facing signaling path to /api/v1/robot/sfu/ws'
 - '2026-06-01 danya.kim <danya.kim@thundersoft.com>: clarify robot-facing API namespace and self-scope boundary'
 - '2026-06-01 danya.kim <danya.kim@thundersoft.com>: document role-based API namespaces for robot, recorder, operator, and system actors'
+- '2026-06-01 danya.kim <danya.kim@thundersoft.com>: clarify Swagger document endpoint outside actor API namespaces'
 ---
 
 # Architecture
@@ -174,9 +175,11 @@ HTTP/WebSocket API는 호출 주체의 책임과 협력 관계가 path에 드러
 | `/api/v1/robot/*` | Robot Gateway / mock robot | 인증된 자기 로봇의 heartbeat, active mission 조회, SFU publish 연결 |
 | `/api/v1/recorder/*` | recorder-worker | 녹화 대상 조회, recording tick, finalization job, upload callback, DataChannel sensor 저장, recorder SFU subscribe 연결 |
 | `/api/v1/operator/*` | 관제 브라우저 | 로봇/임무 운영, live 상태 조회, 센서/녹화 조회, operator SFU subscribe 연결 |
-| `/api/v1/system/*` | 운영자 / 배포 검증 / 진단 도구 | 시스템 상태, Swagger/OpenAPI 문서, 위험한 운영성 작업 |
+| `/api/v1/system/*` | 운영자 / 배포 검증 / 진단 도구 | 시스템 상태, 위험한 운영성 작업 |
 
 `/api/v1/common/*`은 현재 사용하지 않는다. 호출 주체가 불명확한 API를 `common`으로 밀어 넣으면 책임 경계가 흐려지므로, 둘 이상의 actor가 실제로 같은 계약을 공유해야 할 때만 새로 정의한다.
+
+Swagger UI와 OpenAPI JSON은 actor namespace에 속하지 않는 문서 endpoint로 `/swagger/index.html`, `/swagger/openapi.json`에서 제공한다.
 
 Robot Gateway는 `/api/v1/operator/*`, `/api/v1/recorder/*`, `/api/v1/system/*`를 호출하지 않는다. recorder-worker는 `/api/v1/recorder/*`와 내부 health/runtime 흐름에만 의존한다. 관제 브라우저는 사용자 조작과 화면 표시를 위해 `/api/v1/operator/*`를 사용하고, 시스템 진단/운영성 작업만 `/api/v1/system/*`를 사용한다.
 

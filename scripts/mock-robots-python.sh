@@ -56,9 +56,9 @@ ensure_python_venv() {
 
 ensure_robot_count() {
   local robot_count
-  robot_count="$(curl -fsS "$APP_SERVER_URL/api/robots" | json_get 'import json,sys; print(len(json.load(sys.stdin).get("robots", [])))')"
+  robot_count="$(curl -fsS "$APP_SERVER_URL/api/v1/operator/robots" | json_get 'import json,sys; print(len(json.load(sys.stdin).get("robots", [])))')"
   while (( robot_count < MOCK_ROBOT_COUNT )); do
-    curl -fsS -X POST "$APP_SERVER_URL/api/robots" \
+    curl -fsS -X POST "$APP_SERVER_URL/api/v1/operator/robots" \
       -H 'Content-Type: application/json' \
       -d '{"displayName":"Python Mock Robot","modelName":"Python Mock"}' >/dev/null
     robot_count=$((robot_count + 1))
@@ -67,7 +67,7 @@ ensure_robot_count() {
 
 robot_code_at() {
   local index="$1"
-  curl -fsS "$APP_SERVER_URL/api/robots" | json_get '
+  curl -fsS "$APP_SERVER_URL/api/v1/operator/robots" | json_get '
 import json,sys
 index = int(sys.argv[1])
 robots = sorted(json.load(sys.stdin).get("robots", []), key=lambda item: item.get("robotCode", ""))
@@ -77,7 +77,7 @@ print(robots[index]["robotCode"])
 
 connection_token_for() {
   local robot_code="$1"
-  curl -fsS "$APP_SERVER_URL/api/robots/$robot_code/connection-info" | json_get '
+  curl -fsS "$APP_SERVER_URL/api/v1/operator/robots/$robot_code/connection-info" | json_get '
 import json,sys
 print(json.load(sys.stdin)["connectionInfo"]["robotToken"])
 '
@@ -85,7 +85,7 @@ print(json.load(sys.stdin)["connectionInfo"]["robotToken"])
 
 active_mission_for_robot() {
   local robot_code="$1"
-  curl -fsS "$APP_SERVER_URL/api/missions" | json_get '
+  curl -fsS "$APP_SERVER_URL/api/v1/operator/missions" | json_get '
 import json,sys
 robot_code = sys.argv[1]
 missions = json.load(sys.stdin).get("missions", [])
@@ -98,7 +98,7 @@ for mission in missions:
 
 ready_mission_for_robot() {
   local robot_code="$1"
-  curl -fsS "$APP_SERVER_URL/api/missions" | json_get '
+  curl -fsS "$APP_SERVER_URL/api/v1/operator/missions" | json_get '
 import json,sys
 robot_code = sys.argv[1]
 missions = json.load(sys.stdin).get("missions", [])
@@ -122,7 +122,7 @@ print("" if value is None else value)
 select_shared_mission() {
   local mission_code="$1"
   shift || true
-  curl -fsS "$APP_SERVER_URL/api/missions" | json_get '
+  curl -fsS "$APP_SERVER_URL/api/v1/operator/missions" | json_get '
 import json,sys
 mission_code = sys.argv[1]
 required_robot_codes = set(sys.argv[2:])
@@ -162,7 +162,7 @@ print(json.dumps({
     "robotCodes": robot_codes,
 }))
 ' "${robot_codes[@]}")"
-  curl -fsS -X POST "$APP_SERVER_URL/api/missions" \
+  curl -fsS -X POST "$APP_SERVER_URL/api/v1/operator/missions" \
     -H 'Content-Type: application/json' \
     -d "$payload" \
     | json_get 'import json,sys; print(json.dumps(json.load(sys.stdin)["mission"]))'
@@ -171,7 +171,7 @@ print(json.dumps({
 end_conflicting_active_missions() {
   local robot_codes=("$@")
   local mission_codes
-  mission_codes="$(curl -fsS "$APP_SERVER_URL/api/missions" | json_get '
+  mission_codes="$(curl -fsS "$APP_SERVER_URL/api/v1/operator/missions" | json_get '
 import json,sys
 required_robot_codes = set(sys.argv[1:])
 missions = json.load(sys.stdin).get("missions", [])
@@ -197,13 +197,13 @@ print("\n".join(sorted(set(conflicting))))
   while IFS= read -r mission_code; do
     [[ -z "$mission_code" ]] && continue
     printf 'ending conflicting active mission: %s\n' "$mission_code"
-    curl -fsS -X POST "$APP_SERVER_URL/api/missions/$mission_code/end" >/dev/null
+    curl -fsS -X POST "$APP_SERVER_URL/api/v1/operator/missions/$mission_code/end" >/dev/null
   done <<<"$mission_codes"
 }
 
 start_mission_payload() {
   local mission_code="$1"
-  curl -fsS -X POST "$APP_SERVER_URL/api/missions/$mission_code/start" \
+  curl -fsS -X POST "$APP_SERVER_URL/api/v1/operator/missions/$mission_code/start" \
     | json_get 'import json,sys; print(json.dumps(json.load(sys.stdin)["mission"]))'
 }
 
@@ -245,12 +245,12 @@ ensure_active_mission_for_robot() {
   local ready_mission_code
   ready_mission_code="$(ready_mission_for_robot "$robot_code")"
   if [[ -z "$ready_mission_code" ]]; then
-    ready_mission_code="$(curl -fsS -X POST "$APP_SERVER_URL/api/missions" \
+    ready_mission_code="$(curl -fsS -X POST "$APP_SERVER_URL/api/v1/operator/missions" \
       -H 'Content-Type: application/json' \
       -d '{"name":"Python Mock Demo","missionType":"mountain_rescue","siteNote":"created by python mock script","robotCode":"'"$robot_code"'"}' \
       | json_get 'import json,sys; print(json.load(sys.stdin)["mission"]["missionCode"])')"
   fi
-  curl -fsS -X POST "$APP_SERVER_URL/api/missions/$ready_mission_code/start" >/dev/null
+  curl -fsS -X POST "$APP_SERVER_URL/api/v1/operator/missions/$ready_mission_code/start" >/dev/null
   printf '%s\n' "$ready_mission_code"
 }
 

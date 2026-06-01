@@ -23,6 +23,10 @@ func (h *Hub) handleRobotOffer(sender *peer, payload map[string]any) error {
 		})
 		return err
 	}
+	if normalizedOfferSDP, normalized := normalizeBundledApplicationDataChannelSDP(offerSDP); normalized {
+		log.Printf("sfu robot offer sdp normalized room=%s robot=%s reason=bundled datachannel application m-line zero port", sender.roomID, robotCode)
+		offerSDP = normalizedOfferSDP
+	}
 
 	peerConnection, err := h.createPeerConnection()
 	if err != nil {

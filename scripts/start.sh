@@ -103,22 +103,22 @@ wait_for_http "http://127.0.0.1:$APP_PORT/healthz" "app-server"
 wait_for_http "http://127.0.0.1:$RECORDER_PORT/healthz" "recorder-worker"
 
 printf 'ensuring demo robot and active mission...\n'
-robot_payload="$(curl -fsS 'http://127.0.0.1:'"$APP_PORT"'/api/robots')"
+robot_payload="$(curl -fsS 'http://127.0.0.1:'"$APP_PORT"'/api/v1/operator/robots')"
 robot_code="$(printf '%s' "$robot_payload" | /usr/bin/python3 -c 'import json,sys; items=json.load(sys.stdin).get("robots", []); print(items[0]["robotCode"] if items else "")')"
 if [[ -z "$robot_code" ]]; then
-  robot_payload="$(curl -fsS -X POST 'http://127.0.0.1:'"$APP_PORT"'/api/robots' -H 'Content-Type: application/json' -d '{"displayName":"Bootstrap Robot","modelName":"PoC Bootstrap"}')"
+  robot_payload="$(curl -fsS -X POST 'http://127.0.0.1:'"$APP_PORT"'/api/v1/operator/robots' -H 'Content-Type: application/json' -d '{"displayName":"Bootstrap Robot","modelName":"PoC Bootstrap"}')"
   robot_code="$(printf '%s' "$robot_payload" | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin)["robot"]["robotCode"])')"
 fi
 
-mission_payload="$(curl -fsS 'http://127.0.0.1:'"$APP_PORT"'/api/missions')"
+mission_payload="$(curl -fsS 'http://127.0.0.1:'"$APP_PORT"'/api/v1/operator/missions')"
 active_mission_code="$(printf '%s' "$mission_payload" | /usr/bin/python3 -c 'import json,sys; robot=sys.argv[1]; items=json.load(sys.stdin).get("missions", []); print(next((m["missionCode"] for m in items if m.get("robotCode")==robot and m.get("status")=="active"), ""))' "$robot_code")"
 if [[ -z "$active_mission_code" ]]; then
   ready_mission_code="$(printf '%s' "$mission_payload" | /usr/bin/python3 -c 'import json,sys; robot=sys.argv[1]; items=json.load(sys.stdin).get("missions", []); print(next((m["missionCode"] for m in items if m.get("robotCode")==robot and m.get("status")=="ready"), ""))' "$robot_code")"
   if [[ -z "$ready_mission_code" ]]; then
-    mission_payload="$(curl -fsS -X POST 'http://127.0.0.1:'"$APP_PORT"'/api/missions' -H 'Content-Type: application/json' -d '{"name":"P0 Integrated Demo","missionType":"mountain_rescue","siteNote":"created by dev-up","robotCode":"'"$robot_code"'"}')"
+    mission_payload="$(curl -fsS -X POST 'http://127.0.0.1:'"$APP_PORT"'/api/v1/operator/missions' -H 'Content-Type: application/json' -d '{"name":"P0 Integrated Demo","missionType":"mountain_rescue","siteNote":"created by dev-up","robotCode":"'"$robot_code"'"}')"
     ready_mission_code="$(printf '%s' "$mission_payload" | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin)["mission"]["missionCode"])')"
   fi
-  curl -fsS -X POST 'http://127.0.0.1:'"$APP_PORT"'/api/missions/'"$ready_mission_code"'/start' >/dev/null
+  curl -fsS -X POST 'http://127.0.0.1:'"$APP_PORT"'/api/v1/operator/missions/'"$ready_mission_code"'/start' >/dev/null
   active_mission_code="$ready_mission_code"
 fi
 

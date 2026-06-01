@@ -24,8 +24,7 @@ history:
 - '2026-05-28 danya.kim <danya.kim@thundersoft.com>: finalize token-only robot gateway and values-only sensor sample contract'
 - '2026-06-01 danya.kim <danya.kim@thundersoft.com>: separate public robot API namespace from operator and internal diagnostics'
 - '2026-06-01 danya.kim <danya.kim@thundersoft.com>: document robot-scoped /api/v1/robot namespace and token scope'
-- '2026-06-01 danya.kim <danya.kim@thundersoft.com>: document Swagger exposure for robot-scoped API'
-- '2026-06-01 danya.kim <danya.kim@thundersoft.com>: clarify Swagger as API reference instead of test setup guide'
+- '2026-06-01 danya.kim <danya.kim@thundersoft.com>: remove Swagger reference from robot gateway contract'
 ---
 
 # Robot Gateway Interface
@@ -106,8 +105,6 @@ Robot API의 scope:
 | `/api/v1/robot/sfu/ws` | token으로 인증된 자기 로봇이 배정된 mission room에만 publish 허용 |
 
 서버는 token으로 `robotCode`를 resolve한다. Robot Gateway는 `robotCode`, `robotId`, `sessionId`, `roomId`를 request query, WebSocket message, DataChannel payload에 넣지 않는다.
-
-백엔드는 `/swagger/index.html`에서 Swagger UI를 제공하고 `/swagger/openapi.json`에서 OpenAPI JSON을 제공한다. OpenAPI는 관제 서버의 전체 HTTP/WebSocket API reference이며, robot runtime, robot/mission 관리, sensor, recording, system, SFU endpoint를 모두 포함한다. 단 Robot Gateway 구현 계약은 이 문서의 `/api/v1/robot/*` REST/WebSocket API와 DataChannel 계약을 기준으로 한다.
 
 ## 6. REST API
 

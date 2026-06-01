@@ -31,7 +31,9 @@ history:
 - '2026-05-28 danya.kim <danya.kim@thundersoft.com>: clarify telemetry-only payload schema contract for robot team send test'
 - '2026-06-01 danya.kim <danya.kim@thundersoft.com>: separate robot-facing API namespace and remove internal diagnostics from robot guide'
 - '2026-06-01 danya.kim <danya.kim@thundersoft.com>: clarify /api/v1/robot self-scope API boundary'
-- '2026-06-01 danya.kim <danya.kim@thundersoft.com>: add Swagger API docs URL for robot team field reference'
+- '2026-06-01 danya.kim <danya.kim@thundersoft.com>: remove non-contract Swagger reference from robot team guide'
+- '2026-06-01 danya.kim <danya.kim@thundersoft.com>: remove stale verification result block from robot team guide'
+- '2026-06-01 danya.kim <danya.kim@thundersoft.com>: align robot API error guidance with current implementation'
 ---
 
 # Robot Team WebRTC Send Test Guide
@@ -87,26 +89,9 @@ GET  /api/v1/robot/sfu/ws?room={missionCode}
 ```text
 serverUrl: http://192.168.20.12:18080
 operatorUi: http://192.168.20.12:18080
-apiDocs: http://192.168.20.12:18080/swagger/index.html
-openapiJson: http://192.168.20.12:18080/swagger/openapi.json
 missionCode: 각 테스트자가 직접 생성
 missionStatus: active로 시작 후 테스트
 ```
-
-Swagger UI와 OpenAPI JSON은 관제 서버 전체 API field reference다. 로봇팀 구현 계약은 이 문서의 `/api/v1/robot/*` REST/WebSocket API와 WebRTC/DataChannel 계약만 기준으로 삼는다.
-
-현재 관제팀 재현 결과:
-
-```text
-verifiedAt: 2026-05-27 18:01 KST
-verifiedWith: Android Robot app 2 devices
-robot-001: heartbeat OK, mission OK, WebSocket joined, relay ICE CONNECTED/COMPLETED
-robot-002: heartbeat OK, mission OK, WebSocket joined, relay ICE CONNECTED/COMPLETED
-app-server SFU: mission-001 room, robotCount 2
-관제 UI: RGB/Thermal/Audio, telemetry 수신 확인
-```
-
-`robot-001`, `robot-002`, `mission-001`은 관제팀이 Android Robot app 2대로 검증한 baseline slot이다. 여러 명이 동시에 테스트할 때는 이 공용 slot을 재사용하지 않는다.
 
 로봇팀 개별 테스트 원칙:
 
@@ -397,13 +382,12 @@ Error responses:
 | --- | --- |
 | `400` | JSON body 파싱 실패 또는 요청 값 오류 |
 | `401` | Bearer token이 없거나 유효하지 않음 |
-| `404` | token에 해당하는 robot이 등록되어 있지 않음 |
 
 Client behavior:
 
 - active mission 여부와 무관하게 주기적으로 heartbeat를 보낸다.
 - 실패하면 2s, 5s, 10s 수준의 backoff로 재시도한다.
-- `401` 또는 `404`는 token 발급 상태를 관제팀과 확인한다.
+- `401`은 token 발급 상태를 관제팀과 확인한다.
 
 ### 5.2 `getActiveMissionForRobot`
 
@@ -482,7 +466,6 @@ Error responses:
 | Status | Meaning |
 | --- | --- |
 | `401` | Bearer token이 없거나 유효하지 않음 |
-| `404` | token에 해당하는 robot이 등록되어 있지 않음 |
 
 Client behavior:
 
@@ -623,7 +606,7 @@ ICE candidate payload는 browser/Pion 표준 candidate 필드를 사용한다.
 | `channel.event` | `event.*` |
 | `channel.control` | `control.*` |
 
-관제 서버는 현재 `channel.telemetry`의 `descriptors` / `samples` / `values` 구조를 저장 및 Live UI 표시 검증 대상으로 본다. 나머지 채널은 label과 negotiation 확인용으로만 다루며, payload schema를 확정하려면 관제팀과 별도 합의한다.
+관제 서버는 현재 `channel.telemetry`의 `descriptors` / `samples` / `values` 구조를 로봇팀 송신 테스트의 필수 검증 대상으로 본다. 다른 채널의 payload schema는 관제팀과 별도 합의한다.
 
 ### 8.2 DataChannel lifecycle
 
@@ -812,7 +795,8 @@ SFU/WebRTC:
 | --- | --- |
 | heartbeat 401 | robotToken 누락/만료/불일치 |
 | mission 조회가 `missionStatus=none` | active mission 없음, robot assignment 누락 |
-| WebSocket 400 | mission 응답의 `sfu.signalingUrl`을 사용하지 않았거나 필수 query 누락 |
+| WebSocket 400 | mission 응답의 `sfu.signalingUrl` 사용 여부, `room` query 누락 여부 |
+| WebSocket 401/403 | robotToken과 mission assignment 상태 |
 | `publish-error` | robot이 active mission에 배정되지 않았거나 room이 missionCode와 다름 |
 | ICE `failed` | mission 응답의 `turnServers` 사용 여부, UDP 3478, relay port range, 방화벽, relay candidate 생성 여부 |
 | WebSocket은 연결됐지만 영상 없음 | track publish, codec negotiation, track label/order |

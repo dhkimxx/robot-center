@@ -38,9 +38,9 @@ list_adb_devices() {
 ensure_robot_count() {
   local required_count="$1"
   local robot_count
-  robot_count="$(curl -fsS "$APP_SERVER_URL/api/robots" | json_get 'import json,sys; print(len(json.load(sys.stdin).get("robots", [])))')"
+  robot_count="$(curl -fsS "$APP_SERVER_URL/api/v1/operator/robots" | json_get 'import json,sys; print(len(json.load(sys.stdin).get("robots", [])))')"
   while (( robot_count < required_count )); do
-    curl -fsS -X POST "$APP_SERVER_URL/api/robots" \
+    curl -fsS -X POST "$APP_SERVER_URL/api/v1/operator/robots" \
       -H 'Content-Type: application/json' \
       -d '{"displayName":"Android Mock Robot","modelName":"Android Mock"}' >/dev/null
     robot_count=$((robot_count + 1))
@@ -49,7 +49,7 @@ ensure_robot_count() {
 
 robot_code_at() {
   local index="$1"
-  curl -fsS "$APP_SERVER_URL/api/robots" | json_get '
+  curl -fsS "$APP_SERVER_URL/api/v1/operator/robots" | json_get '
 import json,sys
 index = int(sys.argv[1])
 robots = sorted(json.load(sys.stdin).get("robots", []), key=lambda item: item.get("robotCode", ""))
@@ -59,14 +59,14 @@ print(robots[index]["robotCode"])
 
 connection_token_for() {
   local robot_code="$1"
-  curl -fsS "$APP_SERVER_URL/api/robots/$robot_code/connection-info" | json_get '
+  curl -fsS "$APP_SERVER_URL/api/v1/operator/robots/$robot_code/connection-info" | json_get '
 import json,sys
 print(json.load(sys.stdin)["connectionInfo"]["robotToken"])
 '
 }
 
 select_mission_for_robots() {
-  curl -fsS "$APP_SERVER_URL/api/missions" | json_get '
+  curl -fsS "$APP_SERVER_URL/api/v1/operator/missions" | json_get '
 import json,sys
 required = set(sys.argv[1:])
 missions = json.load(sys.stdin).get("missions", [])
@@ -107,7 +107,7 @@ print(json.dumps({
     "robotCodes": robot_codes,
 }))
 ' "$@")"
-  curl -fsS -X POST "$APP_SERVER_URL/api/missions" \
+  curl -fsS -X POST "$APP_SERVER_URL/api/v1/operator/missions" \
     -H 'Content-Type: application/json' \
     -d "$payload" \
     | json_get 'import json,sys; print(json.dumps(json.load(sys.stdin)["mission"]))'
@@ -125,7 +125,7 @@ ensure_shared_active_mission() {
   local mission_code
   mission_code="$(printf '%s' "$mission_payload" | mission_field missionCode)"
   if [[ "$mission_status" == "ready" ]]; then
-    curl -fsS -X POST "$APP_SERVER_URL/api/missions/$mission_code/start" \
+    curl -fsS -X POST "$APP_SERVER_URL/api/v1/operator/missions/$mission_code/start" \
       | json_get 'import json,sys; print(json.dumps(json.load(sys.stdin)["mission"]))'
     return
   fi
