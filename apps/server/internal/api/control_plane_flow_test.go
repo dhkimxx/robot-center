@@ -48,6 +48,12 @@ func TestControlPlaneFlow(t *testing.T) {
 	if !strings.Contains(info["description"].(string), "관제 서버") {
 		t.Fatalf("expected Korean OpenAPI description, got %#v", info)
 	}
+	forbiddenOpenAPIWords := []string{"개발 서버", "테스트 슬롯", "테스트용", "Mock Robot"}
+	for _, forbiddenWord := range forbiddenOpenAPIWords {
+		if strings.Contains(info["description"].(string), forbiddenWord) {
+			t.Fatalf("OpenAPI description should be API-reference oriented, got %#v", info)
+		}
+	}
 	paths := openAPI["paths"].(map[string]any)
 	if _, ok := paths["/api/v1/robot/mission"]; !ok {
 		t.Fatalf("expected robot mission API in OpenAPI paths, got %#v", paths)

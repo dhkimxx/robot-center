@@ -25,6 +25,7 @@ history:
 - '2026-06-01 danya.kim <danya.kim@thundersoft.com>: separate public robot API namespace from operator and internal diagnostics'
 - '2026-06-01 danya.kim <danya.kim@thundersoft.com>: document robot-scoped /api/v1/robot namespace and token scope'
 - '2026-06-01 danya.kim <danya.kim@thundersoft.com>: document Swagger exposure for robot-scoped API'
+- '2026-06-01 danya.kim <danya.kim@thundersoft.com>: clarify Swagger as API reference instead of test setup guide'
 ---
 
 # Robot Gateway Interface
@@ -106,7 +107,7 @@ Robot API의 scope:
 
 서버는 token으로 `robotCode`를 resolve한다. Robot Gateway는 `robotCode`, `robotId`, `sessionId`, `roomId`를 request query, WebSocket message, DataChannel payload에 넣지 않는다.
 
-백엔드는 `/api/docs`에서 Swagger UI를 제공하고 `/api/docs/openapi.json`에서 OpenAPI JSON을 제공한다. 이 문서에는 로봇 런타임용 `/api/v1/robot/*`와 개발 서버 테스트 준비용 최소 관리 API만 노출하며, deprecated alias나 recorder/system 내부 API는 포함하지 않는다.
+백엔드는 `/api/docs`에서 Swagger UI를 제공하고 `/api/docs/openapi.json`에서 OpenAPI JSON을 제공한다. 이 문서에는 로봇 런타임용 `/api/v1/robot/*`, 로봇 관리 API, 임무 관리 API를 노출하며, deprecated alias나 recorder/system 내부 API는 포함하지 않는다.
 
 ## 6. REST API
 

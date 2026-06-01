@@ -46,7 +46,7 @@ func (s *Server) openAPISpec() map[string]any {
 		"info": map[string]any{
 			"title":       "Robot Center API",
 			"version":     "0.1.0",
-			"description": "관제 서버에서 외부 로봇이 사용하는 로봇 전용 API와 개발 서버 테스트 슬롯 생성에 필요한 최소 API를 정리한 문서입니다. 로봇 런타임은 `/api/v1/robot/*` 하위 경로만 호출합니다.",
+			"description": "관제 서버 API 문서입니다. 로봇 런타임 API는 `/api/v1/robot/*` 하위 경로로 분리되며, robotToken으로 인증된 자기 로봇 범위의 정보만 반환합니다.",
 		},
 		"servers": []map[string]any{
 			{
@@ -57,11 +57,15 @@ func (s *Server) openAPISpec() map[string]any {
 		"tags": []map[string]any{
 			{
 				"name":        "로봇 런타임 API",
-				"description": "실제 로봇 또는 Mock Robot이 런타임 중 호출하는 Bearer token 기반 self-scope API입니다.",
+				"description": "로봇이 운용 중 호출하는 Bearer token 기반 API입니다. 서버는 token으로 로봇 신원을 판별합니다.",
 			},
 			{
-				"name":        "개발 서버 테스트 준비",
-				"description": "개발 서버에서 로봇팀 테스트 슬롯을 만들고 임무를 시작하기 위한 관제팀 관리 API입니다. 로봇 런타임에서 호출하지 않습니다.",
+				"name":        "로봇 관리 API",
+				"description": "관제에서 로봇을 등록하고 연결 정보를 관리하는 API입니다.",
+			},
+			{
+				"name":        "임무 관리 API",
+				"description": "관제에서 임무를 생성하고 상태를 전환하는 API입니다.",
 			},
 		},
 		"paths": map[string]any{
@@ -73,7 +77,7 @@ func (s *Server) openAPISpec() map[string]any {
 			"/api/missions/{missionCode}/start": openAPIMissionStatePath(
 				"startMission",
 				"임무 시작",
-				"생성된 임무를 active 상태로 전환합니다. 로봇은 이후 `/api/v1/robot/mission`에서 자기 토큰에 연결된 active 임무만 조회합니다.",
+				"ready 상태의 임무를 active 상태로 전환합니다. 로봇은 `/api/v1/robot/mission`에서 자기 token에 연결된 active 임무만 조회합니다.",
 			),
 			"/api/missions/{missionCode}/end": openAPIMissionStatePath(
 				"endMission",
@@ -87,7 +91,7 @@ func (s *Server) openAPISpec() map[string]any {
 					"type":         "http",
 					"scheme":       "bearer",
 					"bearerFormat": "robotToken",
-					"description":  "`POST /api/robots` 응답의 `connectionInfo.robotToken` 값입니다. 서버는 이 토큰으로 로봇 신원을 판별하므로 robotCode, robotId, roomId, sessionId를 별도 파라미터로 받지 않습니다.",
+					"description":  "로봇 연결 정보에 포함된 `robotToken` 값입니다. 서버는 이 token으로 로봇 신원을 판별하므로 robotCode, robotId, roomId, sessionId를 별도 파라미터로 받지 않습니다.",
 				},
 			},
 			"schemas": openAPISchemas(),
@@ -175,10 +179,10 @@ func openAPIRobotSFUWebSocketPath() map[string]any {
 func openAPIRobotsPath() map[string]any {
 	return map[string]any{
 		"post": map[string]any{
-			"tags":        []string{"개발 서버 테스트 준비"},
+			"tags":        []string{"로봇 관리 API"},
 			"operationId": "createRobot",
-			"summary":     "테스트용 로봇 생성",
-			"description": "개발 서버에서 테스트에 사용할 로봇 슬롯을 생성하고 robotToken을 발급합니다. 이 API는 관제팀 관리 API이며 로봇 런타임이 호출하는 API가 아닙니다.",
+			"summary":     "로봇 등록",
+			"description": "관제 서버에 로봇을 등록하고 로봇 런타임이 사용할 연결 정보를 발급합니다. 이 API는 관리 API이며 로봇 런타임이 직접 호출하지 않습니다.",
 			"requestBody": map[string]any{
 				"required": true,
 				"content": map[string]any{
@@ -188,7 +192,7 @@ func openAPIRobotsPath() map[string]any {
 				},
 			},
 			"responses": map[string]any{
-				"201": openAPIJSONResponse("로봇 슬롯과 연결 정보가 생성됐습니다.", "#/components/schemas/CreateRobotResponse"),
+				"201": openAPIJSONResponse("로봇과 연결 정보가 생성됐습니다.", "#/components/schemas/CreateRobotResponse"),
 				"400": openAPIErrorResponse("필수 값이 없거나 요청 body가 잘못됐습니다."),
 			},
 		},
@@ -198,10 +202,10 @@ func openAPIRobotsPath() map[string]any {
 func openAPIMissionsPath() map[string]any {
 	return map[string]any{
 		"post": map[string]any{
-			"tags":        []string{"개발 서버 테스트 준비"},
+			"tags":        []string{"임무 관리 API"},
 			"operationId": "createMission",
-			"summary":     "테스트용 임무 생성",
-			"description": "테스트할 로봇을 배정한 임무를 생성합니다. 여러 로봇 테스트는 robotCodes 배열을 사용합니다.",
+			"summary":     "임무 생성",
+			"description": "임무를 생성하고 하나 이상의 로봇을 배정합니다. 여러 로봇을 배정할 때는 robotCodes 배열을 사용합니다.",
 			"requestBody": map[string]any{
 				"required": true,
 				"content": map[string]any{
@@ -222,7 +226,7 @@ func openAPIMissionsPath() map[string]any {
 func openAPIMissionStatePath(operationID string, summary string, description string) map[string]any {
 	return map[string]any{
 		"post": map[string]any{
-			"tags":        []string{"개발 서버 테스트 준비"},
+			"tags":        []string{"임무 관리 API"},
 			"operationId": operationID,
 			"summary":     summary,
 			"description": description,
@@ -403,7 +407,7 @@ func openAPIRobotSFUConfigSchema() map[string]any {
 			},
 			"iceTransportPolicy": map[string]any{
 				"type":        "string",
-				"description": "ICE 후보 선택 정책입니다. 개발 서버 테스트는 TURN relay 경로 검증을 위해 relay를 사용합니다.",
+				"description": "ICE 후보 선택 정책입니다. `relay`이면 TURN relay candidate만 사용합니다.",
 				"example":     "relay",
 			},
 		},
@@ -439,17 +443,17 @@ func openAPITurnServerSchema() map[string]any {
 func openAPICreateRobotRequestSchema() map[string]any {
 	return map[string]any{
 		"type":        "object",
-		"description": "개발 서버에서 테스트용 로봇 슬롯을 만들 때 사용하는 요청입니다.",
+		"description": "관제 서버에 로봇을 등록할 때 사용하는 요청입니다.",
 		"required":    []string{"displayName"},
 		"properties": map[string]any{
 			"displayName": map[string]any{
 				"type":        "string",
-				"description": "관제 화면과 테스트 문서에서 구분할 로봇 표시 이름입니다.",
-				"example":     "Robot Team Jetson 01",
+				"description": "관제 화면에서 표시할 로봇 이름입니다.",
+				"example":     "Jetson 01",
 			},
 			"modelName": map[string]any{
 				"type":        "string",
-				"description": "로봇 모델 또는 테스트 장비 이름입니다. 선택 값입니다.",
+				"description": "로봇 모델명입니다. 선택 값입니다.",
 				"example":     "Jetson Orin",
 			},
 		},
@@ -459,7 +463,7 @@ func openAPICreateRobotRequestSchema() map[string]any {
 func openAPICreateRobotResponseSchema() map[string]any {
 	return map[string]any{
 		"type":        "object",
-		"description": "생성된 로봇 슬롯과 로봇 런타임 접속 정보입니다.",
+		"description": "생성된 로봇과 로봇 런타임 접속 정보입니다.",
 		"required":    []string{"robot", "connectionInfo"},
 		"properties": map[string]any{
 			"robot":          map[string]any{"$ref": "#/components/schemas/Robot"},
@@ -471,13 +475,13 @@ func openAPICreateRobotResponseSchema() map[string]any {
 func openAPIRobotSchema() map[string]any {
 	return map[string]any{
 		"type":        "object",
-		"description": "관제 서버에 등록된 로봇 슬롯입니다.",
+		"description": "관제 서버에 등록된 로봇입니다.",
 		"required":    []string{"id", "robotCode", "displayName", "status", "createdAt", "updatedAt"},
 		"properties": map[string]any{
 			"id":          openAPIStringProperty("관제 서버 내부 로봇 ID입니다.", "2f0af2f5-9f3b-4f02-a5d3-1f4c4a0e0001"),
 			"robotCode":   openAPIStringProperty("관제 서버가 발급한 로봇 코드입니다.", "robot-004"),
-			"displayName": openAPIStringProperty("로봇 표시 이름입니다.", "Robot Team Jetson 01"),
-			"modelName":   openAPIStringProperty("로봇 모델 또는 테스트 장비 이름입니다.", "Jetson Orin"),
+			"displayName": openAPIStringProperty("로봇 표시 이름입니다.", "Jetson 01"),
+			"modelName":   openAPIStringProperty("로봇 모델명입니다.", "Jetson Orin"),
 			"status":      openAPIStringProperty("현재 연결 상태입니다.", "offline"),
 			"lastSeenAt": map[string]any{
 				"type":        "string",
@@ -485,8 +489,8 @@ func openAPIRobotSchema() map[string]any {
 				"description": "마지막 heartbeat 수신 시각입니다.",
 				"nullable":    true,
 			},
-			"createdAt": openAPIDateTimeProperty("로봇 슬롯 생성 시각입니다."),
-			"updatedAt": openAPIDateTimeProperty("로봇 슬롯 수정 시각입니다."),
+			"createdAt": openAPIDateTimeProperty("로봇 등록 시각입니다."),
+			"updatedAt": openAPIDateTimeProperty("로봇 정보 수정 시각입니다."),
 		},
 	}
 }
@@ -494,10 +498,10 @@ func openAPIRobotSchema() map[string]any {
 func openAPIRobotConnectionInfoSchema() map[string]any {
 	return map[string]any{
 		"type":        "object",
-		"description": "로봇팀 테스트 클라이언트가 런타임 API에 접속할 때 필요한 정보입니다.",
+		"description": "로봇 런타임이 관제 서버에 접속할 때 사용하는 연결 정보입니다.",
 		"required":    []string{"serverUrl", "robotCode", "robotToken"},
 		"properties": map[string]any{
-			"serverUrl":  openAPIStringProperty("관제 서버 Public URL입니다.", "http://192.168.20.12:18080"),
+			"serverUrl":  openAPIStringProperty("관제 서버 public URL입니다.", "http://center.example.com"),
 			"robotCode":  openAPIStringProperty("생성된 로봇 코드입니다. 런타임 API에서는 식별용 파라미터로 보내지 않습니다.", "robot-004"),
 			"robotToken": openAPIStringProperty("로봇 런타임 API Authorization Bearer token 값입니다.", "rb_p0_example"),
 		},
@@ -507,25 +511,25 @@ func openAPIRobotConnectionInfoSchema() map[string]any {
 func openAPICreateMissionRequestSchema() map[string]any {
 	return map[string]any{
 		"type":        "object",
-		"description": "테스트용 임무 생성 요청입니다.",
+		"description": "임무 생성 요청입니다.",
 		"required":    []string{"name", "missionType", "robotCodes"},
 		"properties": map[string]any{
-			"name": openAPIStringProperty("임무 표시 이름입니다.", "Robot Team WebRTC Test"),
+			"name": openAPIStringProperty("임무 표시 이름입니다.", "Mountain Rescue A"),
 			"missionType": map[string]any{
 				"type":        "string",
 				"description": "임무 유형입니다. 현재 서버가 허용하는 값 중 하나를 사용합니다.",
 				"enum":        []string{"mountain_rescue", "collapse_site", "underground_facility"},
 				"example":     "mountain_rescue",
 			},
-			"siteNote": openAPIStringProperty("테스트 위치나 목적을 적는 메모입니다.", "WebRTC 영상/센서 송출 테스트"),
+			"siteNote": openAPIStringProperty("임무 위치나 작업 내용을 적는 메모입니다.", "북측 진입로 수색"),
 			"robotCode": map[string]any{
 				"type":        "string",
-				"description": "단일 로봇 테스트용 legacy 입력입니다. 새 테스트는 robotCodes 배열 사용을 권장합니다.",
+				"description": "기존 단일 로봇 입력 필드입니다. 새 호출에서는 robotCodes 배열 사용을 권장합니다.",
 				"example":     "robot-004",
 			},
 			"robotCodes": map[string]any{
 				"type":        "array",
-				"description": "임무에 배정할 로봇 코드 목록입니다. 여러 명이 테스트하면 각자 생성한 로봇 코드를 넣습니다.",
+				"description": "임무에 배정할 로봇 코드 목록입니다.",
 				"items":       map[string]any{"type": "string"},
 				"example":     []string{"robot-004"},
 			},
@@ -552,10 +556,10 @@ func openAPIMissionSchema() map[string]any {
 		"properties": map[string]any{
 			"id":          openAPIStringProperty("관제 서버 내부 임무 ID입니다.", "8c68200a-b18f-4f1d-94f6-6f409e000001"),
 			"missionCode": openAPIStringProperty("로봇 런타임 mission 조회 응답과 SFU room에 사용되는 임무 코드입니다.", "mission-002"),
-			"name":        openAPIStringProperty("임무 표시 이름입니다.", "Robot Team WebRTC Test"),
+			"name":        openAPIStringProperty("임무 표시 이름입니다.", "Mountain Rescue A"),
 			"missionType": openAPIStringProperty("임무 유형입니다.", "mountain_rescue"),
 			"status":      openAPIStringProperty("임무 상태입니다.", "active"),
-			"siteNote":    openAPIStringProperty("임무 메모입니다.", "WebRTC 영상/센서 송출 테스트"),
+			"siteNote":    openAPIStringProperty("임무 메모입니다.", "북측 진입로 수색"),
 			"robotCode":   openAPIStringProperty("첫 번째 배정 로봇 코드입니다. 다중 로봇 호환을 위해 robotCodes도 함께 확인합니다.", "robot-004"),
 			"robotCodes": map[string]any{
 				"type":        "array",
