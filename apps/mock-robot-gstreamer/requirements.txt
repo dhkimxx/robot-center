@@ -1,0 +1,2 @@
+# Runtime dependencies are installed by Dockerfile from Ubuntu packages:
+# python3-gi, python3-gst-1.0, python3-requests, python3-websocket.

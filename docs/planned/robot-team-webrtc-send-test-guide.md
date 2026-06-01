@@ -34,6 +34,7 @@ history:
 - '2026-06-01 danya.kim <danya.kim@thundersoft.com>: remove non-contract Swagger reference from robot team guide'
 - '2026-06-01 danya.kim <danya.kim@thundersoft.com>: remove stale verification result block from robot team guide'
 - '2026-06-01 danya.kim <danya.kim@thundersoft.com>: align robot API error guidance with current implementation'
+- '2026-06-01 danya.kim <danya.kim@thundersoft.com>: clarify GStreamer webrtcbin max-bundle and track identity expectations'
 ---
 
 # Robot Team WebRTC Send Test Guide
@@ -553,6 +554,38 @@ ICE candidate payload는 browser/Pion 표준 candidate 필드를 사용한다.
 }
 ```
 
+### 6.1 SDP / BUNDLE 호환성
+
+Robot publisher는 `max-bundle` 정책을 사용할 수 있다. 관제 서버는 RFC BUNDLE 형태의 SDP를 기준으로 협상한다.
+
+GStreamer `webrtcbin` 같은 구현체는 `max-bundle` offer에서 bundle transport를 대표하지 않는 media section을 아래처럼 보낼 수 있다.
+
+```text
+a=group:BUNDLE audio0 video1 video2 application3
+m=audio 9 UDP/TLS/RTP/SAVPF 111
+a=mid:audio0
+m=video 0 UDP/TLS/RTP/SAVPF 96
+a=bundle-only
+a=mid:video1
+m=video 0 UDP/TLS/RTP/SAVPF 97
+a=bundle-only
+a=mid:video2
+m=application 0 UDP/DTLS/SCTP webrtc-datachannel
+a=bundle-only
+a=mid:application3
+a=sctp-port:5000
+```
+
+위 형태는 허용된다. `m=application 0 ... webrtc-datachannel`이더라도 `a=group:BUNDLE`에 포함되어 있고, `a=bundle-only`, `a=mid`, `a=sctp-port`가 있으면 DataChannel 협상 대상으로 본다.
+
+로봇팀 구현 조건:
+
+- DataChannel은 offer 생성 전에 만든다.
+- offer SDP에 `m=application ... webrtc-datachannel`과 `a=sctp-port`가 포함되어야 한다.
+- `max-bundle` 사용 시 `a=group:BUNDLE`에 media/DataChannel mid가 모두 포함되어야 한다.
+- `answer` 적용 직후가 아니라 각 DataChannel OPEN 이후에만 payload를 보낸다.
+- client-side에서 SDP를 임의로 고쳐야 한다면 관제팀에 먼저 공유한다. 특히 `m=` line, `a=mid`, `a=sctp-port`, `a=msid`는 협상과 track 식별에 직접 영향을 준다.
+
 ## 7. Media Track
 
 로봇팀 구현은 아래 canonical track slot만 사용한다.
@@ -570,6 +603,27 @@ ICE candidate payload는 browser/Pion 표준 candidate 필드를 사용한다.
 - `track.video_2`에는 thermal 또는 보조 영상을 송신한다.
 - audio가 없으면 `track.audio_1`은 생략 가능하다.
 - 영상 codec은 우선 H.264로 테스트한다.
+
+### 7.1 Track identity
+
+관제 서버는 media track을 canonical slot으로 식별해야 RGB/Thermal/Audio를 기대 위치에 표시할 수 있다.
+
+권장 식별 방식:
+
+- 가능한 SDK에서는 track id 또는 stream id에 `track.video_1`, `track.video_2`, `track.audio_1` 같은 canonical slot 이름을 넣는다.
+- SDP 기준으로는 media section의 `a=msid` track id 또는 `a=ssrc ... msid:` 값에 canonical slot 이름이 드러나야 한다.
+- GStreamer `webrtcbin`이 `webrtctransceiver0` 같은 자동 track id만 생성하면 WebRTC 연결과 media 수신은 될 수 있지만, 관제 표시 slot이 기대와 다를 수 있다.
+
+예시:
+
+```text
+m=video 0 UDP/TLS/RTP/SAVPF 96
+a=mid:video1
+a=msid:robot-publisher track.video_1
+a=ssrc:1234 msid:robot-publisher track.video_1
+```
+
+track identity는 DataChannel payload나 WebSocket query에 넣지 않는다. WebRTC media track/SDP 식별자로만 표현한다.
 
 ## 8. DataChannel
 
@@ -800,6 +854,7 @@ SFU/WebRTC:
 | `publish-error` | robot이 active mission에 배정되지 않았거나 room이 missionCode와 다름 |
 | ICE `failed` | mission 응답의 `turnServers` 사용 여부, UDP 3478, relay port range, 방화벽, relay candidate 생성 여부 |
 | WebSocket은 연결됐지만 영상 없음 | track publish, codec negotiation, track label/order |
+| DataChannel open callback 없음 | DataChannel을 offer 전에 만들었는지, offer SDP의 `m=application`, `a=sctp-port`, `a=group:BUNDLE`, `a=bundle-only` 확인 |
 | 영상은 보이나 센서 없음 | DataChannel label, open 상태, payload envelope |
 | 센서는 오나 위치 없음 | position sensorId/value shape |
 

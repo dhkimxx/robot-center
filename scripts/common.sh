@@ -8,6 +8,7 @@ APP_SESSION="robot-center-app"
 RECORDER_SESSION="robot-center-recorder"
 TURN_SESSION="robot-center-turn"
 PYTHON_MOCK_SESSION_PREFIX="robot-center-pyrobot"
+GSTREAMER_MOCK_SESSION_PREFIX="robot-center-gstrobot"
 
 APP_PORT="${APP_PORT:-18080}"
 RECORDER_PORT="${RECORDER_PORT:-18082}"
@@ -46,16 +47,54 @@ detect_host_ip() {
 }
 
 screen_exists() {
+  if ! command -v screen >/dev/null 2>&1; then
+    pid_session_running "$1"
+    return
+  fi
   local screen_output
   screen_output="$(screen -ls 2>/dev/null || true)"
   grep -q "[.]$1[[:space:]]" <<<"$screen_output"
 }
 
+runtime_pid_file() {
+  local session_name="$1"
+  printf '%s/.runtime/%s.pid\n' "$ROOT_DIR" "$session_name"
+}
+
+pid_session_running() {
+  local session_name="$1"
+  local pid_file
+  pid_file="$(runtime_pid_file "$session_name")"
+  [[ -s "$pid_file" ]] || return 1
+  local pid
+  pid="$(cat "$pid_file")"
+  [[ -n "$pid" ]] || return 1
+  kill -0 "$pid" >/dev/null 2>&1
+}
+
+stop_pid_session() {
+  local session_name="$1"
+  local pid_file
+  pid_file="$(runtime_pid_file "$session_name")"
+  [[ -s "$pid_file" ]] || return 0
+  local pid
+  pid="$(cat "$pid_file")"
+  if [[ -n "$pid" ]] && kill -0 "$pid" >/dev/null 2>&1; then
+    kill "$pid" >/dev/null 2>&1 || true
+    sleep 1
+    if kill -0 "$pid" >/dev/null 2>&1; then
+      kill -9 "$pid" >/dev/null 2>&1 || true
+    fi
+  fi
+  rm -f "$pid_file"
+}
+
 stop_screen_session() {
   local session_name="$1"
-  if screen_exists "$session_name"; then
+  if command -v screen >/dev/null 2>&1 && screen_exists "$session_name"; then
     screen -S "$session_name" -X quit || true
   fi
+  stop_pid_session "$session_name"
 }
 
 kill_listeners_on_port() {
@@ -81,18 +120,24 @@ stop_local_processes() {
 	stop_screen_session "$RECORDER_SESSION"
 	stop_screen_session "$TURN_SESSION"
 	stop_python_mock_sessions
+	stop_gstreamer_mock_sessions
 	kill_listeners_on_port "$APP_PORT"
 	kill_listeners_on_port "$RECORDER_PORT"
 	kill_listeners_on_port "$TURN_PORT"
 }
 
 list_python_mock_sessions() {
-  (screen -ls 2>/dev/null || true) | awk -v prefix="$PYTHON_MOCK_SESSION_PREFIX" '
+  {
+    if command -v screen >/dev/null 2>&1; then
+      screen -ls 2>/dev/null || true
+    fi
+  } | awk -v prefix="$PYTHON_MOCK_SESSION_PREFIX" '
     $1 ~ "[.]" prefix {
       split($1, parts, ".")
       print parts[2]
     }
   '
+  list_pid_sessions "$PYTHON_MOCK_SESSION_PREFIX"
 }
 
 stop_python_mock_sessions() {
@@ -103,15 +148,51 @@ stop_python_mock_sessions() {
   done < <(list_python_mock_sessions)
 }
 
+list_gstreamer_mock_sessions() {
+  {
+    if command -v screen >/dev/null 2>&1; then
+      screen -ls 2>/dev/null || true
+    fi
+  } | awk -v prefix="$GSTREAMER_MOCK_SESSION_PREFIX" '
+    $1 ~ "[.]" prefix {
+      split($1, parts, ".")
+      print parts[2]
+    }
+  '
+  list_pid_sessions "$GSTREAMER_MOCK_SESSION_PREFIX"
+}
+
+stop_gstreamer_mock_sessions() {
+  local session_name
+  while IFS= read -r session_name; do
+    [[ -z "$session_name" ]] && continue
+    stop_screen_session "$session_name"
+  done < <(list_gstreamer_mock_sessions)
+}
+
 start_screen_session() {
   local session_name="$1"
   local command="$2"
   local log_file="$ROOT_DIR/.runtime/$session_name.log"
+  local pid_file
+  pid_file="$(runtime_pid_file "$session_name")"
 
   stop_screen_session "$session_name"
   mkdir -p "$ROOT_DIR/.runtime"
   : > "$log_file"
-  screen -dmS "$session_name" bash -lc "$command >> '$log_file' 2>&1"
+  if command -v screen >/dev/null 2>&1; then
+    screen -dmS "$session_name" bash -lc "$command >> '$log_file' 2>&1"
+    return
+  fi
+  nohup bash -lc "$command >> '$log_file' 2>&1" >/dev/null 2>&1 &
+  printf '%s\n' "$!" > "$pid_file"
+}
+
+list_pid_sessions() {
+  local prefix="$1"
+  local runtime_dir="$ROOT_DIR/.runtime"
+  [[ -d "$runtime_dir" ]] || return
+  find "$runtime_dir" -maxdepth 1 -type f -name "$prefix*.pid" -exec basename {} .pid \; 2>/dev/null
 }
 
 wait_for_http() {
