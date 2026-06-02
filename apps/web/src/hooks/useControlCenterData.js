@@ -14,7 +14,7 @@ export function useControlCenterData() {
   const [statusError, setStatusError] = useState("");
   const [dataLoadState, setDataLoadState] = useState({
     hasLoaded: false,
-    isLoading: false
+    isLoading: true
   });
   const requestSequenceRef = useRef(0);
 
