@@ -17,10 +17,37 @@ type RobotResponse struct {
 	UpdatedAt   time.Time                   `json:"updatedAt"`
 }
 
+type CreateRobotRequest struct {
+	DisplayName string `json:"displayName"`
+	ModelName   string `json:"modelName"`
+}
+
+type UpdateRobotRequest struct {
+	DisplayName string `json:"displayName"`
+	ModelName   string `json:"modelName"`
+}
+
 type RobotConnectionInfoResponse struct {
 	ServerURL  string `json:"serverUrl"`
 	RobotCode  string `json:"robotCode"`
 	RobotToken string `json:"robotToken"`
+}
+
+type RobotEnvelopeResponse struct {
+	Robot RobotResponse `json:"robot"`
+}
+
+type RobotsResponse struct {
+	Robots []RobotResponse `json:"robots"`
+}
+
+type CreateRobotResponse struct {
+	Robot          RobotResponse               `json:"robot"`
+	ConnectionInfo RobotConnectionInfoResponse `json:"connectionInfo"`
+}
+
+type RobotConnectionInfoEnvelopeResponse struct {
+	ConnectionInfo RobotConnectionInfoResponse `json:"connectionInfo"`
 }
 
 func Robot(robot domain.Robot, now time.Time, heartbeatTTL time.Duration) RobotResponse {
@@ -44,6 +71,31 @@ func Robots(robots []domain.Robot, now time.Time, heartbeatTTL time.Duration) []
 	return response
 }
 
+func RobotEnvelope(robot domain.Robot, now time.Time, heartbeatTTL time.Duration) RobotEnvelopeResponse {
+	return RobotEnvelopeResponse{
+		Robot: Robot(robot, now, heartbeatTTL),
+	}
+}
+
+func RobotsPayload(robots []domain.Robot, now time.Time, heartbeatTTL time.Duration) RobotsResponse {
+	return RobotsResponse{
+		Robots: Robots(robots, now, heartbeatTTL),
+	}
+}
+
 func RobotConnectionInfo(info domain.RobotConnectionInfo) RobotConnectionInfoResponse {
 	return RobotConnectionInfoResponse(info)
+}
+
+func CreateRobotPayload(robot domain.Robot, info domain.RobotConnectionInfo, now time.Time, heartbeatTTL time.Duration) CreateRobotResponse {
+	return CreateRobotResponse{
+		Robot:          Robot(robot, now, heartbeatTTL),
+		ConnectionInfo: RobotConnectionInfo(info),
+	}
+}
+
+func RobotConnectionInfoPayload(info domain.RobotConnectionInfo) RobotConnectionInfoEnvelopeResponse {
+	return RobotConnectionInfoEnvelopeResponse{
+		ConnectionInfo: RobotConnectionInfo(info),
+	}
 }

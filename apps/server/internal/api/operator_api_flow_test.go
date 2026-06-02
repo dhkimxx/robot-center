@@ -3,82 +3,79 @@ package api
 import (
 	"net/http"
 	"testing"
+
+	"robot-center/apps/server/internal/api/dto"
 )
 
 func TestOperatorAPIFlow(t *testing.T) {
 	server := newAPIFlowTestServer(t)
 	robot := server.createRobot(t, "Test Robot")
 
-	connectionInfoPayload := requestJSON[map[string]any](t, server.baseURL, http.MethodGet, "/api/v1/operator/robots/"+robot.code+"/connection-info", "", nil)
-	connectionInfo := connectionInfoPayload["connectionInfo"].(map[string]any)
-	if connectionInfo["robotCode"] != robot.code || connectionInfo["robotToken"] == "" {
-		t.Fatalf("expected operator connection info for robot %s, got %#v", robot.code, connectionInfo)
+	connectionInfoPayload := requestJSON[dto.RobotConnectionInfoEnvelopeResponse](t, server.baseURL, http.MethodGet, "/api/v1/operator/robots/"+robot.code+"/connection-info", "", nil)
+	if connectionInfoPayload.ConnectionInfo.RobotCode != robot.code || connectionInfoPayload.ConnectionInfo.RobotToken == "" {
+		t.Fatalf("expected operator connection info for robot %s, got %#v", robot.code, connectionInfoPayload)
 	}
 
-	updateRobotPayload := requestJSON[map[string]any](t, server.baseURL, http.MethodPatch, "/api/v1/operator/robots/"+robot.code, "", map[string]any{
-		"displayName": "Updated Test Robot",
-		"modelName":   "Updated Android Mock",
+	updateRobotPayload := requestJSON[dto.RobotEnvelopeResponse](t, server.baseURL, http.MethodPatch, "/api/v1/operator/robots/"+robot.code, "", dto.UpdateRobotRequest{
+		DisplayName: "Updated Test Robot",
+		ModelName:   "Updated Android Mock",
 	})
-	updatedRobot := updateRobotPayload["robot"].(map[string]any)
-	if updatedRobot["displayName"] != "Updated Test Robot" {
-		t.Fatalf("expected updated robot name, got %#v", updatedRobot)
+	if updateRobotPayload.Robot.DisplayName != "Updated Test Robot" {
+		t.Fatalf("expected updated robot name, got %#v", updateRobotPayload)
 	}
 
-	rotateTokenPayload := requestJSON[map[string]any](t, server.baseURL, http.MethodPost, "/api/v1/operator/robots/"+robot.code+"/connection-token", "", nil)
-	rotatedConnectionInfo := rotateTokenPayload["connectionInfo"].(map[string]any)
-	if rotatedConnectionInfo["robotToken"] == robot.token {
-		t.Fatalf("expected rotated robot token, got %#v", rotatedConnectionInfo)
+	rotateTokenPayload := requestJSON[dto.RobotConnectionInfoEnvelopeResponse](t, server.baseURL, http.MethodPost, "/api/v1/operator/robots/"+robot.code+"/connection-token", "", nil)
+	if rotateTokenPayload.ConnectionInfo.RobotToken == robot.token {
+		t.Fatalf("expected rotated robot token, got %#v", rotateTokenPayload)
 	}
 
 	supportRobot := server.createRobot(t, "Support Robot")
 	idleRobot := server.createRobot(t, "Idle Robot")
-	requestJSON[map[string]any](t, server.baseURL, http.MethodDelete, "/api/v1/operator/robots/"+idleRobot.code, "", nil)
-	robotsPayload := requestJSON[map[string]any](t, server.baseURL, http.MethodGet, "/api/v1/operator/robots", "", nil)
-	if robotListHasCode(robotsPayload["robots"].([]any), idleRobot.code) {
+	requestJSON[dto.RobotEnvelopeResponse](t, server.baseURL, http.MethodDelete, "/api/v1/operator/robots/"+idleRobot.code, "", nil)
+	robotsPayload := requestJSON[dto.RobotsResponse](t, server.baseURL, http.MethodGet, "/api/v1/operator/robots", "", nil)
+	if robotListHasCode(robotsPayload.Robots, idleRobot.code) {
 		t.Fatalf("expected archived robot to be hidden, got %#v", robotsPayload)
 	}
 
 	mission := server.createMission(t, []string{robot.code, supportRobot.code})
-	missionsPayload := requestJSON[map[string]any](t, server.baseURL, http.MethodGet, "/api/v1/operator/missions", "", nil)
-	missions := missionsPayload["missions"].([]any)
-	if len(missions) != 1 {
+	missionsPayload := requestJSON[dto.MissionsResponse](t, server.baseURL, http.MethodGet, "/api/v1/operator/missions", "", nil)
+	if len(missionsPayload.Missions) != 1 {
 		t.Fatalf("expected one mission row for multi-robot mission, got %#v", missionsPayload)
 	}
-	listedMission := missions[0].(map[string]any)
-	assertStringListEqual(t, listedMission["robotCodes"], []string{robot.code, supportRobot.code})
+	listedMission := missionsPayload.Missions[0]
+	assertStringListEqual(t, listedMission.RobotCodes, []string{robot.code, supportRobot.code})
 
 	startedMission := server.startMission(t, mission.code)
-	if startedMission["status"] != "active" {
+	if startedMission.Status != "active" {
 		t.Fatalf("expected active mission, got %#v", startedMission)
 	}
-	assertStringListEqual(t, startedMission["robotCodes"], []string{robot.code, supportRobot.code})
+	assertStringListEqual(t, startedMission.RobotCodes, []string{robot.code, supportRobot.code})
 
-	conflictStatus, conflictPayload := requestRawJSON(t, server.baseURL, http.MethodPost, "/api/v1/operator/missions", "", map[string]any{
-		"name":        "Conflicting Mission",
-		"missionType": "mountain_rescue",
-		"robotCode":   robot.code,
+	conflictStatus, conflictPayload := requestRawJSONAs[dto.MissionConflictEnvelopeResponse](t, server.baseURL, http.MethodPost, "/api/v1/operator/missions", "", dto.CreateMissionRequest{
+		Name:        "Conflicting Mission",
+		MissionType: "mountain_rescue",
+		RobotCode:   robot.code,
 	})
 	if conflictStatus != http.StatusConflict {
 		t.Fatalf("expected mission create conflict status, got %d payload %#v", conflictStatus, conflictPayload)
 	}
-	conflicts := conflictPayload["conflicts"].([]any)
-	if len(conflicts) != 1 {
+	if len(conflictPayload.Conflicts) != 1 {
 		t.Fatalf("expected one conflict, got %#v", conflictPayload)
 	}
-	conflict := conflicts[0].(map[string]any)
-	if conflict["robotCode"] != robot.code || conflict["activeMissionCode"] != mission.code {
+	conflict := conflictPayload.Conflicts[0]
+	if conflict.RobotCode != robot.code || conflict.ActiveMissionCode != mission.code {
 		t.Fatalf("expected conflict robot %s active in %s, got %#v", robot.code, mission.code, conflict)
 	}
 
-	liveStatus := requestJSON[map[string]any](t, server.baseURL, http.MethodGet, "/api/v1/operator/missions/"+mission.code+"/live-status", "", nil)
-	if len(liveStatus["robots"].([]any)) != 2 {
+	liveStatus := requestJSON[dto.MissionLiveStatusResponse](t, server.baseURL, http.MethodGet, "/api/v1/operator/missions/"+mission.code+"/live-status", "", nil)
+	if len(liveStatus.Robots) != 2 {
 		t.Fatalf("expected two live status robots, got %#v", liveStatus)
 	}
 
-	endMissionPayload := requestJSON[map[string]any](t, server.baseURL, http.MethodPost, "/api/v1/operator/missions/"+mission.code+"/end", "", nil)
-	endedMission := endMissionPayload["mission"].(map[string]any)
-	if endedMission["status"] != "ended" {
+	endMissionPayload := requestJSON[dto.MissionEnvelopeResponse](t, server.baseURL, http.MethodPost, "/api/v1/operator/missions/"+mission.code+"/end", "", nil)
+	endedMission := endMissionPayload.Mission
+	if endedMission.Status != "ended" {
 		t.Fatalf("expected ended mission, got %#v", endedMission)
 	}
-	assertStringListEqual(t, endedMission["robotCodes"], []string{robot.code, supportRobot.code})
+	assertStringListEqual(t, endedMission.RobotCodes, []string{robot.code, supportRobot.code})
 }

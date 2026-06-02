@@ -4,20 +4,21 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"robot-center/apps/server/internal/api/dto"
 )
 
 func TestSystemAPIFlow(t *testing.T) {
 	server := newAPIFlowTestServer(t)
 
-	health := requestJSON[map[string]any](t, server.baseURL, http.MethodGet, "/healthz", "", nil)
-	if health["status"] != "ok" {
+	health := requestJSON[dto.HealthResponse](t, server.baseURL, http.MethodGet, "/healthz", "", nil)
+	if health.Status != "ok" {
 		t.Fatalf("expected health ok, got %#v", health)
 	}
 
-	systemStatus := requestJSON[map[string]any](t, server.baseURL, http.MethodGet, "/api/v1/system/status", "", nil)
-	components := systemStatus["components"].([]any)
-	if !componentHasStatus(components, "recorder-worker", "ok") {
-		t.Fatalf("expected recorder-worker component status ok, got %#v", components)
+	systemStatus := requestJSON[dto.SystemStatusResponse](t, server.baseURL, http.MethodGet, "/api/v1/system/status", "", nil)
+	if !componentHasStatus(systemStatus.Components, "recorder-worker", "ok") {
+		t.Fatalf("expected recorder-worker component status ok, got %#v", systemStatus.Components)
 	}
 
 	swaggerResponse, err := http.Get(server.baseURL + "/swagger/index.html")

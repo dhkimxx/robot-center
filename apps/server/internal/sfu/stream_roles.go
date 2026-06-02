@@ -91,6 +91,24 @@ func isCanonicalTrackRole(role string) bool {
 	return false
 }
 
+func canonicalPublishedTrackCount(trackKeys []string) int {
+	count := 0
+	for _, trackKey := range trackKeys {
+		if isCanonicalTrackRole(trackLabelFromPublishedTrackKey(trackKey)) {
+			count++
+		}
+	}
+	return count
+}
+
+func trackLabelFromPublishedTrackKey(trackKey string) string {
+	normalized := strings.TrimSpace(trackKey)
+	if index := strings.Index(normalized, ":"); index >= 0 {
+		normalized = normalized[index+1:]
+	}
+	return strings.TrimSpace(normalized)
+}
+
 func unmappedTrackRole(track *webrtc.TrackRemote) string {
 	for _, candidate := range []string{track.ID(), track.StreamID(), track.Kind().String()} {
 		token := utils.SafeTrackToken(candidate)

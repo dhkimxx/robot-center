@@ -36,6 +36,7 @@ type RecordingSession = port.RecordingSession
 type CreateRecordingChunkInput = port.CreateRecordingChunkInput
 type RecordingUploadMetadata = port.RecordingUploadMetadata
 type StorageMetadataResetResult = port.StorageMetadataResetResult
+type SensorDataClearResult = port.SensorDataClearResult
 
 type PostgresConfig = postgresstore.Config
 type PostgresStore = postgresstore.Store

@@ -50,6 +50,28 @@ func TestHubAnnouncesServerPeerAndRoomPeers(t *testing.T) {
 	}
 }
 
+func TestHubReplacesDuplicateRobotPeer(t *testing.T) {
+	hub := NewHub()
+	oldRobotPeer := testPeer("robot-peer-old", "mission-001", "robot", "robot-001")
+	newRobotPeer := testPeer("robot-peer-new", "mission-001", "robot", "robot-001")
+
+	if existingPeers, replacedPeers := hub.registerPeer(oldRobotPeer); len(existingPeers) != 0 || len(replacedPeers) != 0 {
+		t.Fatalf("expected first robot peer to have no existing/replaced peers, got existing=%#v replaced=%#v", existingPeers, replacedPeers)
+	}
+	existingPeers, replacedPeers := hub.registerPeer(newRobotPeer)
+
+	if len(existingPeers) != 0 {
+		t.Fatalf("expected replaced peer to be hidden from new peer presence, got %#v", existingPeers)
+	}
+	if len(replacedPeers) != 1 || replacedPeers[0].id != oldRobotPeer.id {
+		t.Fatalf("expected old robot peer to be replaced, got %#v", replacedPeers)
+	}
+	summary := hub.Summaries()[0]
+	if summary.RobotCount != 1 || len(summary.Peers) != 1 || summary.Peers[0].PeerID != newRobotPeer.id {
+		t.Fatalf("expected only replacement robot peer in summary, got %#v", summary)
+	}
+}
+
 func TestOperatorEndpointRejectsRobotCodeQuery(t *testing.T) {
 	hub := NewHub()
 	server := newTestSFUServer(hub)

@@ -15,13 +15,16 @@ import { SensorPanel } from "./SensorPanel.jsx";
 import { VideoPane } from "./VideoPane.jsx";
 
 export function MissionControlView({
+  isSensorSnapshotRefreshing = false,
   latestSensor,
+  latestSensorSourceLabel,
   latestTelemetry,
   liveEvents,
   liveSessions,
   mission,
   missionTargets,
   onReconnectSelectedMissionTarget,
+  onRefreshSensorSnapshot,
   operationStatuses,
   selectedMissionTargetKey,
   setSelectedMissionTargetKey
@@ -77,7 +80,13 @@ export function MissionControlView({
             <VideoPane className="min-h-0" label="RGB" stream={selectedSession.videoStreams.rgb} />
             <VideoPane className="min-h-0" label="Thermal" stream={selectedSession.videoStreams.thermal} thermal />
             <RobotMap className="min-h-0" telemetry={latestTelemetry} />
-            <SensorPanel className="min-h-0" sensor={latestSensor} />
+            <SensorPanel
+              className="min-h-0"
+              isRefreshing={isSensorSnapshotRefreshing}
+              onRefresh={onRefreshSensorSnapshot}
+              sensor={latestSensor}
+              sourceLabel={latestSensorSourceLabel}
+            />
             </div>
           </Surface>
         )}

@@ -22,6 +22,8 @@ history:
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: renamed robot schema status to device_state and clarified computed API connection status'
 - '2026-05-28 danya.kim <danya.kim@thundersoft.com>: document canonical sensor sample values column'
 - '2026-06-02 danya.kim <danya.kim@thundersoft.com>: scope recorder DataChannel sensor storage to telemetry only'
+- '2026-06-02 danya.kim <danya.kim@thundersoft.com>: document live sensor snapshot policy and sensor data clear'
+- '2026-06-02 danya.kim <danya.kim@thundersoft.com>: document sensor latest cache table and history/latest separation'
 ---
 
 # Data Storage
@@ -69,6 +71,7 @@ browser_sessions
 recorder_sessions
 sensor_descriptors
 sensor_samples
+sensor_latest_samples
 recording_sessions
 recording_chunks
 recording_finalization_jobs
@@ -97,7 +100,7 @@ control_acks
 | Identity / Access | `users` | PoC operator seed |
 | Robot / Mission | `robots`, `robot_tokens`, `missions`, `mission_robots` | 로봇 등록, token, 다중 로봇 mission assignment |
 | Runtime Session | `robot_sessions`, `browser_sessions`, `recorder_sessions` | heartbeat/session 이력. live 송출 판정은 SFU observed stream 상태를 기준으로 함 |
-| Realtime Sensor | `sensor_descriptors`, `sensor_samples` | telemetry/spatial DataChannel 저장과 최신값 조회 |
+| Realtime Sensor | `sensor_descriptors`, `sensor_samples`, `sensor_latest_samples` | telemetry DataChannel 저장, latest snapshot cache, replay/debug용 sensor 이력 |
 | Recording / Storage | `recording_sessions`, `recording_chunks`, `recording_finalization_jobs`, `storage_objects` | recorder-worker chunk, finalization job, upload 상태, MinIO object metadata |
 | Event / Control | `events`, `control_commands`, `control_acks` | P0/P1 event/control 감사 기록 기반. control 정책은 아직 TODO |
 
@@ -118,6 +121,7 @@ erDiagram
   missions ||--o{ sensor_samples : has
   robots ||--o{ sensor_samples : sends
   sensor_descriptors ||--o{ sensor_samples : classifies
+  sensor_descriptors ||--o{ sensor_latest_samples : caches_latest
 
   missions ||--o{ recording_sessions : records
   robots ||--o{ recording_sessions : recorded
@@ -318,7 +322,7 @@ Descriptor upsert 정책:
 
 ### 8.2 sensor_samples
 
-`SensorSample`은 특정 시점에 들어온 실제 측정값이다.
+`SensorSample`은 특정 시점에 들어온 실제 측정값 이력이다. Live 최신값 조회용이 아니라 replay/debug/history 저장소로 취급한다.
 
 | Column | Type | Required | Note |
 | --- | --- | --- | --- |
@@ -337,10 +341,37 @@ Descriptor upsert 정책:
 
 Index:
 
-- composite latest index: `mission_id, robot_id, sensor_id, received_at desc`
-- index: `descriptor_id`
+- history lookup index: `mission_id, robot_id, sensor_id, received_at desc`
+- descriptor history lookup index: `descriptor_id, received_at desc`
+- mission/robot sample list index: `mission_id, robot_id, received_at desc`
 - index: `channel_role`
 - index: `message_id`
+
+### 8.3 sensor_latest_samples
+
+`sensor_latest_samples`는 Live snapshot/API 최신값 조회용 cache table이다. `sensor_samples`에 insert된 sample 중 `(mission_id, robot_id, sensor_id)`별 최신 sample만 보관한다.
+
+| Column | Type | Required | Note |
+| --- | --- | --- | --- |
+| `id` | uuid | yes | PK |
+| `sample_id` | uuid | yes | 원본 `sensor_samples.id` |
+| `descriptor_id` | uuid | yes | FK sensor_descriptors.id |
+| `mission_id` | uuid | yes | FK missions.id |
+| `robot_id` | uuid | yes | FK robots.id |
+| `sensor_id` | text | yes | descriptor/sample 매칭용 sensor ID |
+| `channel_role` | text | yes | `channel.telemetry` 등 |
+| `message_id` | text | no | robot message id |
+| `sample_timestamp` | timestamptz | no | robot 측 sample 측정 시각 |
+| `received_at` | timestamptz | yes | latest 판단 기준 |
+| `values` | jsonb | no | 최신 sample value snapshot |
+| `object_key` | text | no | 대용량 object 참조 |
+| `raw_payload` | jsonb | yes | 원본 또는 정규화 전 payload |
+
+Index:
+
+- unique: `mission_id, robot_id, sensor_id`
+- lookup: `mission_id, robot_id, received_at desc`
+- index: `descriptor_id`
 
 Latest 조회 정책:
 
@@ -349,14 +380,24 @@ latest key = robotCode + sensorId
 ```
 
 같은 mission room에서 `robot-001`과 `robot-002`가 모두 `telemetry.battery_1`을 보내도 두 행으로 유지한다.
+`/api/v1/operator/sensor-latest`는 Live 화면의 주기 polling source가 아니라 target 선택 직후 초기 snapshot, 디버깅, replay 보조 조회용이다. Live 화면의 실시간 센서 표시 기준은 operator WebRTC DataChannel로 수신한 값이며, snapshot은 live 값이 들어오기 전까지만 fallback으로 사용한다.
 
-### 8.3 DataChannel 저장 경로
+Latest API는 descriptor 목록과 `sensor_latest_samples`를 조인한다. 대량 `sensor_samples` 전체 join/sort 또는 descriptor별 history lookup을 수행하지 않는다.
+
+테스트 데이터 초기화:
+
+- `/api/v1/system/sensors/clear`는 저장된 sensor descriptor, sample, latest cache를 삭제한다.
+- production 환경에서는 실행하지 않는다.
+- active recorder가 telemetry를 다시 수신하면 descriptor, sample, latest cache는 다시 생성된다.
+- object storage 초기화와 별개 작업이다.
+
+### 8.4 DataChannel 저장 경로
 
 현재 recorder-worker는 확정된 telemetry DataChannel만 sensor API로 저장한다.
 
 | DataChannel | PostgreSQL 저장 | JSONL artifact |
 | --- | --- | --- |
-| `channel.telemetry` | `sensor_descriptors`, `sensor_samples` | `telemetry_jsonl` snapshot |
+| `channel.telemetry` | `sensor_descriptors`, `sensor_samples`, `sensor_latest_samples` | `telemetry_jsonl` snapshot |
 | `channel.spatial` | 저장 안 함 | label은 예약되어 있으나 payload schema 미확정. 저장 정책은 별도 합의 후 활성화 |
 | `channel.event` | 현재 sensor 저장 대상 아님 | TODO |
 | `channel.control` | 현재 저장 대상 아님 | TODO |
@@ -706,7 +747,7 @@ Browser
 4. active mission에 두 robot assignment 존재
 5. `/api/v1/operator/missions/{missionCode}/live-status`에서 robot별 publisher/track/DataChannel 관측
 6. sensor_descriptors가 robotCode + sensorId 기준으로 분리
-7. sensor_samples가 telemetry/spatial payload를 저장
+7. sensor_samples가 telemetry payload를 저장
 8. /api/v1/operator/sensor-latest가 같은 sensorId를 robot별로 분리
 9. recording_chunks가 robot별 chunk를 생성
 10. storage_objects가 업로드 완료 파일만 object metadata로 보유

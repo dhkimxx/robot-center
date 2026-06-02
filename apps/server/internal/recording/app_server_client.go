@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"robot-center/apps/server/internal/api/dto"
 	"robot-center/apps/server/internal/domain"
 )
 
@@ -28,27 +29,6 @@ type AppServerClient interface {
 type HTTPAppServerClient struct {
 	baseURL    string
 	httpClient *http.Client
-}
-
-type recordingTargetsResponse struct {
-	Targets []domain.Mission `json:"targets"`
-}
-
-type recordingTickRequest struct {
-	MissionCode          string    `json:"missionCode"`
-	RobotCode            string    `json:"robotCode"`
-	ChunkDurationSeconds int       `json:"chunkDurationSeconds"`
-	TickAt               time.Time `json:"tickAt"`
-}
-
-type recordingFinalizationClaimRequest struct {
-	WorkerID            string `json:"workerId"`
-	Limit               int    `json:"limit"`
-	LockDurationSeconds int    `json:"lockDurationSeconds"`
-}
-
-type recordingFinalizationJobsResponse struct {
-	Jobs []domain.RecordingFinalizationJob `json:"jobs"`
 }
 
 func NewHTTPAppServerClient(baseURL string, httpClient *http.Client) *HTTPAppServerClient {
@@ -75,26 +55,26 @@ func (c *HTTPAppServerClient) FetchRecordingTargets(ctx context.Context) ([]doma
 		return nil, fmt.Errorf("app-server returned %s", response.Status)
 	}
 
-	var payload recordingTargetsResponse
+	var payload dto.RecordingTargetsResponse
 	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
 		return nil, err
 	}
-	return payload.Targets, nil
+	return missionsFromResponses(payload.Targets), nil
 }
 
 func (c *HTTPAppServerClient) CreateRecordingTick(ctx context.Context, target domain.Mission, chunkDuration time.Duration, tickAt time.Time) (domain.RecordingTickResult, error) {
-	body := recordingTickRequest{
+	body := dto.RecorderTickRequest{
 		MissionCode:          target.MissionCode,
 		RobotCode:            target.RobotCode,
 		ChunkDurationSeconds: int(chunkDuration.Seconds()),
 		TickAt:               tickAt,
 	}
-	var buffer bytes.Buffer
-	if err := json.NewEncoder(&buffer).Encode(body); err != nil {
+	buffer, err := encodeJSONBuffer(body)
+	if err != nil {
 		return domain.RecordingTickResult{}, err
 	}
 
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, joinURL(c.baseURL, "/api/v1/recorder/tick"), &buffer)
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, joinURL(c.baseURL, "/api/v1/recorder/tick"), buffer)
 	if err != nil {
 		return domain.RecordingTickResult{}, err
 	}
@@ -109,25 +89,25 @@ func (c *HTTPAppServerClient) CreateRecordingTick(ctx context.Context, target do
 		return domain.RecordingTickResult{}, fmt.Errorf("app-server returned %s", response.Status)
 	}
 
-	var result domain.RecordingTickResult
+	var result dto.RecordingTickResponse
 	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
 		return domain.RecordingTickResult{}, err
 	}
-	return result, nil
+	return recordingTickResultFromResponse(result), nil
 }
 
 func (c *HTTPAppServerClient) ClaimRecordingFinalizationJobs(ctx context.Context, workerID string, limit int, lockDuration time.Duration) ([]domain.RecordingFinalizationJob, error) {
-	body := recordingFinalizationClaimRequest{
+	body := dto.RecorderFinalizationClaimRequest{
 		WorkerID:            workerID,
 		Limit:               limit,
 		LockDurationSeconds: int(lockDuration.Seconds()),
 	}
-	var buffer bytes.Buffer
-	if err := json.NewEncoder(&buffer).Encode(body); err != nil {
+	buffer, err := encodeJSONBuffer(body)
+	if err != nil {
 		return nil, err
 	}
 
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, joinURL(c.baseURL, "/api/v1/recorder/finalization-jobs/claim"), &buffer)
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, joinURL(c.baseURL, "/api/v1/recorder/finalization-jobs/claim"), buffer)
 	if err != nil {
 		return nil, err
 	}
@@ -140,11 +120,11 @@ func (c *HTTPAppServerClient) ClaimRecordingFinalizationJobs(ctx context.Context
 	if response.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("app-server returned %s", response.Status)
 	}
-	var payload recordingFinalizationJobsResponse
+	var payload dto.RecorderFinalizationJobsResponse
 	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
 		return nil, err
 	}
-	return payload.Jobs, nil
+	return recordingFinalizationJobsFromResponses(payload.Jobs), nil
 }
 
 func (c *HTTPAppServerClient) MarkRecordingFinalizationJobCompleted(ctx context.Context, jobID string, uploadContext RecordingUploadContext) error {
@@ -224,21 +204,16 @@ func (c *HTTPAppServerClient) PostDataChannelPayload(ctx context.Context, label 
 }
 
 func (c *HTTPAppServerClient) postRecordingFinalizationStatus(ctx context.Context, jobID string, status string, uploadContext RecordingUploadContext, reason string) error {
-	body := map[string]any{}
-	if strings.TrimSpace(reason) != "" {
-		body["reason"] = strings.TrimSpace(reason)
+	body := dto.RecorderFinalizationStatusRequest{
+		WorkerID: strings.TrimSpace(uploadContext.WorkerID),
+		Attempt:  uploadContext.Attempt,
+		Reason:   strings.TrimSpace(reason),
 	}
-	if strings.TrimSpace(uploadContext.WorkerID) != "" {
-		body["workerId"] = strings.TrimSpace(uploadContext.WorkerID)
-	}
-	if uploadContext.Attempt > 0 {
-		body["attempt"] = uploadContext.Attempt
-	}
-	var buffer bytes.Buffer
-	if err := json.NewEncoder(&buffer).Encode(body); err != nil {
+	buffer, err := encodeJSONBuffer(body)
+	if err != nil {
 		return err
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, joinURL(c.baseURL, "/api/v1/recorder/finalization-jobs/"+jobID+"/"+status), &buffer)
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, joinURL(c.baseURL, "/api/v1/recorder/finalization-jobs/"+jobID+"/"+status), buffer)
 	if err != nil {
 		return err
 	}
@@ -255,26 +230,33 @@ func (c *HTTPAppServerClient) postRecordingFinalizationStatus(ctx context.Contex
 }
 
 func (c *HTTPAppServerClient) newUploadNotificationRequest(ctx context.Context, endpoint string, sizeBytes int64, uploadContext RecordingUploadContext) (*http.Request, error) {
-	body := map[string]any{}
+	var requestSizeBytes *int64
 	if sizeBytes > 0 {
-		body["sizeBytes"] = sizeBytes
+		requestSizeBytes = &sizeBytes
 	}
-	if strings.TrimSpace(uploadContext.WorkerID) != "" {
-		body["workerId"] = strings.TrimSpace(uploadContext.WorkerID)
+	body := dto.RecorderUploadRequest{
+		SizeBytes: requestSizeBytes,
+		WorkerID:  strings.TrimSpace(uploadContext.WorkerID),
+		Attempt:   uploadContext.Attempt,
 	}
-	if uploadContext.Attempt > 0 {
-		body["attempt"] = uploadContext.Attempt
-	}
-	var buffer bytes.Buffer
-	if err := json.NewEncoder(&buffer).Encode(body); err != nil {
+	buffer, err := encodeJSONBuffer(body)
+	if err != nil {
 		return nil, err
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, &buffer)
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, buffer)
 	if err != nil {
 		return nil, err
 	}
 	request.Header.Set("Content-Type", "application/json")
 	return request, nil
+}
+
+func encodeJSONBuffer(payload any) (*bytes.Buffer, error) {
+	var buffer bytes.Buffer
+	if err := json.NewEncoder(&buffer).Encode(payload); err != nil {
+		return nil, err
+	}
+	return &buffer, nil
 }
 
 func joinURL(baseURL string, path string) string {

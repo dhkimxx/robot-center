@@ -227,7 +227,7 @@ func (w *Worker) SubscriberStatus() SubscriberStatus {
 			Robots:               subscriberRobotStatuses(roomStatus),
 			SignalingState:       roomStatus.signalingState,
 			ICEState:             roomStatus.iceState,
-			TrackCount:           len(roomStatus.trackLabels),
+			TrackCount:           subscriberRoomTrackCount(roomStatus),
 			DataChannelCount:     len(roomStatus.dataChannelLabels),
 			DataChannels:         subscriberDataChannelStatuses(roomStatus),
 			DataMessageCount:     roomStatus.dataMessageCount,

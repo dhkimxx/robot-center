@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
+	"robot-center/apps/server/internal/api/dto"
 )
 
 func TestRecorderAPIFlow(t *testing.T) {
@@ -11,52 +13,53 @@ func TestRecorderAPIFlow(t *testing.T) {
 	robot := server.createRobot(t, "Recorder Robot")
 	mission := server.createStartedMission(t, robot)
 
-	targetsPayload := requestJSON[map[string]any](t, server.baseURL, http.MethodGet, "/api/v1/recorder/recording-targets", "", nil)
-	targets := targetsPayload["targets"].([]any)
-	if len(targets) != 1 {
+	targetsPayload := requestJSON[dto.RecordingTargetsResponse](t, server.baseURL, http.MethodGet, "/api/v1/recorder/recording-targets", "", nil)
+	if len(targetsPayload.Targets) != 1 {
 		t.Fatalf("expected one recording target, got %#v", targetsPayload)
 	}
 
-	requestJSON[map[string]any](t, server.baseURL, http.MethodPost, "/api/v1/recorder/sensor-samples", "", map[string]any{
-		"messageId":   "telemetry-canonical-1",
-		"messageType": "telemetry",
-		"channelRole": "channel.telemetry",
-		"robotCode":   robot.code,
-		"missionId":   mission.id,
-		"descriptors": []map[string]any{
+	positionTimestamp := time.Now().UTC()
+	gasTimestamp := time.Now().UTC()
+	requestJSON[dto.SensorSamplesResponse](t, server.baseURL, http.MethodPost, "/api/v1/recorder/sensor-samples", "", dto.SensorEnvelopeRequest{
+		MessageID:   "telemetry-canonical-1",
+		MessageType: "telemetry",
+		ChannelRole: "channel.telemetry",
+		RobotCode:   robot.code,
+		MissionID:   mission.id,
+		Descriptors: []dto.SensorDescriptorRequest{
 			{
-				"sensorId":   "telemetry.position_1",
-				"sensorType": "position",
-				"label":      "GPS",
-				"enabled":    true,
+				SensorID:   "telemetry.position_1",
+				SensorType: "position",
+				Label:      "GPS",
+				Enabled:    true,
 			},
 			{
-				"sensorId":   "telemetry.gas.channel_1",
-				"sensorType": "gas",
-				"label":      "Gas",
-				"enabled":    true,
+				SensorID:   "telemetry.gas.channel_1",
+				SensorType: "gas",
+				Label:      "Gas",
+				Enabled:    true,
 			},
 		},
-		"samples": []map[string]any{
+		Samples: []dto.SensorSampleRequest{
 			{
-				"sensorId":  "telemetry.position_1",
-				"timestamp": time.Now().UTC().Format(time.RFC3339Nano),
-				"values": map[string]any{
+				SensorID:  "telemetry.position_1",
+				Timestamp: &positionTimestamp,
+				Values: map[string]any{
 					"latitude":  37.402181,
 					"longitude": 127.106818,
 				},
 			},
 			{
-				"sensorId":  "telemetry.gas.channel_1",
-				"timestamp": time.Now().UTC().Format(time.RFC3339Nano),
-				"values": map[string]any{
+				SensorID:  "telemetry.gas.channel_1",
+				Timestamp: &gasTimestamp,
+				Values: map[string]any{
 					"concentration": 12.3,
 				},
 			},
 		},
 	})
 
-	missingSensorTypeStatus, _ := requestRawJSON(t, server.baseURL, http.MethodPost, "/api/v1/recorder/sensor-samples", "", map[string]any{
+	missingSensorTypeStatus := requestStatus(t, server.baseURL, http.MethodPost, "/api/v1/recorder/sensor-samples", "", map[string]any{
 		"messageId":   "telemetry-missing-sensor-type",
 		"messageType": "telemetry",
 		"channelRole": "channel.telemetry",
@@ -74,7 +77,7 @@ func TestRecorderAPIFlow(t *testing.T) {
 		t.Fatalf("expected descriptor without sensorType to be rejected, got %d", missingSensorTypeStatus)
 	}
 
-	invalidSensorTypeStatus, _ := requestRawJSON(t, server.baseURL, http.MethodPost, "/api/v1/recorder/sensor-samples", "", map[string]any{
+	invalidSensorTypeStatus := requestStatus(t, server.baseURL, http.MethodPost, "/api/v1/recorder/sensor-samples", "", map[string]any{
 		"messageId":   "telemetry-invalid-sensor-type",
 		"messageType": "telemetry",
 		"channelRole": "channel.telemetry",
@@ -93,7 +96,7 @@ func TestRecorderAPIFlow(t *testing.T) {
 		t.Fatalf("expected descriptor with invalid sensorType to be rejected, got %d", invalidSensorTypeStatus)
 	}
 
-	sampleWithoutDescriptorStatus, _ := requestRawJSON(t, server.baseURL, http.MethodPost, "/api/v1/recorder/sensor-samples", "", map[string]any{
+	sampleWithoutDescriptorStatus := requestStatus(t, server.baseURL, http.MethodPost, "/api/v1/recorder/sensor-samples", "", map[string]any{
 		"messageId":   "telemetry-sample-without-descriptor",
 		"messageType": "telemetry",
 		"channelRole": "channel.telemetry",
@@ -113,7 +116,7 @@ func TestRecorderAPIFlow(t *testing.T) {
 		t.Fatalf("expected sample without descriptor to be rejected, got %d", sampleWithoutDescriptorStatus)
 	}
 
-	payloadOnlyStatus, _ := requestRawJSON(t, server.baseURL, http.MethodPost, "/api/v1/recorder/sensor-samples", "", map[string]any{
+	payloadOnlyStatus := requestStatus(t, server.baseURL, http.MethodPost, "/api/v1/recorder/sensor-samples", "", map[string]any{
 		"messageId":   "telemetry-payload-only",
 		"messageType": "telemetry",
 		"channelRole": "channel.telemetry",
@@ -127,52 +130,59 @@ func TestRecorderAPIFlow(t *testing.T) {
 		t.Fatalf("expected payload-only sensor envelope to be rejected, got %d", payloadOnlyStatus)
 	}
 
-	sensorLatestPayload := requestJSON[map[string]any](t, server.baseURL, http.MethodGet, "/api/v1/operator/sensor-latest?missionId="+mission.id+"&robotCode="+robot.code, "", nil)
-	latestSensors := sensorLatestPayload["sensors"].([]any)
-	if len(latestSensors) != 2 {
+	sensorLatestPayload := requestJSON[dto.SensorLatestListResponse](t, server.baseURL, http.MethodGet, "/api/v1/operator/sensor-latest?missionId="+mission.id+"&robotCode="+robot.code, "", nil)
+	if len(sensorLatestPayload.Sensors) != 2 {
 		t.Fatalf("expected two latest sensor rows, got %#v", sensorLatestPayload)
 	}
-	if !sensorListHasID(latestSensors, "telemetry.position_1") {
+	if !sensorListHasID(sensorLatestPayload.Sensors, "telemetry.position_1") {
 		t.Fatalf("expected position sensor latest row, got %#v", sensorLatestPayload)
 	}
 
-	recordingTickPayload := requestJSON[map[string]any](t, server.baseURL, http.MethodPost, "/api/v1/recorder/tick", "", map[string]any{
-		"missionCode":          mission.code,
-		"robotCode":            robot.code,
-		"chunkDurationSeconds": 600,
-		"tickAt":               time.Now().UTC().Format(time.RFC3339Nano),
+	clearSensorPayload := requestJSON[dto.ClearSensorDataResponse](t, server.baseURL, http.MethodPost, "/api/v1/system/sensors/clear", "", dto.ClearSensorDataRequest{
+		Confirmation: "CLEAR_SENSOR_DATA",
 	})
-	chunk := recordingTickPayload["chunk"].(map[string]any)
-	if chunk["status"] != "recording" {
+	if clearSensorPayload.SensorData.SensorSamplesDeleted != 2 {
+		t.Fatalf("expected two sensor samples deleted, got %#v", clearSensorPayload)
+	}
+	sensorLatestAfterClearPayload := requestJSON[dto.SensorLatestListResponse](t, server.baseURL, http.MethodGet, "/api/v1/operator/sensor-latest?missionId="+mission.id+"&robotCode="+robot.code, "", nil)
+	if latestAfterClear := sensorLatestAfterClearPayload.Sensors; len(latestAfterClear) != 0 {
+		t.Fatalf("expected sensor latest to be empty after clear, got %#v", sensorLatestAfterClearPayload)
+	}
+
+	recordingTickPayload := requestJSON[dto.RecordingTickResponse](t, server.baseURL, http.MethodPost, "/api/v1/recorder/tick", "", dto.RecorderTickRequest{
+		MissionCode:          mission.code,
+		RobotCode:            robot.code,
+		ChunkDurationSeconds: 600,
+		TickAt:               time.Now().UTC(),
+	})
+	chunk := recordingTickPayload.Chunk
+	if chunk.Status != "recording" {
 		t.Fatalf("expected recording chunk, got %#v", chunk)
 	}
 
-	uploadedPayload := requestJSON[map[string]any](t, server.baseURL, http.MethodPost, "/api/v1/recorder/chunks/"+chunk["id"].(string)+"/uploaded", "", nil)
-	uploadedChunk := uploadedPayload["chunk"].(map[string]any)
-	if uploadedChunk["status"] != "uploaded" {
+	uploadedPayload := requestJSON[dto.RecordingChunkEnvelopeResponse](t, server.baseURL, http.MethodPost, "/api/v1/recorder/chunks/"+chunk.ID+"/uploaded", "", nil)
+	uploadedChunk := uploadedPayload.Chunk
+	if uploadedChunk.Status != "uploaded" {
 		t.Fatalf("expected uploaded chunk, got %#v", uploadedChunk)
 	}
-	fileUploadedPayload := requestJSON[map[string]any](t, server.baseURL, http.MethodPost, "/api/v1/recorder/chunks/"+chunk["id"].(string)+"/files/rgb_audio_mp4/uploaded", "", nil)
-	fileUploadedChunk := fileUploadedPayload["chunk"].(map[string]any)
-	fileTypes := fileUploadedChunk["availableFileTypes"].(map[string]any)
-	if fileTypes["rgb_audio_mp4"] != true {
+	fileUploadedPayload := requestJSON[dto.RecordingChunkEnvelopeResponse](t, server.baseURL, http.MethodPost, "/api/v1/recorder/chunks/"+chunk.ID+"/files/rgb_audio_mp4/uploaded", "", nil)
+	fileUploadedChunk := fileUploadedPayload.Chunk
+	if fileUploadedChunk.AvailableFileTypes["rgb_audio_mp4"] != true {
 		t.Fatalf("expected rgb mp4 available flag, got %#v", fileUploadedChunk)
 	}
 
-	recordingsPayload := requestJSON[map[string]any](t, server.baseURL, http.MethodGet, "/api/v1/operator/recordings", "", nil)
-	recordings := recordingsPayload["recordings"].([]any)
-	if len(recordings) != 1 {
+	recordingsPayload := requestJSON[dto.RecordingsResponse](t, server.baseURL, http.MethodGet, "/api/v1/operator/recordings", "", nil)
+	if len(recordingsPayload.Recordings) != 1 {
 		t.Fatalf("expected one recording, got %#v", recordingsPayload)
 	}
-	recording := recordings[0].(map[string]any)
-	if recording["recordingSessionId"] == "" {
+	recording := recordingsPayload.Recordings[0]
+	if recording.RecordingSessionID == "" {
 		t.Fatalf("expected recordingSessionId in response, got %#v", recording)
 	}
-	files := recording["files"].([]any)
-	if !fileHasAvailableURL(files, "manifest") {
-		t.Fatalf("expected manifest file with available URL, got %#v", files)
+	if !fileHasAvailableURL(recording.Files, "manifest") {
+		t.Fatalf("expected manifest file with available URL, got %#v", recording.Files)
 	}
-	if !fileHasAvailableURL(files, "rgb_audio_mp4") {
-		t.Fatalf("expected rgb mp4 file with available URL, got %#v", files)
+	if !fileHasAvailableURL(recording.Files, "rgb_audio_mp4") {
+		t.Fatalf("expected rgb mp4 file with available URL, got %#v", recording.Files)
 	}
 }

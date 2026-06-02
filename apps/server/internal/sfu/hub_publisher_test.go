@@ -117,6 +117,46 @@ func TestHubObservedRoomsSummarizePublisherActivity(t *testing.T) {
 	}
 }
 
+func TestHubObservedRoomsCountCanonicalTracksOnly(t *testing.T) {
+	hub := NewHub()
+	roomID := "mission-001"
+	observedAt := time.Now().UTC()
+
+	hub.mu.Lock()
+	currentRoom := hub.ensureRoomLocked(roomID)
+	publisher := newPublisherSession("robot-peer", "robot-001", nil)
+	publisher.iceState = "connected"
+	publisher.lastTrackAt = &observedAt
+	publisher.updatedAt = observedAt
+	for _, label := range []string{
+		StreamRoleTrackVideo1,
+		StreamRoleTrackVideo2,
+		StreamRoleTrackAudio1,
+		"unmapped.webrtctransceiver0",
+		"unmapped.webrtctransceiver1",
+	} {
+		key := publishedTrackKey("robot-001", label)
+		publisher.publishedTracks[key] = &publishedTrack{
+			key:       key,
+			robotCode: "robot-001",
+			label:     label,
+		}
+	}
+	currentRoom.publishers[publisher.robotCode] = publisher
+	hub.mu.Unlock()
+
+	publishers := hub.ObservedRooms()[0].Publishers
+	if len(publishers) != 1 {
+		t.Fatalf("expected one observed publisher, got %#v", publishers)
+	}
+	if publishers[0].TrackCount != 3 {
+		t.Fatalf("track count = %d, want canonical count 3", publishers[0].TrackCount)
+	}
+	if len(publishers[0].Tracks) != 5 {
+		t.Fatalf("expected raw track list to keep unmapped tracks, got %#v", publishers[0].Tracks)
+	}
+}
+
 func TestHubPublishedTrackKeysAreRobotScoped(t *testing.T) {
 	rgbA := publishedTrackKey("robot-001", StreamRoleTrackVideo1)
 	rgbB := publishedTrackKey("robot-002", StreamRoleTrackVideo1)

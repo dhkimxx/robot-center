@@ -4,18 +4,13 @@ import (
 	"context"
 	"errors"
 	"net/http"
+
+	"robot-center/apps/server/internal/api/dto"
 	"robot-center/apps/server/internal/service"
+
 	"strings"
 	"time"
 )
-
-func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"status":    "ok",
-		"service":   "app-server",
-		"startedAt": s.started.Format(time.RFC3339),
-	})
-}
 
 func (s *Server) handleSystemStatus(w http.ResponseWriter, r *http.Request) {
 	requestContext := r.Context()
@@ -35,57 +30,33 @@ func (s *Server) handleSystemStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sfuRooms := s.sfuHub.Summaries()
-	writeJSON(w, http.StatusOK, map[string]any{
-		"service": "app-server",
-		"status":  "ok",
-		"components": []map[string]string{
-			{"name": "app-server", "status": "ok"},
-			{"name": "recorder-worker", "status": s.componentHTTPStatus(requestContext, s.config.RecorderWorkerURL+"/healthz")},
-			{"name": "turn", "status": "configured"},
-			{"name": "postgres", "status": "configured"},
-			{"name": "minio", "status": "configured"},
-		},
-		"config": map[string]string{
-			"environment":   s.config.Environment,
-			"publicUrl":     s.config.PublicURL,
-			"minioEndpoint": s.config.MinIOEndpoint,
-			"minioBucket":   s.config.MinIOBucket,
-		},
-		"objectStorage": s.readObjectStorageStatus(requestContext),
-		"summary": map[string]int{
-			"robots":     len(robots),
-			"missions":   len(missions),
-			"sfuRooms":   len(sfuRooms),
-			"recordings": len(recordings),
-		},
-		"sfuRooms": sfuRooms,
-	})
+	writeJSON(w, http.StatusOK, dto.SystemStatus(dto.SystemStatusInput{
+		Environment:          s.config.Environment,
+		PublicURL:            s.config.PublicURL,
+		MinIOEndpoint:        s.config.MinIOEndpoint,
+		MinIOBucket:          s.config.MinIOBucket,
+		RecorderWorkerStatus: s.componentHTTPStatus(requestContext, s.config.RecorderWorkerURL+"/healthz"),
+		ObjectStorage:        s.readObjectStorageStatus(requestContext),
+		RobotCount:           len(robots),
+		MissionCount:         len(missions),
+		RecordingCount:       len(recordings),
+		SFURooms:             sfuRooms,
+	}))
 }
 
-func (s *Server) readObjectStorageStatus(ctx context.Context) any {
+func (s *Server) readObjectStorageStatus(ctx context.Context) dto.ObjectStorageStatusResponse {
 	if s.services.Storage == nil {
-		return map[string]any{
-			"status": "unavailable",
-			"bucket": s.config.MinIOBucket,
-		}
+		return dto.ObjectStorageUnavailable(s.config.MinIOBucket, nil)
 	}
 	usage, err := s.services.Storage.GetObjectStorageUsage(ctx)
 	if err != nil {
-		return map[string]any{
-			"status": "unavailable",
-			"bucket": s.config.MinIOBucket,
-			"error":  err.Error(),
-		}
+		return dto.ObjectStorageUnavailable(s.config.MinIOBucket, err)
 	}
-	return usage
-}
-
-type clearObjectStorageRequest struct {
-	Confirmation string `json:"confirmation"`
+	return dto.ObjectStorageStatus(usage)
 }
 
 func (s *Server) handleClearObjectStorage(w http.ResponseWriter, r *http.Request) {
-	var request clearObjectStorageRequest
+	var request dto.ClearObjectStorageRequest
 	if err := decodeJSON(r, &request); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -104,24 +75,33 @@ func (s *Server) handleClearObjectStorage(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"objectStorage": result,
+	writeJSON(w, http.StatusOK, dto.ClearObjectStorageResponse{
+		ObjectStorage: result,
 	})
 }
 
-func (s *Server) handleRTCConfig(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"mode":                 "sfu",
-		"signalingUrl":         s.config.SFUOperatorWebSocketURL(),
-		"operatorSignalingUrl": s.config.SFUOperatorWebSocketURL(),
-		"iceTransportPolicy":   "relay",
-		"iceServers": []map[string]any{
-			{
-				"urls":       []string{s.config.TURNPublicURL},
-				"username":   s.config.TURNUsername,
-				"credential": s.config.TURNPassword,
-			},
-		},
+func (s *Server) handleClearSensorData(w http.ResponseWriter, r *http.Request) {
+	var request dto.ClearSensorDataRequest
+	if err := decodeJSON(r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	result, err := s.services.Sensors.ClearSensorData(r.Context(), s.config.Environment, request.Confirmation)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrSystemActionForbidden):
+			writeError(w, http.StatusForbidden, err)
+		case errors.Is(err, service.ErrSystemActionConfirmationRequired):
+			writeError(w, http.StatusBadRequest, err)
+		default:
+			writeError(w, http.StatusInternalServerError, err)
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, dto.ClearSensorDataResponse{
+		SensorData: result,
 	})
 }
 

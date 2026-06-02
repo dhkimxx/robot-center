@@ -41,3 +41,23 @@ type SensorSampleModel struct {
 func (SensorSampleModel) TableName() string {
 	return "sensor_samples"
 }
+
+type SensorLatestSampleModel struct {
+	BaseModel
+	SampleID     string          `gorm:"column:sample_id;type:uuid;not null;index"`
+	DescriptorID string          `gorm:"column:descriptor_id;type:uuid;not null;index"`
+	MissionID    string          `gorm:"column:mission_id;type:uuid;not null;uniqueIndex:sensor_latest_samples_mission_robot_sensor_unique,priority:1;index"`
+	RobotID      string          `gorm:"column:robot_id;type:uuid;not null;uniqueIndex:sensor_latest_samples_mission_robot_sensor_unique,priority:2;index"`
+	SensorID     string          `gorm:"column:sensor_id;not null;uniqueIndex:sensor_latest_samples_mission_robot_sensor_unique,priority:3"`
+	ChannelRole  string          `gorm:"column:channel_role;not null;index"`
+	MessageID    *string         `gorm:"column:message_id;index"`
+	Timestamp    *time.Time      `gorm:"column:sample_timestamp"`
+	ReceivedAt   time.Time       `gorm:"column:received_at;not null;default:now();index"`
+	Values       json.RawMessage `gorm:"column:values;type:jsonb"`
+	ObjectKey    *string         `gorm:"column:object_key"`
+	RawPayload   json.RawMessage `gorm:"column:raw_payload;type:jsonb;not null;default:'{}'::jsonb"`
+}
+
+func (SensorLatestSampleModel) TableName() string {
+	return "sensor_latest_samples"
+}

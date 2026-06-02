@@ -21,9 +21,7 @@ func (s *Server) handleListSensorDescriptors(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"sensorDescriptors": dto.SensorDescriptors(descriptors),
-	})
+	writeJSON(w, http.StatusOK, dto.SensorDescriptorsPayload(descriptors))
 }
 
 func (s *Server) handleListSensorSamples(w http.ResponseWriter, r *http.Request) {
@@ -36,9 +34,7 @@ func (s *Server) handleListSensorSamples(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"sensorSamples": dto.SensorSamples(samples),
-	})
+	writeJSON(w, http.StatusOK, dto.SensorSamplesPayload(samples))
 }
 
 func (s *Server) handleListSensorLatest(w http.ResponseWriter, r *http.Request) {
@@ -49,11 +45,7 @@ func (s *Server) handleListSensorLatest(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"missionId": missionID,
-		"robotCode": robotCode,
-		"sensors":   dto.SensorLatest(latest),
-	})
+	writeJSON(w, http.StatusOK, dto.SensorLatestList(missionID, robotCode, latest))
 }
 
 func (s *Server) handleCreateSensorSamples(w http.ResponseWriter, r *http.Request) {
@@ -71,37 +63,7 @@ func (s *Server) handleCreateSensorSamples(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{
-		"sensorSamples": dto.SensorSamples(samples),
-	})
-}
-
-type sensorDescriptorRequest struct {
-	SensorID    string `json:"sensorId"`
-	ChannelRole string `json:"channelRole"`
-	Label       string `json:"label"`
-	SensorType  string `json:"sensorType"`
-	Unit        string `json:"unit"`
-	Enabled     bool   `json:"enabled"`
-}
-
-type sensorSampleRequest struct {
-	SensorID    string     `json:"sensorId,omitempty"`
-	ChannelRole string     `json:"channelRole,omitempty"`
-	MessageID   string     `json:"messageId,omitempty"`
-	Timestamp   *time.Time `json:"timestamp,omitempty"`
-	Values      any        `json:"values,omitempty"`
-	ObjectKey   string     `json:"objectKey,omitempty"`
-}
-
-type sensorEnvelopeRequest struct {
-	MessageID   string                    `json:"messageId"`
-	MessageType string                    `json:"messageType"`
-	RobotCode   string                    `json:"robotCode"`
-	MissionID   string                    `json:"missionId"`
-	ChannelRole string                    `json:"channelRole"`
-	Descriptors []sensorDescriptorRequest `json:"descriptors"`
-	Samples     []sensorSampleRequest     `json:"samples"`
+	writeJSON(w, http.StatusCreated, dto.SensorSamplesPayload(samples))
 }
 
 func decodeSensorEnvelope(r *http.Request) (domain.SensorEnvelope, error) {
@@ -110,7 +72,7 @@ func decodeSensorEnvelope(r *http.Request) (domain.SensorEnvelope, error) {
 	if err != nil {
 		return domain.SensorEnvelope{}, err
 	}
-	var request sensorEnvelopeRequest
+	var request dto.SensorEnvelopeRequest
 	if err := json.Unmarshal(rawPayload, &request); err != nil {
 		return domain.SensorEnvelope{}, err
 	}
@@ -185,7 +147,7 @@ func decodeSensorEnvelope(r *http.Request) (domain.SensorEnvelope, error) {
 	return envelope, nil
 }
 
-func marshalSensorSampleValues(sample sensorSampleRequest) json.RawMessage {
+func marshalSensorSampleValues(sample dto.SensorSampleRequest) json.RawMessage {
 	if sample.Values != nil {
 		return utils.RawJSONOrNil(sample.Values)
 	}

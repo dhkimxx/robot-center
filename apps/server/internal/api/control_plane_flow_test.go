@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
+	"robot-center/apps/server/internal/api/dto"
 )
 
 func TestControlPlaneFlowSmoke(t *testing.T) {
@@ -11,35 +13,33 @@ func TestControlPlaneFlowSmoke(t *testing.T) {
 	robot := server.createRobot(t, "Smoke Robot")
 	mission := server.createStartedMission(t, robot)
 
-	requestJSON[map[string]any](t, server.baseURL, http.MethodPost, "/api/v1/robot/heartbeat", robot.token, map[string]any{
-		"state":  "online",
-		"sentAt": time.Now().UTC().Format(time.RFC3339Nano),
+	requestJSON[dto.RobotHeartbeatResponse](t, server.baseURL, http.MethodPost, "/api/v1/robot/heartbeat", robot.token, dto.RobotHeartbeatRequest{
+		State:  "online",
+		SentAt: time.Now().UTC(),
 	})
 
-	robotMission := requestJSON[map[string]any](t, server.baseURL, http.MethodGet, "/api/v1/robot/mission", robot.token, nil)
-	if robotMission["missionStatus"] != "active" || robotMission["missionCode"] != mission.code {
+	robotMission := requestJSON[dto.RobotMissionResponse](t, server.baseURL, http.MethodGet, "/api/v1/robot/mission", robot.token, nil)
+	if robotMission.MissionStatus != "active" || robotMission.MissionCode != mission.code {
 		t.Fatalf("expected active robot mission, got %#v", robotMission)
 	}
 
-	recordingTick := requestJSON[map[string]any](t, server.baseURL, http.MethodPost, "/api/v1/recorder/tick", "", map[string]any{
-		"missionCode":          mission.code,
-		"robotCode":            robot.code,
-		"chunkDurationSeconds": 600,
-		"tickAt":               time.Now().UTC().Format(time.RFC3339Nano),
+	recordingTick := requestJSON[dto.RecordingTickResponse](t, server.baseURL, http.MethodPost, "/api/v1/recorder/tick", "", dto.RecorderTickRequest{
+		MissionCode:          mission.code,
+		RobotCode:            robot.code,
+		ChunkDurationSeconds: 600,
+		TickAt:               time.Now().UTC(),
 	})
-	chunk := recordingTick["chunk"].(map[string]any)
-	if chunk["status"] != "recording" {
-		t.Fatalf("expected recording chunk, got %#v", chunk)
+	if recordingTick.Chunk.Status != "recording" {
+		t.Fatalf("expected recording chunk, got %#v", recordingTick.Chunk)
 	}
 
-	liveStatus := requestJSON[map[string]any](t, server.baseURL, http.MethodGet, "/api/v1/operator/missions/"+mission.code+"/live-status", "", nil)
-	if len(liveStatus["robots"].([]any)) != 1 {
+	liveStatus := requestJSON[dto.MissionLiveStatusResponse](t, server.baseURL, http.MethodGet, "/api/v1/operator/missions/"+mission.code+"/live-status", "", nil)
+	if len(liveStatus.Robots) != 1 {
 		t.Fatalf("expected one live status robot, got %#v", liveStatus)
 	}
 
-	endedPayload := requestJSON[map[string]any](t, server.baseURL, http.MethodPost, "/api/v1/operator/missions/"+mission.code+"/end", "", nil)
-	endedMission := endedPayload["mission"].(map[string]any)
-	if endedMission["status"] != "ended" {
-		t.Fatalf("expected ended mission, got %#v", endedMission)
+	endedPayload := requestJSON[dto.MissionEnvelopeResponse](t, server.baseURL, http.MethodPost, "/api/v1/operator/missions/"+mission.code+"/end", "", nil)
+	if endedPayload.Mission.Status != "ended" {
+		t.Fatalf("expected ended mission, got %#v", endedPayload)
 	}
 }

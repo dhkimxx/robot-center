@@ -21,6 +21,34 @@ type SensorDescriptorResponse struct {
 	LastSeenAt  time.Time `json:"lastSeenAt"`
 }
 
+type SensorDescriptorRequest struct {
+	SensorID    string `json:"sensorId"`
+	ChannelRole string `json:"channelRole"`
+	Label       string `json:"label"`
+	SensorType  string `json:"sensorType"`
+	Unit        string `json:"unit"`
+	Enabled     bool   `json:"enabled"`
+}
+
+type SensorSampleRequest struct {
+	SensorID    string     `json:"sensorId,omitempty"`
+	ChannelRole string     `json:"channelRole,omitempty"`
+	MessageID   string     `json:"messageId,omitempty"`
+	Timestamp   *time.Time `json:"timestamp,omitempty"`
+	Values      any        `json:"values,omitempty"`
+	ObjectKey   string     `json:"objectKey,omitempty"`
+}
+
+type SensorEnvelopeRequest struct {
+	MessageID   string                    `json:"messageId"`
+	MessageType string                    `json:"messageType"`
+	RobotCode   string                    `json:"robotCode"`
+	MissionID   string                    `json:"missionId"`
+	ChannelRole string                    `json:"channelRole"`
+	Descriptors []SensorDescriptorRequest `json:"descriptors"`
+	Samples     []SensorSampleRequest     `json:"samples"`
+}
+
 type SensorSampleResponse struct {
 	ID           string          `json:"id"`
 	DescriptorID string          `json:"descriptorId,omitempty"`
@@ -37,7 +65,30 @@ type SensorSampleResponse struct {
 
 type SensorLatestResponse struct {
 	SensorDescriptorResponse
-	LatestSample *SensorSampleResponse `json:"latestSample,omitempty"`
+	LatestSample *SensorSampleResponse        `json:"latestSample,omitempty"`
+	Readings     []SensorValueReadingResponse `json:"readings,omitempty"`
+}
+
+type SensorValueReadingResponse struct {
+	FieldPath string  `json:"fieldPath"`
+	Label     string  `json:"label"`
+	Order     float64 `json:"order"`
+	Unit      string  `json:"unit,omitempty"`
+	Value     any     `json:"value"`
+}
+
+type SensorDescriptorsResponse struct {
+	SensorDescriptors []SensorDescriptorResponse `json:"sensorDescriptors"`
+}
+
+type SensorSamplesResponse struct {
+	SensorSamples []SensorSampleResponse `json:"sensorSamples"`
+}
+
+type SensorLatestListResponse struct {
+	MissionID string                 `json:"missionId"`
+	RobotCode string                 `json:"robotCode"`
+	Sensors   []SensorLatestResponse `json:"sensors"`
 }
 
 func SensorDescriptor(descriptor domain.SensorDescriptor) SensorDescriptorResponse {
@@ -64,6 +115,12 @@ func SensorDescriptors(descriptors []domain.SensorDescriptor) []SensorDescriptor
 	return response
 }
 
+func SensorDescriptorsPayload(descriptors []domain.SensorDescriptor) SensorDescriptorsResponse {
+	return SensorDescriptorsResponse{
+		SensorDescriptors: SensorDescriptors(descriptors),
+	}
+}
+
 func SensorSample(sample domain.SensorSample) SensorSampleResponse {
 	return SensorSampleResponse{
 		ID:           sample.ID,
@@ -88,6 +145,12 @@ func SensorSamples(samples []domain.SensorSample) []SensorSampleResponse {
 	return response
 }
 
+func SensorSamplesPayload(samples []domain.SensorSample) SensorSamplesResponse {
+	return SensorSamplesResponse{
+		SensorSamples: SensorSamples(samples),
+	}
+}
+
 func SensorLatest(items []domain.SensorLatest) []SensorLatestResponse {
 	response := make([]SensorLatestResponse, 0, len(items))
 	for _, item := range items {
@@ -97,8 +160,31 @@ func SensorLatest(items []domain.SensorLatest) []SensorLatestResponse {
 		if item.LatestSample != nil {
 			sample := SensorSample(*item.LatestSample)
 			latest.LatestSample = &sample
+			latest.Readings = SensorValueReadings(domain.InterpretSensorSampleValue(item.Descriptor, *item.LatestSample))
 		}
 		response = append(response, latest)
+	}
+	return response
+}
+
+func SensorLatestList(missionID string, robotCode string, items []domain.SensorLatest) SensorLatestListResponse {
+	return SensorLatestListResponse{
+		MissionID: missionID,
+		RobotCode: robotCode,
+		Sensors:   SensorLatest(items),
+	}
+}
+
+func SensorValueReadings(readings []domain.SensorValueReading) []SensorValueReadingResponse {
+	response := make([]SensorValueReadingResponse, 0, len(readings))
+	for _, reading := range readings {
+		response = append(response, SensorValueReadingResponse{
+			FieldPath: reading.FieldPath,
+			Label:     reading.Label,
+			Order:     reading.Order,
+			Unit:      reading.Unit,
+			Value:     reading.Value,
+		})
 	}
 	return response
 }

@@ -29,6 +29,7 @@ func (s *Store) runAutoMigrations(ctx context.Context) error {
 		&model.RecorderSessionModel{},
 		&model.SensorDescriptorModel{},
 		&model.SensorSampleModel{},
+		&model.SensorLatestSampleModel{},
 		&model.RecordingSessionModel{},
 		&model.RecordingChunkModel{},
 		&model.RecordingFinalizationJobModel{},
@@ -61,6 +62,10 @@ func (s *Store) applyPostAutoMigrateDDL(db *gorm.DB) error {
 			ON sensor_descriptors(id, mission_id, robot_id, sensor_id)`,
 		`CREATE INDEX IF NOT EXISTS sensor_samples_descriptor_received_idx
 			ON sensor_samples(descriptor_id, received_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS sensor_samples_mission_robot_received_idx
+			ON sensor_samples(mission_id, robot_id, received_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS sensor_latest_samples_mission_robot_received_idx
+			ON sensor_latest_samples(mission_id, robot_id, received_at DESC)`,
 		`UPDATE sensor_samples ss
 			SET descriptor_id = sd.id
 			FROM sensor_descriptors sd
@@ -72,6 +77,7 @@ func (s *Store) applyPostAutoMigrateDDL(db *gorm.DB) error {
 				ALTER COLUMN descriptor_id SET NOT NULL`,
 		sensorSampleValueColumnMigrationStatement(),
 		sensorContractCleanupMigrationStatement(),
+		sensorLatestInitialBackfillStatement(),
 		`CREATE INDEX IF NOT EXISTS events_geom_idx
 				ON events USING gist(geom)`,
 		dropEmptyTableStatement("sensor_readings"),
@@ -198,6 +204,63 @@ func sensorContractCleanupMigrationStatement() string {
 		END $$`
 }
 
+func sensorLatestInitialBackfillStatement() string {
+	return `DO $$
+			BEGIN
+				IF EXISTS (SELECT 1 FROM sensor_samples LIMIT 1)
+					AND NOT EXISTS (SELECT 1 FROM sensor_latest_samples LIMIT 1) THEN
+					INSERT INTO sensor_latest_samples (
+						sample_id,
+						descriptor_id,
+						mission_id,
+						robot_id,
+						sensor_id,
+						channel_role,
+						message_id,
+						sample_timestamp,
+						received_at,
+						"values",
+						object_key,
+						raw_payload,
+						created_at,
+						updated_at
+					)
+					SELECT
+						latest_samples.id,
+						latest_samples.descriptor_id,
+						latest_samples.mission_id,
+						latest_samples.robot_id,
+						latest_samples.sensor_id,
+						latest_samples.channel_role,
+						latest_samples.message_id,
+						latest_samples.sample_timestamp,
+						latest_samples.received_at,
+						latest_samples."values",
+						latest_samples.object_key,
+						latest_samples.raw_payload,
+						now(),
+						now()
+					FROM (
+						SELECT DISTINCT ON (mission_id, robot_id, sensor_id)
+							id,
+							descriptor_id,
+							mission_id,
+							robot_id,
+							sensor_id,
+							channel_role,
+							message_id,
+							sample_timestamp,
+							received_at,
+							"values",
+							object_key,
+							raw_payload
+						FROM sensor_samples
+						ORDER BY mission_id, robot_id, sensor_id, received_at DESC, id DESC
+					) latest_samples;
+				END IF;
+			END $$`
+}
+
 func baseModelTableNames() []string {
 	return []string{
 		model.UserModel{}.TableName(),
@@ -210,6 +273,7 @@ func baseModelTableNames() []string {
 		model.RecorderSessionModel{}.TableName(),
 		model.SensorDescriptorModel{}.TableName(),
 		model.SensorSampleModel{}.TableName(),
+		model.SensorLatestSampleModel{}.TableName(),
 		model.RecordingSessionModel{}.TableName(),
 		model.RecordingChunkModel{}.TableName(),
 		model.RecordingFinalizationJobModel{}.TableName(),
@@ -359,6 +423,7 @@ func foreignKeyConstraintStatements() []string {
 		{Name: "sensor_descriptors_mission_fk", Table: "sensor_descriptors", Columns: "mission_id", ReferenceTable: "missions", ReferenceColumn: "id", OnDelete: "CASCADE"},
 		{Name: "sensor_descriptors_robot_fk", Table: "sensor_descriptors", Columns: "robot_id", ReferenceTable: "robots", ReferenceColumn: "id"},
 		{Name: "sensor_samples_descriptor_identity_fk", Table: "sensor_samples", Columns: "descriptor_id, mission_id, robot_id, sensor_id", ReferenceTable: "sensor_descriptors", ReferenceColumn: "id, mission_id, robot_id, sensor_id", OnDelete: "CASCADE"},
+		{Name: "sensor_latest_samples_descriptor_identity_fk", Table: "sensor_latest_samples", Columns: "descriptor_id, mission_id, robot_id, sensor_id", ReferenceTable: "sensor_descriptors", ReferenceColumn: "id, mission_id, robot_id, sensor_id", OnDelete: "CASCADE"},
 		{Name: "recording_sessions_mission_fk", Table: "recording_sessions", Columns: "mission_id", ReferenceTable: "missions", ReferenceColumn: "id", OnDelete: "CASCADE"},
 		{Name: "recording_sessions_robot_fk", Table: "recording_sessions", Columns: "robot_id", ReferenceTable: "robots", ReferenceColumn: "id"},
 		{Name: "recording_sessions_recorder_session_fk", Table: "recording_sessions", Columns: "recorder_session_id", ReferenceTable: "recorder_sessions", ReferenceColumn: "id", OnDelete: "SET NULL"},

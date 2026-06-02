@@ -15,11 +15,12 @@ import { useLiveConnectionManager } from "../domains/live/useLiveConnectionManag
 import { resolveStoredLiveTargetKey } from "../domains/live/useLiveTargetSelection.js";
 import { useMissionSamples } from "../domains/live/useMissionSamples.js";
 import {
+  createSensorPanelState,
   createSensorPanelSnapshot,
   createTelemetryFromSensorLatest
 } from "../domains/live/sensorLatestMapper.js";
 import { useOperationStatuses } from "../domains/live/useOperationStatuses.js";
-import { clearObjectStorage } from "../api/systemApi.js";
+import { clearObjectStorage, clearSensorData } from "../api/systemApi.js";
 import { useControlCenterData } from "./useControlCenterData.js";
 import { useNotifications } from "./useNotifications.js";
 
@@ -104,6 +105,8 @@ export function useControlCenterController({
     setSelectedLiveTargetKey
   } = liveConnectionManager;
   const {
+    refreshSensorSnapshot,
+    sensorSnapshotState,
     serverSensorLatest
   } = useMissionSamples({ appendLiveEvent, selectedLiveTarget });
   const activeLiveStream = useMemo(() => {
@@ -121,8 +124,16 @@ export function useControlCenterController({
     () => createSensorPanelSnapshot(serverSensorLatest, selectedRobotCode),
     [selectedRobotCode, serverSensorLatest]
   );
+  const sensorPanelState = useMemo(
+    () => createSensorPanelState({
+      liveSensor: selectedLiveSession.sensor,
+      snapshotSensor: latestServerSensorPanel,
+      snapshotState: sensorSnapshotState
+    }),
+    [latestServerSensorPanel, selectedLiveSession.sensor, sensorSnapshotState]
+  );
   const latestTelemetry = selectedLiveSession.telemetry ?? latestServerTelemetryFromSensors;
-  const latestSensor = selectedLiveSession.sensor ?? latestServerSensorPanel;
+  const latestSensor = sensorPanelState.sensor;
   const latestPositionState = getTelemetryPositionState(latestTelemetry);
   const recordingsController = useRecordingsController();
 
@@ -141,6 +152,23 @@ export function useControlCenterController({
       throw error;
     }
   }, [loadAll, showNotification]);
+
+  const clearSystemSensorData = useCallback(async () => {
+    try {
+      const payload = await clearSensorData();
+      const result = payload.sensorData ?? {};
+      showNotification(
+        `Sensor 데이터 sample ${result.sensorSamplesDeleted ?? 0}개 / descriptor ${result.sensorDescriptorsDeleted ?? 0}개 삭제 완료`,
+        "success"
+      );
+      await loadAll();
+      refreshSensorSnapshot();
+      return result;
+    } catch (error) {
+      showNotification(error instanceof Error ? error.message : "Sensor 데이터 정리 실패", "danger");
+      throw error;
+    }
+  }, [loadAll, refreshSensorSnapshot, showNotification]);
 
   useEffect(() => {
     const previousMissionCode = previousRouteMissionControlCodeRef.current;
@@ -285,7 +313,9 @@ export function useControlCenterController({
       controlMission: missionControlMission,
       controlMissionCode: routeMissionControlCode,
       dataLoadState,
+      isSensorSnapshotRefreshing: sensorSnapshotState.status === "loading",
       latestSensor,
+      latestSensorSourceLabel: sensorPanelState.sourceLabel,
       latestTelemetry,
       liveEvents: selectedLiveSession.events,
       liveStatus: missionControlLiveStatus,
@@ -300,6 +330,7 @@ export function useControlCenterController({
       onOpenMissionReplay: missionController.openMissionReplay,
       onOpenPlaybackFile: recordingsController.setRecordingPlaybackFile,
       onReconnectSelectedMissionTarget: reconnectLive,
+      onRefreshSensorSnapshot: refreshSensorSnapshot,
       onSelectMission: missionController.setSelectedMissionManagementCode,
       onStartMission: missionController.startMission,
       operationStatuses,
@@ -354,6 +385,7 @@ export function useControlCenterController({
     },
     systemRouteProps: {
       onClearObjectStorage: clearSystemObjectStorage,
+      onClearSensorData: clearSystemSensorData,
       dataLoadState,
       statusError,
       systemStatus

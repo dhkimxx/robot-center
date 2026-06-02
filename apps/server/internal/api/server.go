@@ -63,6 +63,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /swagger/openapi.json", s.handleOpenAPIJSON)
 	mux.HandleFunc("GET /api/v1/system/status", s.handleSystemStatus)
 	mux.HandleFunc("POST /api/v1/system/object-storage/clear", s.handleClearObjectStorage)
+	mux.HandleFunc("POST /api/v1/system/sensors/clear", s.handleClearSensorData)
 	mux.HandleFunc("GET /api/v1/operator/rtc-config", s.handleRTCConfig)
 	mux.HandleFunc("GET /api/v1/operator/sensor-descriptors", s.handleListSensorDescriptors)
 	mux.HandleFunc("GET /api/v1/operator/sensor-samples", s.handleListSensorSamples)

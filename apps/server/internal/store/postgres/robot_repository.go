@@ -337,3 +337,12 @@ func (s *Store) findRobotID(ctx context.Context, robotCode string) (string, erro
 	}
 	return robotID, err
 }
+
+func (s *Store) findRobotIDIncludingArchived(ctx context.Context, robotCode string) (string, error) {
+	var robotID string
+	err := s.sqlDB.QueryRowContext(ctx, `SELECT id::text FROM robots WHERE robot_code = $1`, strings.TrimSpace(robotCode)).Scan(&robotID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", repo.ErrNotFound
+	}
+	return robotID, err
+}

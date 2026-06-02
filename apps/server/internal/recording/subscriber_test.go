@@ -156,3 +156,49 @@ func TestResetRecorderTrackRuntimeClearsStaleRobotTracksOnly(t *testing.T) {
 		t.Fatalf("expected stale lastTrackLabel to be cleared, got %q", status.lastTrackLabel)
 	}
 }
+
+func TestSubscriberStatusCountsCanonicalTracksOnly(t *testing.T) {
+	worker := NewWorker(config.RecorderWorkerConfig{})
+	observedAt := time.Now().UTC()
+	worker.subscriberStatuses["mission-001"] = recorderSessionStatus{
+		missionCode: "mission-001",
+		robotCodes: map[string]struct{}{
+			"robot-001": {},
+		},
+		trackLabels: map[string]struct{}{
+			"robot-001:track.video_1":      {},
+			"robot-001:track.video_2":      {},
+			"robot-001:track.audio_1":      {},
+			"robot-001:unmapped.video":     {},
+			"robot-001:webrtctransceiver0": {},
+			"robot-001:webrtctransceiver1": {},
+			"robot-001:webrtctransceiver2": {},
+		},
+		robotStatuses: map[string]recorderRobotRuntime{
+			"robot-001": {
+				trackLabels: map[string]struct{}{
+					"track.video_1":      {},
+					"track.video_2":      {},
+					"track.audio_1":      {},
+					"unmapped.video":     {},
+					"webrtctransceiver0": {},
+					"webrtctransceiver1": {},
+					"webrtctransceiver2": {},
+				},
+				lastTrackAt: observedAt,
+			},
+		},
+	}
+
+	status := worker.SubscriberStatus()
+	if len(status.Rooms) != 1 {
+		t.Fatalf("room statuses = %d, want 1", len(status.Rooms))
+	}
+	room := status.Rooms[0]
+	if room.TrackCount != 3 {
+		t.Fatalf("room track count = %d, want canonical count 3", room.TrackCount)
+	}
+	if len(room.Robots) != 1 || room.Robots[0].TrackCount != 3 {
+		t.Fatalf("robot track status = %#v, want canonical count 3", room.Robots)
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"robot-center/apps/server/internal/api/dto"
 	"robot-center/apps/server/internal/config"
 	"robot-center/apps/server/internal/testsupport/postgrestest"
 )
@@ -57,39 +58,36 @@ func newAPIFlowTestServer(t *testing.T) apiFlowTestServer {
 func (s apiFlowTestServer) createRobot(t *testing.T, displayName string) testRobot {
 	t.Helper()
 
-	payload := requestJSON[map[string]any](t, s.baseURL, http.MethodPost, "/api/v1/operator/robots", "", map[string]any{
-		"displayName": displayName,
-		"modelName":   "Android Mock",
+	payload := requestJSON[dto.CreateRobotResponse](t, s.baseURL, http.MethodPost, "/api/v1/operator/robots", "", dto.CreateRobotRequest{
+		DisplayName: displayName,
+		ModelName:   "Android Mock",
 	})
-	robot := payload["robot"].(map[string]any)
-	connectionInfo := payload["connectionInfo"].(map[string]any)
 	return testRobot{
-		code:  robot["robotCode"].(string),
-		token: connectionInfo["robotToken"].(string),
+		code:  payload.Robot.RobotCode,
+		token: payload.ConnectionInfo.RobotToken,
 	}
 }
 
 func (s apiFlowTestServer) createMission(t *testing.T, robotCodes []string) testMission {
 	t.Helper()
 
-	payload := requestJSON[map[string]any](t, s.baseURL, http.MethodPost, "/api/v1/operator/missions", "", map[string]any{
-		"name":        "Integration Mission",
-		"missionType": "mountain_rescue",
-		"siteNote":    "test",
-		"robotCodes":  robotCodes,
+	payload := requestJSON[dto.MissionEnvelopeResponse](t, s.baseURL, http.MethodPost, "/api/v1/operator/missions", "", dto.CreateMissionRequest{
+		Name:        "Integration Mission",
+		MissionType: "mountain_rescue",
+		SiteNote:    "test",
+		RobotCodes:  robotCodes,
 	})
-	mission := payload["mission"].(map[string]any)
 	return testMission{
-		code: mission["missionCode"].(string),
-		id:   mission["id"].(string),
+		code: payload.Mission.MissionCode,
+		id:   payload.Mission.ID,
 	}
 }
 
-func (s apiFlowTestServer) startMission(t *testing.T, missionCode string) map[string]any {
+func (s apiFlowTestServer) startMission(t *testing.T, missionCode string) dto.MissionResponse {
 	t.Helper()
 
-	payload := requestJSON[map[string]any](t, s.baseURL, http.MethodPost, "/api/v1/operator/missions/"+missionCode+"/start", "", nil)
-	return payload["mission"].(map[string]any)
+	payload := requestJSON[dto.MissionEnvelopeResponse](t, s.baseURL, http.MethodPost, "/api/v1/operator/missions/"+missionCode+"/start", "", nil)
+	return payload.Mission
 }
 
 func (s apiFlowTestServer) createStartedMission(t *testing.T, robots ...testRobot) testMission {
@@ -102,7 +100,7 @@ func (s apiFlowTestServer) createStartedMission(t *testing.T, robots ...testRobo
 	mission := s.createMission(t, robotCodes)
 	startedMission := s.startMission(t, mission.code)
 	return testMission{
-		code: startedMission["missionCode"].(string),
-		id:   startedMission["id"].(string),
+		code: startedMission.MissionCode,
+		id:   startedMission.ID,
 	}
 }

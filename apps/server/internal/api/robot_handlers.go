@@ -9,18 +9,8 @@ import (
 	"time"
 )
 
-type createRobotRequest struct {
-	DisplayName string `json:"displayName"`
-	ModelName   string `json:"modelName"`
-}
-
-type updateRobotRequest struct {
-	DisplayName string `json:"displayName"`
-	ModelName   string `json:"modelName"`
-}
-
 func (s *Server) handleCreateRobot(w http.ResponseWriter, r *http.Request) {
-	var request createRobotRequest
+	var request dto.CreateRobotRequest
 	if err := decodeJSON(r, &request); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -36,14 +26,11 @@ func (s *Server) handleCreateRobot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := time.Now().UTC()
-	writeJSON(w, http.StatusCreated, map[string]any{
-		"robot":          dto.Robot(robot, now, domain.DefaultRobotHeartbeatTTL),
-		"connectionInfo": dto.RobotConnectionInfo(connectionInfo),
-	})
+	writeJSON(w, http.StatusCreated, dto.CreateRobotPayload(robot, connectionInfo, now, domain.DefaultRobotHeartbeatTTL))
 }
 
 func (s *Server) handleUpdateRobot(w http.ResponseWriter, r *http.Request) {
-	var request updateRobotRequest
+	var request dto.UpdateRobotRequest
 	if err := decodeJSON(r, &request); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -59,9 +46,7 @@ func (s *Server) handleUpdateRobot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := time.Now().UTC()
-	writeJSON(w, http.StatusOK, map[string]any{
-		"robot": dto.Robot(robot, now, domain.DefaultRobotHeartbeatTTL),
-	})
+	writeJSON(w, http.StatusOK, dto.RobotEnvelope(robot, now, domain.DefaultRobotHeartbeatTTL))
 }
 
 func (s *Server) handleArchiveRobot(w http.ResponseWriter, r *http.Request) {
@@ -72,9 +57,7 @@ func (s *Server) handleArchiveRobot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := time.Now().UTC()
-	writeJSON(w, http.StatusOK, map[string]any{
-		"robot": dto.Robot(robot, now, domain.DefaultRobotHeartbeatTTL),
-	})
+	writeJSON(w, http.StatusOK, dto.RobotEnvelope(robot, now, domain.DefaultRobotHeartbeatTTL))
 }
 
 func (s *Server) handleListRobots(w http.ResponseWriter, r *http.Request) {
@@ -84,9 +67,7 @@ func (s *Server) handleListRobots(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now().UTC()
-	writeJSON(w, http.StatusOK, map[string]any{
-		"robots": dto.Robots(robots, now, domain.DefaultRobotHeartbeatTTL),
-	})
+	writeJSON(w, http.StatusOK, dto.RobotsPayload(robots, now, domain.DefaultRobotHeartbeatTTL))
 }
 
 func (s *Server) handleGetRobotConnectionInfo(w http.ResponseWriter, r *http.Request) {
@@ -95,9 +76,7 @@ func (s *Server) handleGetRobotConnectionInfo(w http.ResponseWriter, r *http.Req
 		writeStoreError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"connectionInfo": dto.RobotConnectionInfo(connectionInfo),
-	})
+	writeJSON(w, http.StatusOK, dto.RobotConnectionInfoPayload(connectionInfo))
 }
 
 func (s *Server) handleRotateRobotConnectionToken(w http.ResponseWriter, r *http.Request) {
@@ -106,7 +85,5 @@ func (s *Server) handleRotateRobotConnectionToken(w http.ResponseWriter, r *http
 		writeStoreError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"connectionInfo": dto.RobotConnectionInfo(connectionInfo),
-	})
+	writeJSON(w, http.StatusOK, dto.RobotConnectionInfoPayload(connectionInfo))
 }

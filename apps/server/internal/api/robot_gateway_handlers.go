@@ -4,23 +4,17 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+
+	"robot-center/apps/server/internal/api/dto"
 	"robot-center/apps/server/internal/domain"
-	"robot-center/apps/server/internal/sfu"
 	"robot-center/apps/server/internal/store"
 	"robot-center/apps/server/internal/utils"
 	"strings"
 	"time"
 )
 
-type heartbeatRequest struct {
-	State          string    `json:"state"`
-	BatteryPercent int       `json:"batteryPercent"`
-	NetworkQuality string    `json:"networkQuality"`
-	SentAt         time.Time `json:"sentAt"`
-}
-
 func (s *Server) handleRobotAPIHeartbeat(w http.ResponseWriter, r *http.Request) {
-	var request heartbeatRequest
+	var request dto.RobotHeartbeatRequest
 	if err := decodeJSON(r, &request); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -37,11 +31,7 @@ func (s *Server) handleRobotAPIHeartbeat(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"robotCode":  robot.RobotCode,
-		"status":     robot.DeviceState,
-		"serverTime": time.Now().UTC().Format(time.RFC3339Nano),
-	})
+	writeJSON(w, http.StatusOK, dto.RobotHeartbeatPayload(robot, time.Now().UTC()))
 }
 
 func (s *Server) handleRobotAPIMission(w http.ResponseWriter, r *http.Request) {
@@ -55,46 +45,23 @@ func (s *Server) handleRobotAPIMission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !found {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"missionStatus": "none",
-			"serverTime":    time.Now().UTC().Format(time.RFC3339Nano),
-		})
+		writeJSON(w, http.StatusOK, dto.RobotMissionNonePayload(time.Now().UTC()))
 		return
 	}
 
-	writeJSON(w, http.StatusOK, s.robotMissionResponse(mission))
+	writeJSON(w, http.StatusOK, s.robotMissionResponse(mission, time.Now().UTC()))
 }
 
-func (s *Server) robotMissionResponse(mission domain.Mission) map[string]any {
+func (s *Server) robotMissionResponse(mission domain.Mission, now time.Time) dto.RobotMissionResponse {
 	roomID := mission.MissionCode
-	return map[string]any{
-		"missionCode":   mission.MissionCode,
-		"missionStatus": mission.Status,
-		"serverTime":    time.Now().UTC().Format(time.RFC3339Nano),
-		"sfu": map[string]any{
-			"signalingUrl":       s.config.SFURobotWebSocketURL() + "?room=" + url.QueryEscape(roomID),
-			"iceTransportPolicy": "relay",
-		},
-		"turnServers": []map[string]any{
-			{
-				"urls":       []string{s.config.TURNPublicURL},
-				"username":   s.config.TURNUsername,
-				"credential": s.config.TURNPassword,
-			},
-		},
-		"tracks": []string{
-			sfu.StreamRoleTrackVideo1,
-			sfu.StreamRoleTrackVideo2,
-			sfu.StreamRoleTrackAudio1,
-			sfu.StreamRoleTrackAudio2,
-		},
-		"dataChannels": []string{
-			sfu.StreamRoleChannelTelemetry,
-			sfu.StreamRoleChannelSpatial,
-			sfu.StreamRoleChannelEvent,
-			sfu.StreamRoleChannelControl,
-		},
-	}
+	return dto.RobotMissionPayload(dto.RobotMissionInput{
+		Mission:      mission,
+		SignalingURL: s.config.SFURobotWebSocketURL() + "?room=" + url.QueryEscape(roomID),
+		TURNURL:      s.config.TURNPublicURL,
+		TURNUsername: s.config.TURNUsername,
+		TURNPassword: s.config.TURNPassword,
+		Now:          now,
+	})
 }
 
 func bearerToken(r *http.Request) string {

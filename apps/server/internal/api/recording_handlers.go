@@ -20,9 +20,7 @@ func (s *Server) handleRecordingTargets(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"targets": dto.Missions(targets),
-	})
+	writeJSON(w, http.StatusOK, dto.RecordingTargetsPayload(targets))
 }
 
 func (s *Server) handleListRecordings(w http.ResponseWriter, r *http.Request) {
@@ -35,9 +33,7 @@ func (s *Server) handleListRecordings(w http.ResponseWriter, r *http.Request) {
 	for _, recording := range recordings {
 		response = append(response, s.createRecordingResponse(recording))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"recordings": response,
-	})
+	writeJSON(w, http.StatusOK, dto.RecordingsPayload(response))
 }
 
 func (s *Server) createRecordingResponse(recording domain.RecordingChunk) dto.RecordingChunkResponse {
@@ -124,34 +120,8 @@ func encodeObjectPath(path string) string {
 	return strings.Join(segments, "/")
 }
 
-type recorderTickRequest struct {
-	MissionCode          string    `json:"missionCode"`
-	RobotCode            string    `json:"robotCode"`
-	ChunkDurationSeconds int       `json:"chunkDurationSeconds"`
-	TickAt               time.Time `json:"tickAt"`
-}
-
-type recorderUploadRequest struct {
-	SizeBytes *int64 `json:"sizeBytes"`
-	Checksum  string `json:"checksum"`
-	WorkerID  string `json:"workerId"`
-	Attempt   int    `json:"attempt"`
-}
-
-type recorderFinalizationClaimRequest struct {
-	WorkerID            string `json:"workerId"`
-	Limit               int    `json:"limit"`
-	LockDurationSeconds int    `json:"lockDurationSeconds"`
-}
-
-type recorderFinalizationStatusRequest struct {
-	WorkerID string `json:"workerId"`
-	Attempt  int    `json:"attempt"`
-	Reason   string `json:"reason"`
-}
-
 func (s *Server) handleRecorderTick(w http.ResponseWriter, r *http.Request) {
-	var request recorderTickRequest
+	var request dto.RecorderTickRequest
 	if err := decodeJSON(r, &request); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -172,7 +142,7 @@ func (s *Server) handleRecorderTick(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleRecorderFinalizationJobsClaim(w http.ResponseWriter, r *http.Request) {
-	var request recorderFinalizationClaimRequest
+	var request dto.RecorderFinalizationClaimRequest
 	if err := decodeJSON(r, &request); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -187,7 +157,7 @@ func (s *Server) handleRecorderFinalizationJobsClaim(w http.ResponseWriter, r *h
 		writeStoreError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"jobs": jobs})
+	writeJSON(w, http.StatusOK, dto.RecorderFinalizationJobsPayload(jobs))
 }
 
 func (s *Server) handleRecorderFinalizationJobCompleted(w http.ResponseWriter, r *http.Request) {
@@ -200,7 +170,7 @@ func (s *Server) handleRecorderFinalizationJobCompleted(w http.ResponseWriter, r
 		writeStoreError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	writeJSON(w, http.StatusOK, dto.OKPayload())
 }
 
 func (s *Server) handleRecorderFinalizationJobPartial(w http.ResponseWriter, r *http.Request) {
@@ -213,7 +183,7 @@ func (s *Server) handleRecorderFinalizationJobPartial(w http.ResponseWriter, r *
 		writeStoreError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	writeJSON(w, http.StatusOK, dto.OKPayload())
 }
 
 func (s *Server) handleRecorderFinalizationJobFailed(w http.ResponseWriter, r *http.Request) {
@@ -226,7 +196,7 @@ func (s *Server) handleRecorderFinalizationJobFailed(w http.ResponseWriter, r *h
 		writeStoreError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	writeJSON(w, http.StatusOK, dto.OKPayload())
 }
 
 func (s *Server) handleRecorderChunkUploaded(w http.ResponseWriter, r *http.Request) {
@@ -240,9 +210,7 @@ func (s *Server) handleRecorderChunkUploaded(w http.ResponseWriter, r *http.Requ
 		writeStoreError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"chunk": s.createRecordingResponse(chunk),
-	})
+	writeJSON(w, http.StatusOK, dto.RecordingChunkPayload(s.createRecordingResponse(chunk)))
 }
 
 func (s *Server) handleRecorderFileUploaded(w http.ResponseWriter, r *http.Request) {
@@ -256,9 +224,7 @@ func (s *Server) handleRecorderFileUploaded(w http.ResponseWriter, r *http.Reque
 		writeStoreError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"chunk": s.createRecordingResponse(chunk),
-	})
+	writeJSON(w, http.StatusOK, dto.RecordingChunkPayload(s.createRecordingResponse(chunk)))
 }
 
 func decodeRecorderUploadMetadata(r *http.Request) (store.RecordingUploadMetadata, error) {
@@ -271,7 +237,7 @@ func decodeRecorderUploadMetadata(r *http.Request) (store.RecordingUploadMetadat
 		return store.RecordingUploadMetadata{}, nil
 	}
 
-	var request recorderUploadRequest
+	var request dto.RecorderUploadRequest
 	if err := json.Unmarshal(rawPayload, &request); err != nil {
 		return store.RecordingUploadMetadata{}, err
 	}
@@ -283,19 +249,19 @@ func decodeRecorderUploadMetadata(r *http.Request) (store.RecordingUploadMetadat
 	}, nil
 }
 
-func decodeRecorderFinalizationStatus(r *http.Request) (recorderFinalizationStatusRequest, error) {
+func decodeRecorderFinalizationStatus(r *http.Request) (dto.RecorderFinalizationStatusRequest, error) {
 	defer r.Body.Close()
 	rawPayload, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {
-		return recorderFinalizationStatusRequest{}, err
+		return dto.RecorderFinalizationStatusRequest{}, err
 	}
 	if len(strings.TrimSpace(string(rawPayload))) == 0 {
-		return recorderFinalizationStatusRequest{}, nil
+		return dto.RecorderFinalizationStatusRequest{}, nil
 	}
 
-	var request recorderFinalizationStatusRequest
+	var request dto.RecorderFinalizationStatusRequest
 	if err := json.Unmarshal(rawPayload, &request); err != nil {
-		return recorderFinalizationStatusRequest{}, err
+		return dto.RecorderFinalizationStatusRequest{}, err
 	}
 	request.WorkerID = strings.TrimSpace(request.WorkerID)
 	request.Reason = strings.TrimSpace(request.Reason)

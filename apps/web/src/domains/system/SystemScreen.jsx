@@ -12,9 +12,11 @@ import Surface from "../../components/ui/Surface.jsx";
 import { ListSkeleton, PanelSkeleton, SkeletonBlock } from "../../components/ui/Skeleton.jsx";
 import { cn } from "../../utils/cn.js";
 
-export default function SystemScreen({ dataLoadState, onClearObjectStorage, statusError, systemStatus }) {
+export default function SystemScreen({ dataLoadState, onClearObjectStorage, onClearSensorData, statusError, systemStatus }) {
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [sensorClearConfirmOpen, setSensorClearConfirmOpen] = useState(false);
+  const [clearingSensors, setClearingSensors] = useState(false);
   const isInitialLoading = Boolean(dataLoadState?.isInitialLoading);
   const components = systemStatus?.components ?? [];
   const rooms = systemStatus?.sfuRooms ?? [];
@@ -38,6 +40,19 @@ export default function SystemScreen({ dataLoadState, onClearObjectStorage, stat
       setClearConfirmOpen(false);
     } finally {
       setClearing(false);
+    }
+  }
+
+  async function confirmClearSensorData() {
+    if (!onClearSensorData || clearingSensors) {
+      return;
+    }
+    setClearingSensors(true);
+    try {
+      await onClearSensorData();
+      setSensorClearConfirmOpen(false);
+    } finally {
+      setClearingSensors(false);
     }
   }
 
@@ -100,6 +115,23 @@ export default function SystemScreen({ dataLoadState, onClearObjectStorage, stat
                   전체 삭제
                 </Button>
               </div>
+              <div className="grid gap-3 rounded-lg border border-red-400/15 bg-red-400/[0.06] p-3">
+                <div>
+                  <strong className="block text-sm font-black text-red-100">Sensor 데이터 전체 삭제</strong>
+                  <span className="mt-1 block text-xs font-semibold leading-relaxed text-red-100/70">
+                    저장된 sensor descriptor와 sample을 정리합니다. 새 telemetry가 들어오면 다시 생성됩니다.
+                  </span>
+                </div>
+                <Button
+                  className="justify-self-start"
+                  disabled={isProduction || !onClearSensorData || clearingSensors}
+                  onClick={() => setSensorClearConfirmOpen(true)}
+                  variant="danger"
+                >
+                  <RiDeleteBin6Line aria-hidden="true" />
+                  전체 삭제
+                </Button>
+              </div>
             </div>
           </Surface>
         </div>
@@ -112,33 +144,38 @@ export default function SystemScreen({ dataLoadState, onClearObjectStorage, stat
             ) : rooms.length === 0 ? (
               <EmptyState>연결된 세션이 없습니다.</EmptyState>
             ) : (
-              rooms.map((room) => (
-                <div
-                  className="grid gap-3 rounded-xl border border-slate-500/20 bg-white/[0.045] p-4"
-                  key={room.roomId}
-                >
-                  <div className="flex min-w-0 items-start justify-between gap-3 max-[760px]:grid">
-                    <div className="min-w-0">
-                      <strong className="block truncate text-base font-black text-slate-50">{room.roomId}</strong>
-                      <span className="mt-1 block text-xs font-semibold text-slate-500">실시간 관제 연결</span>
-                    </div>
-                    <div className="flex flex-wrap justify-end gap-1.5 max-[760px]:justify-start">
-                      <StatusBadge tone="success">로봇 {room.robotCount}대</StatusBadge>
-                      <StatusBadge tone={room.operatorCount > 0 ? "info" : "neutral"}>관제 {room.operatorCount}명</StatusBadge>
-                      <StatusBadge tone={room.recorderCount > 0 ? "warning" : "neutral"}>녹화 {room.recorderCount}개</StatusBadge>
-                    </div>
-                  </div>
+	              rooms.map((room) => {
+	                const peerSummaries = createRoomPeerSummaries(room);
+	                const robotCount = countRoomRobotPublishers(room);
+	                const mediaCount = countRoomPublishedTracks(room);
+	                const roomState = makeRoomStreamingState(room);
+	                return (
+	                  <div
+	                    className="grid gap-3 rounded-xl border border-slate-500/20 bg-white/[0.045] p-4"
+	                    key={room.roomId}
+	                  >
+	                  <div className="flex min-w-0 items-start justify-between gap-3 max-[760px]:grid">
+	                    <div className="min-w-0">
+	                      <strong className="block truncate text-base font-black text-slate-50">{room.roomId}</strong>
+	                      <span className="mt-1 block text-xs font-semibold text-slate-500">실시간 관제 연결</span>
+	                    </div>
+	                    <div className="flex flex-wrap justify-end gap-1.5 max-[760px]:justify-start">
+	                      <StatusBadge tone={robotCount > 0 ? "success" : "neutral"}>로봇 {robotCount}대</StatusBadge>
+	                      <StatusBadge tone={room.operatorCount > 0 ? "info" : "neutral"}>관제 {room.operatorCount}명</StatusBadge>
+	                      <StatusBadge tone={room.recorderCount > 0 ? "warning" : "neutral"}>녹화 {room.recorderCount}개</StatusBadge>
+	                    </div>
+	                  </div>
 
-                  <div className="grid grid-cols-3 gap-2 max-[760px]:grid-cols-1">
-                    <RoomMetric label="미디어" value={`${room.publishedTracks?.length ?? 0}개`} />
-                    <RoomMetric label="연결 주체" value={`${room.peers?.length ?? 0}개`} />
-                    <RoomMetric label="상태" value={room.robotCount > 0 ? "송출 중" : "대기"} />
-                  </div>
+	                  <div className="grid grid-cols-3 gap-2 max-[760px]:grid-cols-1">
+	                    <RoomMetric label="미디어" value={`${mediaCount}개`} />
+	                    <RoomMetric label="연결 주체" value={`${peerSummaries.length}개`} />
+	                    <RoomMetric label="상태" value={roomState} />
+	                  </div>
 
-                  <div className="flex flex-wrap gap-1.5">
-                    {(room.peers ?? []).map((peer) => (
-                      <span
-                        className={cn(
+	                  <div className="flex flex-wrap gap-1.5">
+	                    {peerSummaries.map((peer) => (
+	                      <span
+	                        className={cn(
                           "inline-flex min-h-7 max-w-full items-center rounded-full border px-2.5 text-xs font-semibold",
                           peer.role === "robot" && "border-emerald-400/25 bg-emerald-400/[0.10] text-emerald-100",
                           peer.role === "operator" && "border-sapphire-400/25 bg-sapphire-400/[0.10] text-sapphire-100",
@@ -148,11 +185,12 @@ export default function SystemScreen({ dataLoadState, onClearObjectStorage, stat
                       >
                         <span className="truncate">{makePeerLabel(peer)}</span>
                       </span>
-                    ))}
-                  </div>
-                </div>
-              ))
-            )}
+	                    ))}
+	                  </div>
+	                </div>
+	                );
+	              })
+	            )}
           </div>
         </Surface>
       </section>
@@ -172,6 +210,22 @@ export default function SystemScreen({ dataLoadState, onClearObjectStorage, stat
           tone="danger"
         />
       ) : null}
+      {sensorClearConfirmOpen ? (
+        <ConfirmDialog
+          cancelLabel="취소"
+          confirmLabel={clearingSensors ? "삭제 중" : "전체 삭제"}
+          description="저장된 sensor descriptor와 sample을 모두 삭제합니다. active recorder가 telemetry를 다시 받으면 sensor 데이터가 다시 생성됩니다."
+          onCancel={() => {
+            if (!clearingSensors) {
+              setSensorClearConfirmOpen(false);
+            }
+          }}
+          onConfirm={confirmClearSensorData}
+          subject="Sensor 데이터"
+          title="Sensor 데이터 전체 삭제"
+          tone="danger"
+        />
+      ) : null}
     </>
   );
 }
@@ -183,6 +237,94 @@ function RoomMetric({ label, value }) {
       <strong className="mt-1 block text-sm font-black text-slate-100">{value}</strong>
     </div>
   );
+}
+
+export function createRoomPeerSummaries(room) {
+  const summaries = [];
+  const seen = new Set();
+  const addPeer = (peer) => {
+    const key = makePeerSummaryKey(peer);
+    if (!key || seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    summaries.push(peer);
+  };
+
+  (room?.publishers ?? []).forEach((publisher) => {
+    if (publisher?.robotCode) {
+      addPeer({
+        peerId: publisher.publisherPeerId,
+        role: "robot",
+        robotCode: publisher.robotCode
+      });
+    }
+  });
+  (room?.peers ?? []).forEach((peer) => {
+    if (peer?.role === "robot") {
+      addPeer(peer);
+      return;
+    }
+    if (peer?.role === "operator" || peer?.role === "recorder") {
+      addPeer(peer);
+    }
+  });
+  return summaries;
+}
+
+export function countRoomRobotPublishers(room) {
+  const publisherRobotCodes = new Set(
+    (room?.publishers ?? [])
+      .map((publisher) => publisher?.robotCode)
+      .filter(Boolean)
+  );
+  if (publisherRobotCodes.size > 0) {
+    return publisherRobotCodes.size;
+  }
+  return new Set(
+    (room?.peers ?? [])
+      .filter((peer) => peer?.role === "robot" && peer.robotCode)
+      .map((peer) => peer.robotCode)
+  ).size;
+}
+
+export function countRoomPublishedTracks(room) {
+  const publisherTrackCount = (room?.publishers ?? []).reduce((sum, publisher) => (
+    sum + Math.max(0, Number(publisher?.trackCount) || 0)
+  ), 0);
+  if (publisherTrackCount > 0) {
+    return publisherTrackCount;
+  }
+  return room?.publishedTracks?.length ?? 0;
+}
+
+export function makeRoomStreamingState(room) {
+  const isPublishing = (room?.publishers ?? []).some((publisher) => (
+    publisher?.state === "publishing" && Math.max(0, Number(publisher?.trackCount) || 0) > 0
+  ));
+  if (isPublishing) {
+    return "송출 중";
+  }
+  if ((room?.publishers ?? []).length > 0 || countRoomRobotPublishers(room) > 0) {
+    return "연결됨";
+  }
+  return "대기";
+}
+
+function makePeerSummaryKey(peer) {
+  if (!peer?.role) {
+    return "";
+  }
+  if (peer.role === "robot") {
+    return peer.robotCode ? `robot:${peer.robotCode}` : `robot-peer:${peer.peerId}`;
+  }
+  if (peer.role === "operator") {
+    return peer.selectedRobotCode ? `operator:${peer.selectedRobotCode}` : `operator-peer:${peer.peerId}`;
+  }
+  if (peer.role === "recorder") {
+    return "recorder";
+  }
+  return `${peer.role}:${peer.peerId ?? ""}`;
 }
 
 function ObjectStorageUsagePanel({ usage }) {

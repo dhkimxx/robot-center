@@ -169,4 +169,39 @@ describe("sensorDisplayMetrics", () => {
     expect(metrics).toHaveLength(3);
     expect(metrics.map((metric) => metric.label)).toContain("배터리");
   });
+
+  it("prefers backend readings for sensor-latest metrics", () => {
+    const metrics = createSensorMetricsFromSensorLatest([
+      {
+        label: "Battery",
+        sensorId: "telemetry.battery_1",
+        sensorType: "battery",
+        unit: "percent",
+        latestSample: {
+          receivedAt: "2026-05-26T01:00:01Z",
+          values: {
+            batteryPercent: 91
+          }
+        },
+        readings: [
+          {
+            fieldPath: "batteryPercent",
+            label: "배터리",
+            order: 30,
+            unit: "%",
+            value: 91
+          }
+        ]
+      }
+    ]);
+
+    expect(metrics).toEqual([
+      expect.objectContaining({
+        label: "배터리",
+        receivedAt: "2026-05-26T01:00:01Z",
+        unit: "%",
+        value: 91
+      })
+    ]);
+  });
 });

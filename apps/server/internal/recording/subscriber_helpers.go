@@ -262,7 +262,7 @@ func subscriberRobotStatuses(status recorderSessionStatus) []SubscriberRobotStat
 		runtime := status.robotStatuses[robotCode]
 		output = append(output, SubscriberRobotStatus{
 			RobotCode:        robotCode,
-			TrackCount:       len(runtime.trackLabels),
+			TrackCount:       recorderCanonicalTrackCount(runtime.trackLabels),
 			DataChannelCount: len(runtime.dataChannelLabels),
 			LastTrackAt:      runtime.lastTrackAt,
 			LastDataAt:       runtime.lastDataAt,
@@ -271,6 +271,40 @@ func subscriberRobotStatuses(status recorderSessionStatus) []SubscriberRobotStat
 		})
 	}
 	return output
+}
+
+func subscriberRoomTrackCount(status recorderSessionStatus) int {
+	if len(status.robotStatuses) == 0 {
+		return recorderCanonicalTrackCount(status.trackLabels)
+	}
+	count := 0
+	for _, runtime := range status.robotStatuses {
+		count += recorderCanonicalTrackCount(runtime.trackLabels)
+	}
+	return count
+}
+
+func recorderCanonicalTrackCount(labels map[string]struct{}) int {
+	count := 0
+	for label := range labels {
+		if isRecorderCanonicalTrackLabel(label) {
+			count++
+		}
+	}
+	return count
+}
+
+func isRecorderCanonicalTrackLabel(label string) bool {
+	normalized := strings.TrimSpace(label)
+	if index := strings.Index(normalized, ":"); index >= 0 {
+		normalized = strings.TrimSpace(normalized[index+1:])
+	}
+	switch normalized {
+	case "track.video_1", "track.video_2", "track.audio_1", "track.audio_2":
+		return true
+	default:
+		return false
+	}
 }
 
 func (w *Worker) singleSubscriberRobotCode(roomID string) string {

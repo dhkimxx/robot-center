@@ -24,11 +24,10 @@ func (h *Hub) Summaries() []RoomSummary {
 			}
 		}
 		sort.Strings(summary.PublishedTracks)
+		summary.RobotCount = uniqueRoomRobotCount(room)
 
 		for _, peer := range room.peers {
 			switch peer.role {
-			case "robot":
-				summary.RobotCount++
 			case "operator":
 				summary.OperatorCount++
 			case "recorder":
@@ -102,7 +101,7 @@ func observedPublisherSummary(currentRoom *room, publisher *publisherSession) Ob
 		PublisherPeerID:   publisher.peerID,
 		State:             observedPublisherState(publisher),
 		ICEState:          publisher.iceState,
-		TrackCount:        len(tracks),
+		TrackCount:        canonicalPublishedTrackCount(tracks),
 		DataChannelCount:  len(dataChannels),
 		SubscriberCount:   currentRoom.subscriberCountForRobot(publisher.robotCode),
 		Tracks:            tracks,
@@ -148,17 +147,24 @@ func observedDataChannelSummaries(publisher *publisherSession) ([]string, []Obse
 	return dataChannels, states
 }
 
-func (h *Hub) registerPeer(joinedPeer *peer) []*peer {
+func (h *Hub) registerPeer(joinedPeer *peer) ([]*peer, []*peer) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	currentRoom := h.ensureRoomLocked(joinedPeer.roomID)
 	existingPeers := make([]*peer, 0, len(currentRoom.peers))
+	replacedPeers := make([]*peer, 0)
 	for _, existingPeer := range currentRoom.peers {
+		if shouldReplacePeer(existingPeer, joinedPeer) {
+			delete(currentRoom.peers, existingPeer.id)
+			h.closePublisherForPeerLocked(currentRoom, existingPeer.id)
+			replacedPeers = append(replacedPeers, existingPeer)
+			continue
+		}
 		existingPeers = append(existingPeers, existingPeer)
 	}
 	currentRoom.peers[joinedPeer.id] = joinedPeer
-	return existingPeers
+	return existingPeers, replacedPeers
 }
 
 func (h *Hub) findPublisherLocked(roomID string, robotCode string, peerID string) *publisherSession {
@@ -218,6 +224,32 @@ func (r *room) subscriberCountForRobot(robotCode string) int {
 		}
 	}
 	return count
+}
+
+func uniqueRoomRobotCount(currentRoom *room) int {
+	robotCodes := map[string]struct{}{}
+	for _, publisher := range currentRoom.publishers {
+		if publisher != nil && publisher.robotCode != "" {
+			robotCodes[publisher.robotCode] = struct{}{}
+		}
+	}
+	for _, peer := range currentRoom.peers {
+		if peer != nil && peer.role == "robot" && peer.robotCode != "" {
+			robotCodes[peer.robotCode] = struct{}{}
+		}
+	}
+	return len(robotCodes)
+}
+
+func shouldReplacePeer(existingPeer *peer, joinedPeer *peer) bool {
+	if existingPeer == nil || joinedPeer == nil {
+		return false
+	}
+	return joinedPeer.role == "robot" &&
+		existingPeer.role == "robot" &&
+		existingPeer.roomID == joinedPeer.roomID &&
+		existingPeer.robotCode == joinedPeer.robotCode &&
+		existingPeer.id != joinedPeer.id
 }
 
 func observedPublisherState(publisher *publisherSession) string {

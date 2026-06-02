@@ -11,3 +11,11 @@ export function clearObjectStorage() {
     timeoutMs: 60000
   });
 }
+
+export function clearSensorData() {
+  return requestJson("/api/v1/system/sensors/clear", {
+    body: JSON.stringify({ confirmation: "CLEAR_SENSOR_DATA" }),
+    method: "POST",
+    timeoutMs: 60000
+  });
+}

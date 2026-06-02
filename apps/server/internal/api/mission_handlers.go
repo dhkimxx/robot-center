@@ -3,21 +3,15 @@ package api
 import (
 	"fmt"
 	"net/http"
+
 	"robot-center/apps/server/internal/api/dto"
 	"robot-center/apps/server/internal/store"
+
 	"strings"
 )
 
-type createMissionRequest struct {
-	Name        string   `json:"name"`
-	MissionType string   `json:"missionType"`
-	SiteNote    string   `json:"siteNote"`
-	RobotCode   string   `json:"robotCode"`
-	RobotCodes  []string `json:"robotCodes"`
-}
-
 func (s *Server) handleCreateMission(w http.ResponseWriter, r *http.Request) {
-	var request createMissionRequest
+	var request dto.CreateMissionRequest
 	if err := decodeJSON(r, &request); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -39,9 +33,7 @@ func (s *Server) handleCreateMission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, map[string]any{
-		"mission": dto.Mission(mission),
-	})
+	writeJSON(w, http.StatusCreated, dto.MissionPayload(mission))
 }
 
 func (s *Server) handleListMissions(w http.ResponseWriter, r *http.Request) {
@@ -50,9 +42,7 @@ func (s *Server) handleListMissions(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"missions": dto.Missions(missions),
-	})
+	writeJSON(w, http.StatusOK, dto.MissionsPayload(missions))
 }
 
 func (s *Server) handleStartMission(w http.ResponseWriter, r *http.Request) {
@@ -61,9 +51,7 @@ func (s *Server) handleStartMission(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"mission": dto.Mission(mission),
-	})
+	writeJSON(w, http.StatusOK, dto.MissionPayload(mission))
 }
 
 func (s *Server) handleEndMission(w http.ResponseWriter, r *http.Request) {
@@ -73,9 +61,7 @@ func (s *Server) handleEndMission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.sfuHub.CloseRoom(mission.MissionCode)
-	writeJSON(w, http.StatusOK, map[string]any{
-		"mission": dto.Mission(mission),
-	})
+	writeJSON(w, http.StatusOK, dto.MissionPayload(mission))
 }
 
 func validMissionType(missionType string) bool {

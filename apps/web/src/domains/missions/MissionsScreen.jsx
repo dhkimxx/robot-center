@@ -10,7 +10,9 @@ export default function MissionsScreen({
   controlMission,
   controlMissionCode,
   dataLoadState,
+  isSensorSnapshotRefreshing,
   latestSensor,
+  latestSensorSourceLabel,
   latestTelemetry,
   liveEvents,
   liveSessions,
@@ -23,6 +25,7 @@ export default function MissionsScreen({
   onOpenMissionReplay,
   onOpenPlaybackFile,
   onReconnectSelectedMissionTarget,
+  onRefreshSensorSnapshot,
   onSelectMission,
   onStartMission,
   operationStatuses,
@@ -66,13 +69,16 @@ export default function MissionsScreen({
     return (
       <MissionControlView
         latestSensor={latestSensor}
+        latestSensorSourceLabel={latestSensorSourceLabel}
         latestTelemetry={latestTelemetry}
         liveEvents={liveEvents}
         liveSessions={liveSessions}
         mission={controlMission}
         missionTargets={missionTargets}
         onReconnectSelectedMissionTarget={onReconnectSelectedMissionTarget}
+        onRefreshSensorSnapshot={onRefreshSensorSnapshot}
         operationStatuses={operationStatuses}
+        isSensorSnapshotRefreshing={isSensorSnapshotRefreshing}
         selectedMissionTargetKey={selectedMissionTargetKey}
         setSelectedMissionTargetKey={setSelectedMissionTargetKey}
       />

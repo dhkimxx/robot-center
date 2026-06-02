@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+
+	"robot-center/apps/server/internal/api/dto"
 	"robot-center/apps/server/internal/store"
 )
 
@@ -14,26 +16,14 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 }
 
 func writeError(w http.ResponseWriter, status int, err error) {
-	writeJSON(w, status, map[string]any{
-		"error": err.Error(),
-	})
+	writeJSON(w, status, dto.ErrorPayload(err.Error()))
 }
 
 func writeStoreError(w http.ResponseWriter, err error) {
 	var missionConflict *store.MissionStartConflictError
 	switch {
 	case errors.As(err, &missionConflict):
-		conflicts := make([]map[string]string, 0, len(missionConflict.Conflicts))
-		for _, conflict := range missionConflict.Conflicts {
-			conflicts = append(conflicts, map[string]string{
-				"robotCode":         conflict.RobotCode,
-				"activeMissionCode": conflict.ActiveMissionCode,
-			})
-		}
-		writeJSON(w, http.StatusConflict, map[string]any{
-			"error":     err.Error(),
-			"conflicts": conflicts,
-		})
+		writeJSON(w, http.StatusConflict, dto.MissionConflictPayload(err.Error(), missionConflict.Conflicts))
 	case errors.Is(err, store.ErrNotFound):
 		writeError(w, http.StatusNotFound, err)
 	case errors.Is(err, store.ErrUnauthorized):

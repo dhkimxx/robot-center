@@ -2,10 +2,13 @@ package service
 
 import (
 	"context"
+	"strings"
 
 	"robot-center/apps/server/internal/domain"
 	"robot-center/apps/server/internal/store"
 )
+
+const clearSensorDataConfirmation = "CLEAR_SENSOR_DATA"
 
 type SensorService struct {
 	repository store.SensorRepository
@@ -25,4 +28,14 @@ func (s *SensorService) ListSensorSamples(ctx context.Context, missionID string,
 
 func (s *SensorService) ListLatestSensorSamples(ctx context.Context, missionID string, robotCode string) ([]domain.SensorLatest, error) {
 	return s.repository.ListLatestSensorSamples(ctx, missionID, robotCode)
+}
+
+func (s *SensorService) ClearSensorData(ctx context.Context, environment string, confirmation string) (store.SensorDataClearResult, error) {
+	if strings.EqualFold(strings.TrimSpace(environment), "production") {
+		return store.SensorDataClearResult{}, ErrSystemActionForbidden
+	}
+	if strings.TrimSpace(confirmation) != clearSensorDataConfirmation {
+		return store.SensorDataClearResult{}, ErrSystemActionConfirmationRequired
+	}
+	return s.repository.ClearSensorData(ctx)
 }

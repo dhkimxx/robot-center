@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  createSensorPanelState,
   createSensorPanelSnapshot,
   createTelemetryFromSensorLatest
 } from "./sensorLatestMapper.js";
@@ -77,5 +78,45 @@ describe("sensorLatestMapper", () => {
         value: 20.8
       })
     ]);
+  });
+
+  it("prefers live sensor values over stored snapshots", () => {
+    const snapshotSensor = createSensorPanelSnapshot(sensorLatest, "robot-001");
+    const liveSensor = {
+      receivedAt: new Date().toISOString(),
+      robotCode: "robot-001",
+      sensors: [
+        {
+          label: "CO",
+          receivedAt: new Date().toISOString(),
+          unit: "ppm",
+          value: 11
+        }
+      ]
+    };
+
+    const state = createSensorPanelState({
+      liveSensor,
+      snapshotSensor,
+      snapshotState: { status: "ready" }
+    });
+
+    expect(state.sensor).toBe(liveSensor);
+    expect(state.source).toBe("live");
+    expect(state.sourceLabel).toBe("실시간 수신");
+  });
+
+  it("marks stale snapshots when snapshot refresh fails", () => {
+    const snapshotSensor = createSensorPanelSnapshot(sensorLatest, "robot-001");
+
+    const state = createSensorPanelState({
+      liveSensor: null,
+      snapshotSensor,
+      snapshotState: { error: "failed", status: "error" }
+    });
+
+    expect(state.sensor).toBe(snapshotSensor);
+    expect(state.source).toBe("snapshot-error");
+    expect(state.sourceLabel).toBe("최근 저장값 갱신 실패");
   });
 });

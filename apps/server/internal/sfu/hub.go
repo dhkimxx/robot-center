@@ -61,7 +61,10 @@ func (h *Hub) ServePeer(w http.ResponseWriter, r *http.Request, request PeerJoin
 		send:      make(chan signalMessage, 32),
 	}
 
-	existingPeers := h.registerPeer(peer)
+	existingPeers, replacedPeers := h.registerPeer(peer)
+	for _, replacedPeer := range replacedPeers {
+		_ = replacedPeer.conn.Close()
+	}
 	go peer.writeLoop()
 
 	peer.send <- signalMessage{

@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -39,111 +40,36 @@ func (s *Store) SaveSensorEnvelope(ctx context.Context, envelope domain.SensorEn
 		return nil, err
 	}
 
-	db := s.db.WithContext(ctx)
-	descriptorIDs := map[string]string{}
-	if len(envelope.Descriptors) > 0 {
-		records := make([]model.SensorDescriptorModel, 0, len(envelope.Descriptors))
-		for _, descriptor := range envelope.Descriptors {
-			descriptor.SensorID = strings.TrimSpace(descriptor.SensorID)
-			if descriptor.SensorID == "" {
-				continue
-			}
-			channelRole := utils.FirstNonEmptyString(descriptor.ChannelRole, envelope.ChannelRole, "channel.telemetry")
-			label := utils.FirstNonEmptyString(descriptor.Label, descriptor.SensorID)
-			sensorType := domain.NormalizeSensorType(descriptor.SensorType, descriptor.SensorID)
-			records = append(records, model.SensorDescriptorModel{
-				MissionID:   envelope.MissionID,
-				RobotID:     robotID,
-				SensorID:    descriptor.SensorID,
-				ChannelRole: channelRole,
-				Label:       label,
-				SensorType:  sensorType,
-				Unit:        optionalString(descriptor.Unit),
-				Enabled:     descriptor.Enabled,
-				FirstSeenAt: envelope.ReceivedAt,
-				LastSeenAt:  envelope.ReceivedAt,
-			})
+	var records []model.SensorSampleModel
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := s.upsertSensorDescriptors(ctx, tx, envelope, robotID); err != nil {
+			return err
 		}
-		if len(records) > 0 {
-			if err := db.Clauses(clause.OnConflict{
-				Columns: []clause.Column{
-					{Name: "mission_id"},
-					{Name: "robot_id"},
-					{Name: "sensor_id"},
-				},
-				DoUpdates: clause.AssignmentColumns([]string{
-					"channel_role",
-					"label",
-					"sensor_type",
-					"unit",
-					"enabled",
-					"last_seen_at",
-				}),
-			}).Create(&records).Error; err != nil {
-				return nil, err
-			}
-			sensorIDs := make([]string, 0, len(records))
-			for _, record := range records {
-				sensorIDs = append(sensorIDs, record.SensorID)
-			}
-			var persisted []model.SensorDescriptorModel
-			if err := db.
-				Where("mission_id = ? AND robot_id = ? AND sensor_id IN ?", envelope.MissionID, robotID, sensorIDs).
-				Find(&persisted).Error; err != nil {
-				return nil, err
-			}
-			for _, descriptor := range persisted {
-				descriptorIDs[descriptor.SensorID] = descriptor.ID
-			}
+
+		descriptorIDs, err := s.resolveSampleDescriptorIDs(ctx, tx, envelope, robotID)
+		if err != nil {
+			return err
 		}
-	}
-	sampleDescriptorIDs, err := s.ensureSensorDescriptorIDsForSamples(ctx, envelope, robotID)
+
+		records, err = makeSensorSampleRecords(envelope, robotID, descriptorIDs)
+		if err != nil {
+			return err
+		}
+		if len(records) == 0 {
+			return nil
+		}
+		if err := tx.Create(&records).Error; err != nil {
+			return err
+		}
+		return upsertLatestSensorSamples(tx, records)
+	})
 	if err != nil {
 		return nil, err
-	}
-	for sensorID, descriptorID := range sampleDescriptorIDs {
-		descriptorIDs[sensorID] = descriptorID
-	}
-
-	records := make([]model.SensorSampleModel, 0, len(envelope.Samples))
-	for _, sample := range envelope.Samples {
-		sample.SensorID = strings.TrimSpace(sample.SensorID)
-		if sample.SensorID == "" {
-			continue
-		}
-		descriptorID := descriptorIDs[sample.SensorID]
-		if descriptorID == "" {
-			return nil, repo.ErrInvalidState
-		}
-		receivedAt := sample.ReceivedAt
-		if receivedAt.IsZero() {
-			receivedAt = envelope.ReceivedAt
-		}
-		rawPayload := sample.RawPayload
-		if len(rawPayload) == 0 {
-			rawPayload = envelope.RawPayload
-		}
-		records = append(records, model.SensorSampleModel{
-			DescriptorID: descriptorID,
-			MissionID:    envelope.MissionID,
-			RobotID:      robotID,
-			SensorID:     sample.SensorID,
-			ChannelRole:  utils.FirstNonEmptyString(sample.ChannelRole, envelope.ChannelRole, "channel.telemetry"),
-			MessageID:    optionalString(utils.FirstNonEmptyString(sample.MessageID, envelope.MessageID)),
-			Timestamp:    sample.Timestamp,
-			ReceivedAt:   receivedAt,
-			Values:       emptyJSONToNil(sample.Values),
-			ObjectKey:    optionalString(sample.ObjectKey),
-			RawPayload:   rawPayload,
-		})
 	}
 	if len(records) == 0 {
 		return []domain.SensorSample{}, nil
 	}
-	if err := db.Create(&records).Error; err != nil {
-		return nil, err
-	}
-	return s.ListSensorSamples(ctx, envelope.MissionID, envelope.RobotCode, "", len(records))
+	return sensorSampleRecordsToDomain(records, envelope.RobotCode), nil
 }
 
 func (s *Store) ListSensorDescriptors(ctx context.Context, missionID string, robotCode string) ([]domain.SensorDescriptor, error) {
@@ -188,6 +114,16 @@ func (s *Store) ListSensorSamples(ctx context.Context, missionID string, robotCo
 	if err != nil {
 		return nil, err
 	}
+	robotID := ""
+	if strings.TrimSpace(robotCode) != "" {
+		robotID, err = s.findRobotIDIncludingArchived(ctx, robotCode)
+		if errors.Is(err, repo.ErrNotFound) {
+			return []domain.SensorSample{}, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
@@ -212,8 +148,8 @@ func (s *Store) ListSensorSamples(ctx context.Context, missionID string, robotCo
 		Where("ss.mission_id = ?", strings.TrimSpace(missionID)).
 		Order("ss.received_at DESC").
 		Limit(limit)
-	if strings.TrimSpace(robotCode) != "" {
-		query = query.Where("r.robot_code = ?", strings.TrimSpace(robotCode))
+	if robotID != "" {
+		query = query.Where("ss.robot_id = ?", robotID)
 	}
 	if strings.TrimSpace(sensorID) != "" {
 		query = query.Where("ss.sensor_id = ?", strings.TrimSpace(sensorID))
@@ -233,9 +169,20 @@ func (s *Store) ListLatestSensorSamples(ctx context.Context, missionID string, r
 	if err != nil {
 		return nil, err
 	}
+	robotID := ""
+	if strings.TrimSpace(robotCode) != "" {
+		robotID, err = s.findRobotIDIncludingArchived(ctx, robotCode)
+		if errors.Is(err, repo.ErrNotFound) {
+			return []domain.SensorLatest{}, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
 	var rows []sensorLatestQueryRow
-	query := s.db.WithContext(ctx).Raw(`
-		SELECT DISTINCT ON (r.robot_code, sd.sensor_id)
+	query := s.db.WithContext(ctx).
+		Table("sensor_descriptors sd").
+		Select(`
 			sd.id AS descriptor_id,
 			sd.mission_id,
 			r.robot_code,
@@ -247,21 +194,22 @@ func (s *Store) ListLatestSensorSamples(ctx context.Context, missionID string, r
 				sd.enabled,
 			sd.first_seen_at,
 			sd.last_seen_at,
-			ss.id AS sample_id,
-				ss.channel_role AS sample_channel_role,
-				ss.message_id,
-				ss.sample_timestamp,
-				ss.received_at,
-				ss."values" AS "values",
-			ss.object_key,
-			ss.raw_payload
-		FROM sensor_descriptors sd
-		JOIN robots r ON r.id = sd.robot_id
-		LEFT JOIN sensor_samples ss ON ss.descriptor_id = sd.id
-		WHERE sd.mission_id = ?
-			AND (? = '' OR r.robot_code = ?)
-		ORDER BY r.robot_code, sd.sensor_id, ss.received_at DESC NULLS LAST
-	`, strings.TrimSpace(missionID), strings.TrimSpace(robotCode), strings.TrimSpace(robotCode))
+			lss.sample_id,
+				lss.channel_role AS sample_channel_role,
+				lss.message_id,
+				lss.sample_timestamp,
+				lss.received_at,
+				lss."values" AS "values",
+			lss.object_key,
+			lss.raw_payload
+		`).
+		Joins("JOIN robots r ON r.id = sd.robot_id").
+		Joins("LEFT JOIN sensor_latest_samples lss ON lss.descriptor_id = sd.id").
+		Where("sd.mission_id = ?", strings.TrimSpace(missionID)).
+		Order("r.robot_code ASC, sd.sensor_id ASC")
+	if robotID != "" {
+		query = query.Where("sd.robot_id = ?", robotID)
+	}
 	if err := query.Scan(&rows).Error; err != nil {
 		return nil, err
 	}
@@ -272,7 +220,98 @@ func (s *Store) ListLatestSensorSamples(ctx context.Context, missionID string, r
 	return latest, nil
 }
 
-func (s *Store) ensureSensorDescriptorIDsForSamples(ctx context.Context, envelope domain.SensorEnvelope, robotID string) (map[string]string, error) {
+func (s *Store) ClearSensorData(ctx context.Context) (repo.SensorDataClearResult, error) {
+	if s.sqlTx == nil {
+		tx, err := s.sqlDB.BeginTx(ctx, nil)
+		if err != nil {
+			return repo.SensorDataClearResult{}, err
+		}
+		transactionalStore := *s
+		transactionalStore.sqlTx = tx
+		result, err := transactionalStore.ClearSensorData(ctx)
+		if err != nil {
+			_ = tx.Rollback()
+			return repo.SensorDataClearResult{}, err
+		}
+		if err := tx.Commit(); err != nil {
+			return repo.SensorDataClearResult{}, err
+		}
+		return result, nil
+	}
+
+	runner := s.sqlRunner()
+	latestResult, err := runner.ExecContext(ctx, `DELETE FROM sensor_latest_samples`)
+	if err != nil {
+		return repo.SensorDataClearResult{}, err
+	}
+	sampleResult, err := runner.ExecContext(ctx, `DELETE FROM sensor_samples`)
+	if err != nil {
+		return repo.SensorDataClearResult{}, err
+	}
+	descriptorResult, err := runner.ExecContext(ctx, `DELETE FROM sensor_descriptors`)
+	if err != nil {
+		return repo.SensorDataClearResult{}, err
+	}
+	sensorLatestSamplesDeleted, _ := latestResult.RowsAffected()
+	sensorSamplesDeleted, _ := sampleResult.RowsAffected()
+	sensorDescriptorsDeleted, _ := descriptorResult.RowsAffected()
+	return repo.SensorDataClearResult{
+		SensorLatestSamplesDeleted: sensorLatestSamplesDeleted,
+		SensorSamplesDeleted:       sensorSamplesDeleted,
+		SensorDescriptorsDeleted:   sensorDescriptorsDeleted,
+	}, nil
+}
+
+func (s *Store) upsertSensorDescriptors(ctx context.Context, db *gorm.DB, envelope domain.SensorEnvelope, robotID string) error {
+	if len(envelope.Descriptors) == 0 {
+		return nil
+	}
+	records := make([]model.SensorDescriptorModel, 0, len(envelope.Descriptors))
+	for _, descriptor := range envelope.Descriptors {
+		descriptor.SensorID = strings.TrimSpace(descriptor.SensorID)
+		if descriptor.SensorID == "" {
+			continue
+		}
+		channelRole := utils.FirstNonEmptyString(descriptor.ChannelRole, envelope.ChannelRole, "channel.telemetry")
+		label := utils.FirstNonEmptyString(descriptor.Label, descriptor.SensorID)
+		sensorType := domain.NormalizeSensorType(descriptor.SensorType, descriptor.SensorID)
+		records = append(records, model.SensorDescriptorModel{
+			MissionID:   envelope.MissionID,
+			RobotID:     robotID,
+			SensorID:    descriptor.SensorID,
+			ChannelRole: channelRole,
+			Label:       label,
+			SensorType:  sensorType,
+			Unit:        optionalString(descriptor.Unit),
+			Enabled:     descriptor.Enabled,
+			FirstSeenAt: envelope.ReceivedAt,
+			LastSeenAt:  envelope.ReceivedAt,
+		})
+	}
+	if len(records) == 0 {
+		return nil
+	}
+	if err := db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{
+			{Name: "mission_id"},
+			{Name: "robot_id"},
+			{Name: "sensor_id"},
+		},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"channel_role",
+			"label",
+			"sensor_type",
+			"unit",
+			"enabled",
+			"last_seen_at",
+		}),
+	}).Create(&records).Error; err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *Store) resolveSampleDescriptorIDs(ctx context.Context, db *gorm.DB, envelope domain.SensorEnvelope, robotID string) (map[string]string, error) {
 	seenSensorIDs := map[string]struct{}{}
 	sensorIDs := make([]string, 0, len(envelope.Samples))
 	for _, sample := range envelope.Samples {
@@ -290,8 +329,7 @@ func (s *Store) ensureSensorDescriptorIDsForSamples(ctx context.Context, envelop
 		return map[string]string{}, nil
 	}
 
-	db := s.db.WithContext(ctx)
-	descriptorIDs, err := findSensorDescriptorIDs(db, envelope.MissionID, robotID, sensorIDs)
+	descriptorIDs, err := findSensorDescriptorIDs(db.WithContext(ctx), envelope.MissionID, robotID, sensorIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -303,6 +341,87 @@ func (s *Store) ensureSensorDescriptorIDsForSamples(ctx context.Context, envelop
 		return nil, fmt.Errorf("%w: sensor descriptor is required before sample sensorId %q", repo.ErrInvalidState, sensorID)
 	}
 	return descriptorIDs, nil
+}
+
+func makeSensorSampleRecords(envelope domain.SensorEnvelope, robotID string, descriptorIDs map[string]string) ([]model.SensorSampleModel, error) {
+	records := make([]model.SensorSampleModel, 0, len(envelope.Samples))
+	for _, sample := range envelope.Samples {
+		sample.SensorID = strings.TrimSpace(sample.SensorID)
+		if sample.SensorID == "" {
+			continue
+		}
+		descriptorID := descriptorIDs[sample.SensorID]
+		if descriptorID == "" {
+			return nil, repo.ErrInvalidState
+		}
+		receivedAt := sample.ReceivedAt
+		if receivedAt.IsZero() {
+			receivedAt = envelope.ReceivedAt
+		}
+		rawPayload := sample.RawPayload
+		if len(rawPayload) == 0 {
+			rawPayload = envelope.RawPayload
+		}
+		records = append(records, model.SensorSampleModel{
+			DescriptorID: descriptorID,
+			MissionID:    envelope.MissionID,
+			RobotID:      robotID,
+			SensorID:     sample.SensorID,
+			ChannelRole:  utils.FirstNonEmptyString(sample.ChannelRole, envelope.ChannelRole, "channel.telemetry"),
+			MessageID:    optionalString(utils.FirstNonEmptyString(sample.MessageID, envelope.MessageID)),
+			Timestamp:    sample.Timestamp,
+			ReceivedAt:   receivedAt,
+			Values:       emptyJSONToNil(sample.Values),
+			ObjectKey:    optionalString(sample.ObjectKey),
+			RawPayload:   rawPayload,
+		})
+	}
+	return records, nil
+}
+
+func upsertLatestSensorSamples(db *gorm.DB, samples []model.SensorSampleModel) error {
+	latestRecords := make([]model.SensorLatestSampleModel, 0, len(samples))
+	for _, sample := range samples {
+		latestRecords = append(latestRecords, model.SensorLatestSampleModel{
+			SampleID:     sample.ID,
+			DescriptorID: sample.DescriptorID,
+			MissionID:    sample.MissionID,
+			RobotID:      sample.RobotID,
+			SensorID:     sample.SensorID,
+			ChannelRole:  sample.ChannelRole,
+			MessageID:    sample.MessageID,
+			Timestamp:    sample.Timestamp,
+			ReceivedAt:   sample.ReceivedAt,
+			Values:       sample.Values,
+			ObjectKey:    sample.ObjectKey,
+			RawPayload:   sample.RawPayload,
+		})
+	}
+	if len(latestRecords) == 0 {
+		return nil
+	}
+	return db.Clauses(clause.OnConflict{
+		Columns: []clause.Column{
+			{Name: "mission_id"},
+			{Name: "robot_id"},
+			{Name: "sensor_id"},
+		},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"sample_id",
+			"descriptor_id",
+			"channel_role",
+			"message_id",
+			"sample_timestamp",
+			"received_at",
+			"values",
+			"object_key",
+			"raw_payload",
+			"updated_at",
+		}),
+		Where: clause.Where{Exprs: []clause.Expression{
+			clause.Expr{SQL: "sensor_latest_samples.received_at <= EXCLUDED.received_at"},
+		}},
+	}).Create(&latestRecords).Error
 }
 
 func findSensorDescriptorIDs(db *gorm.DB, missionID string, robotID string, sensorIDs []string) (map[string]string, error) {
@@ -379,6 +498,27 @@ func (row sensorSampleQueryRow) toDomain() domain.SensorSample {
 		ObjectKey:    stringFromPointer(row.ObjectKey),
 		RawPayload:   row.RawPayload,
 	}
+}
+
+func sensorSampleRecordsToDomain(records []model.SensorSampleModel, robotCode string) []domain.SensorSample {
+	samples := make([]domain.SensorSample, 0, len(records))
+	for _, record := range records {
+		samples = append(samples, domain.SensorSample{
+			ID:           record.ID,
+			DescriptorID: record.DescriptorID,
+			MissionID:    record.MissionID,
+			RobotCode:    robotCode,
+			SensorID:     record.SensorID,
+			ChannelRole:  record.ChannelRole,
+			MessageID:    stringFromPointer(record.MessageID),
+			Timestamp:    record.Timestamp,
+			ReceivedAt:   record.ReceivedAt,
+			Values:       record.Values,
+			ObjectKey:    stringFromPointer(record.ObjectKey),
+			RawPayload:   record.RawPayload,
+		})
+	}
+	return samples
 }
 
 type sensorLatestQueryRow struct {

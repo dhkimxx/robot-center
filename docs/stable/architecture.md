@@ -1,7 +1,7 @@
 ---
 title: "architecture"
 created: 2026-05-26
-updated: '2026-06-01'
+updated: '2026-06-02'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>"]
 type: "design"
@@ -30,6 +30,8 @@ history:
 - '2026-06-01 danya.kim <danya.kim@thundersoft.com>: clarify robot-facing API namespace and self-scope boundary'
 - '2026-06-01 danya.kim <danya.kim@thundersoft.com>: document role-based API namespaces for robot, recorder, operator, and system actors'
 - '2026-06-01 danya.kim <danya.kim@thundersoft.com>: clarify Swagger document endpoint outside actor API namespaces'
+- '2026-06-02 danya.kim <danya.kim@thundersoft.com>: document DataChannel-first live sensor flow and future sensor value interpreter'
+- '2026-06-02 danya.kim <danya.kim@thundersoft.com>: document sensor latest cache and active sensor value interpreter'
 ---
 
 # Architecture
@@ -309,11 +311,13 @@ missionId + robotCode + sensorId
 | `values` / `objectKey` | object 기반 측정값 또는 object storage 참조 |
 | `rawPayload` | 원본 또는 정규화 전 payload snapshot |
 
-frameId, gas alarm 기준, 장비 원본 상태처럼 sensorType별로 달라지는 값은 descriptor가 아니라 `values`에 둔다. UI와 저장 해석은 `sensorType`별 strategy가 담당한다.
+frameId, gas alarm 기준, 장비 원본 상태처럼 sensorType별로 달라지는 값은 descriptor가 아니라 `values`에 둔다. 저장은 raw descriptor와 raw values를 보존하고, 해석은 조회/표시 단계에서 `sensorType`과 정규화된 `label`을 기준으로 수행한다.
+
+Backend에는 `SensorValueInterpreter` 진입점을 둔다. 현재는 `gas`와 generic object 해석을 지원하며, `/api/v1/operator/sensor-latest` 응답에 원본 `latestSample.values`와 함께 표시용 `readings`를 제공한다. Frontend도 `sensorValueInterpreter`에서 raw values를 화면 metric으로 해석한다. 저장 시점에 sensorType별 의미를 DB schema에 과하게 고정하지 않고, 타입별 의미는 interpreter 전략으로 확장한다.
 
 샘플만 들어오고 descriptor가 없으면 서버는 기존 descriptor를 기준으로 저장한다. 새 sensorId를 처음 보낼 때는 descriptor를 함께 보내야 하며, descriptor의 `sensorType`은 필수다.
 
-최신 센서 조회는 반드시 다음 기준으로 분리한다.
+최신 센서 조회는 `sensor_latest_samples` cache table을 기준으로 하며, 반드시 다음 기준으로 분리한다.
 
 ```text
 robotCode + sensorId
@@ -543,6 +547,7 @@ sequenceDiagram
   participant SFU as app-server/SFU
 
   Browser->>App: mission / rtc config 조회
+  Browser->>App: sensor latest snapshot 1회 조회
   Browser->>SFU: /api/v1/operator/sfu/ws?room=missionCode
   Browser->>SFU: select robotCode
   SFU-->>Browser: offer(selected robot tracks/data)
@@ -551,6 +556,7 @@ sequenceDiagram
 ```
 
 Browser A와 Browser B는 같은 mission room에 붙어도 각자 독립적인 subscriber다.
+Live 화면의 센서/위치 실시간 표시는 operator WebRTC DataChannel 수신값을 우선한다. DB의 sensor latest API는 target 선택 직후 초기 snapshot과 디버깅/리플레이 보조 조회용이며, Live 화면에서 주기 polling source로 사용하지 않는다.
 
 ### 8.3 Recording
 

@@ -18,6 +18,9 @@ func TestAutoMigrateRemovesLegacySensorSampleValueColumns(t *testing.T) {
 
 	assertColumnPresent(t, store, "sensor_samples", "values")
 	assertColumnPresent(t, store, "sensor_samples", "sample_timestamp")
+	assertColumnPresent(t, store, "sensor_latest_samples", "sample_id")
+	assertColumnPresent(t, store, "sensor_latest_samples", "values")
+	assertColumnPresent(t, store, "sensor_latest_samples", "sample_timestamp")
 	for _, columnName := range []string{
 		"numeric_value",
 		"text_value",
