@@ -46,7 +46,7 @@ func TestRecorderMediaKeySeparatesRobotStorageWithinMissionRoom(t *testing.T) {
 func TestRecorderStorageDataChannelLabelKeepsSensorSampleChannels(t *testing.T) {
 	cases := map[string]string{
 		"channel.telemetry": "channel.telemetry",
-		"channel.spatial":   "channel.spatial",
+		"channel.spatial":   "",
 		"channel.event":     "",
 		"channel.control":   "",
 		"telemetry":         "",

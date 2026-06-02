@@ -49,13 +49,13 @@ func TestWorkerDropsRecorderDataChannelPostWhenQueueIsFull(t *testing.T) {
 	ctx := context.Background()
 	worker := newWorkerWithCollaborators(config.RecorderWorkerConfig{}, &fakeAppServerClient{}, &fakeObjectStorage{})
 	worker.dataPostQueue = make(chan recorderDataPostJob, 1)
-	worker.dataPostQueue <- recorderDataPostJob{roomID: "mission-001", robotCode: "robot-001", storageLabel: "channel.spatial"}
+	worker.dataPostQueue <- recorderDataPostJob{roomID: "mission-001", robotCode: "robot-001", storageLabel: "channel.telemetry"}
 	worker.updateSubscriberStatus("mission-001", func(status *recorderSessionStatus) {
 		status.robotCode = "robot-001"
 		status.robotCodes = map[string]struct{}{"robot-001": {}}
 	})
 
-	worker.enqueueRecorderDataChannelMessage(ctx, "mission-001", "channel.spatial", []byte(`{"missionId":"mission-001","robotCode":"robot-001","samples":[]}`))
+	worker.enqueueRecorderDataChannelMessage(ctx, "mission-001", "channel.telemetry", []byte(`{"missionId":"mission-001","robotCode":"robot-001","samples":[]}`))
 
 	queueStatus := worker.RecorderDataQueueStatus()
 	if queueStatus.PostDroppedCount != 1 {

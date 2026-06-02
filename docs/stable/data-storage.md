@@ -1,7 +1,7 @@
 ---
 title: "data-storage"
 created: 2026-05-26
-updated: '2026-05-28'
+updated: '2026-06-02'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>"]
 type: "design"
@@ -21,6 +21,7 @@ history:
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: documented finalization upload callback fencing'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: renamed robot schema status to device_state and clarified computed API connection status'
 - '2026-05-28 danya.kim <danya.kim@thundersoft.com>: document canonical sensor sample values column'
+- '2026-06-02 danya.kim <danya.kim@thundersoft.com>: scope recorder DataChannel sensor storage to telemetry only'
 ---
 
 # Data Storage
@@ -351,12 +352,12 @@ latest key = robotCode + sensorId
 
 ### 8.3 DataChannel 저장 경로
 
-현재 recorder-worker는 다음 DataChannel만 sensor API로 저장한다.
+현재 recorder-worker는 확정된 telemetry DataChannel만 sensor API로 저장한다.
 
 | DataChannel | PostgreSQL 저장 | JSONL artifact |
 | --- | --- | --- |
 | `channel.telemetry` | `sensor_descriptors`, `sensor_samples` | `telemetry_jsonl` snapshot |
-| `channel.spatial` | `sensor_descriptors`, `sensor_samples` | 현재 PostgreSQL 저장 중심. 별도 JSONL file label은 확장 여지 |
+| `channel.spatial` | 저장 안 함 | label은 예약되어 있으나 payload schema 미확정. 저장 정책은 별도 합의 후 활성화 |
 | `channel.event` | 현재 sensor 저장 대상 아님 | TODO |
 | `channel.control` | 현재 저장 대상 아님 | TODO |
 
@@ -718,4 +719,4 @@ Browser
 - `mission-005` room에서 `robot-001`, `robot-002`가 동시에 publish 가능
 - `/api/v1/operator/sensor-latest?missionId=mission-005`는 robot별 sensor row를 분리
 - `channel.control`은 Python mock에서 자동 payload를 보내지 않음
-- recorder-worker는 `channel.telemetry`, `channel.spatial`을 PostgreSQL sensor API로 저장
+- recorder-worker는 `channel.telemetry`를 PostgreSQL sensor API로 저장

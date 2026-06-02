@@ -252,8 +252,7 @@ func (w *Worker) markRecorderDataObserved(roomID string, robotCode string, stora
 func (w *Worker) markRecorderDataPersisted(roomID string, robotCode string, storageLabel string) {
 	persistedAt := time.Now().UTC()
 	w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
-		switch storageLabel {
-		case "channel.telemetry", "channel.spatial":
+		if storageLabel == "channel.telemetry" {
 			status.telemetryStoredCount++
 		}
 		if robotCode != "" {
@@ -318,9 +317,9 @@ func (w *Worker) recordRecorderDataPostRetry() {
 }
 
 func recorderShouldPostDataChannelLabel(storageLabel string) bool {
-	return storageLabel == "channel.telemetry" || storageLabel == "channel.spatial"
+	return storageLabel == "channel.telemetry"
 }
 
 func recorderShouldRequireRobotCode(storageLabel string) bool {
-	return storageLabel == "channel.telemetry" || storageLabel == "channel.spatial"
+	return storageLabel == "channel.telemetry"
 }

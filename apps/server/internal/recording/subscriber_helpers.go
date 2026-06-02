@@ -320,8 +320,6 @@ func recorderStorageDataChannelLabel(label string) string {
 	switch strings.TrimSpace(label) {
 	case "channel.telemetry":
 		return "channel.telemetry"
-	case "channel.spatial":
-		return "channel.spatial"
 	case "channel.event", "channel.control":
 		return ""
 	default:

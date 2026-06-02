@@ -26,6 +26,7 @@ history:
 - '2026-06-01 danya.kim <danya.kim@thundersoft.com>: document robot-scoped /api/v1/robot namespace and token scope'
 - '2026-06-01 danya.kim <danya.kim@thundersoft.com>: remove Swagger reference from robot gateway contract'
 - '2026-06-02 danya.kim <danya.kim@thundersoft.com>: clarify canonical msid track contract and unmapped invalid tracks'
+- '2026-06-02 danya.kim <danya.kim@thundersoft.com>: disable spatial payload storage until schema is finalized'
 ---
 
 # Robot Gateway Interface
@@ -294,7 +295,7 @@ DataChannel label은 위 canonical 값만 사용한다.
 
 현재 payload schema가 확정된 채널은 `channel.telemetry`다. `channel.spatial`, `channel.event`, `channel.control`은 label 예약과 open 협상 확인 대상이며, payload schema는 별도 합의 전까지 송신하지 않는다.
 
-DataChannel 메시지는 공통 envelope를 사용한다. sensor 저장 대상인 `channel.telemetry`, `channel.spatial` 메시지는 `descriptors` 또는 `samples`를 포함해야 한다.
+DataChannel 메시지는 공통 envelope를 사용한다. 현재 sensor 저장 대상은 `channel.telemetry`이며 메시지는 `descriptors` 또는 `samples`를 포함해야 한다. `channel.spatial` payload schema와 저장 정책은 별도 합의 전까지 활성화하지 않는다.
 
 ```json
 {
