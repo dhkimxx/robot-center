@@ -73,8 +73,9 @@ func TestRecordingStorageMediaLabelMapsCanonicalVideoSlots(t *testing.T) {
 	cases := map[string]string{
 		"track.video_1": "rgb",
 		"track.video_2": "thermal",
-		"rgb":           "rgb",
-		"thermal":       "thermal",
+		"rgb":           "",
+		"thermal":       "",
+		"video":         "",
 	}
 	for input, want := range cases {
 		if got := recordingStorageMediaLabel(input); got != want {
@@ -86,7 +87,7 @@ func TestRecordingStorageMediaLabelMapsCanonicalVideoSlots(t *testing.T) {
 func TestRecordingStorageAudioLabelMapsPrimaryCanonicalAudio(t *testing.T) {
 	cases := map[string]string{
 		"track.audio_1": "audio",
-		"audio":         "audio",
+		"audio":         "",
 		"track.audio_2": "",
 	}
 	for input, want := range cases {

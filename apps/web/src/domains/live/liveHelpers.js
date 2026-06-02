@@ -28,22 +28,29 @@ export function findRobotCodeForRemoteTrack(event, missionTargets) {
     .find((target) => raw.includes(target.robotCode.toLowerCase()))?.robotCode ?? "";
 }
 
-export function findTrackSlot(event, fallbackIndex) {
+export function findTrackSlot(event) {
   const raw = [
     event.track?.id,
     event.track?.label,
     ...(event.streams ?? []).flatMap((stream) => [stream.id, stream.label])
   ].filter(Boolean).join(" ").toLowerCase();
-  if (event.track?.kind === "audio" || raw.includes("audio")) {
-    return "audio";
-  }
   if (raw.includes("track.video_2")) {
     return "thermal";
   }
   if (raw.includes("track.video_1")) {
     return "rgb";
   }
-  return fallbackIndex === 0 ? "rgb" : "thermal";
+  if (raw.includes("track.audio_1") || raw.includes("track.audio_2")) {
+    return "audio";
+  }
+  return "unmapped";
+}
+
+export function describeRemoteTrack(event) {
+  const trackId = event.track?.id || "-";
+  const streamIds = (event.streams ?? []).map((stream) => stream.id).filter(Boolean).join(",");
+  const kind = event.track?.kind || "-";
+  return `kind=${kind} trackId=${trackId} streamIds=${streamIds || "-"}`;
 }
 
 export function findRobotCodeFromDataMessage(message) {

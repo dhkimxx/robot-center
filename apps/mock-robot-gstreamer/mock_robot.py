@@ -323,45 +323,6 @@ class GStreamerMockRobot:
             ],
         }
 
-    def create_spatial_payload(self) -> dict:
-        sequence = self.next_sequence()
-        return {
-            "messageId": f"{self.robot_code}-gst-spatial-{sequence}",
-            "messageType": "spatial.status",
-            "samples": [
-                {
-                    "sensorId": "spatial.imu_1",
-                    "timestamp": utc_now_iso(),
-                    "values": {
-                        "frameId": "base_link",
-                        "linearAcceleration": {"x": math.sin(sequence / 4) * 0.05, "y": 0.0, "z": 9.81},
-                        "angularVelocity": {"x": 0.01, "y": 0.02, "z": math.sin(sequence / 9) * 0.03},
-                    },
-                }
-            ],
-        }
-
-    def create_event_payload(self) -> dict:
-        sequence = self.next_sequence()
-        return {
-            "messageId": f"{self.robot_code}-gst-event-{sequence}",
-            "messageType": "event.robot_heartbeat",
-            "event": {
-                "kind": "robot_state_changed",
-                "severity": "info",
-                "message": "gstreamer mock robot streaming",
-            },
-        }
-
-    def create_control_payload(self) -> dict:
-        sequence = self.next_sequence()
-        return {
-            "messageId": f"{self.robot_code}-gst-control-{sequence}",
-            "messageType": "control.status",
-            "state": "ready",
-        }
-
-
 class PublishAttempt:
     def __init__(self, robot: GStreamerMockRobot, mission: dict):
         self.robot = robot
@@ -504,6 +465,9 @@ class PublishAttempt:
         if message_type == "answer":
             self.apply_answer(payload)
             return False
+        if message_type == "publish-warning":
+            log(f"publish-warning: {payload}")
+            return False
         if message_type == "publish-error":
             log(f"publish-error: {payload}")
             self.stop_loop()
@@ -594,7 +558,10 @@ class PublishAttempt:
     def on_data_channel_open(self, channel, label: str) -> None:
         log(f"DATA_CHANNEL_OPEN label={label}")
         self.open_labels.add(label)
-        GLib.timeout_add_seconds(DATA_INTERVAL_SECONDS, self.send_channel_payload, channel, label)
+        if label == "channel.telemetry":
+            GLib.timeout_add_seconds(DATA_INTERVAL_SECONDS, self.send_channel_payload, channel, label)
+        else:
+            log(f"DATA_CHANNEL_IDLE label={label} reason=payload schema not finalized")
 
     def on_data_channel_close(self, _channel, label: str) -> None:
         log(f"DATA_CHANNEL_CLOSE label={label}")
@@ -606,15 +573,10 @@ class PublishAttempt:
     def send_channel_payload(self, channel, label: str) -> bool:
         if self.websocket_closed.is_set() or self.robot.stop_event.is_set() or label in self.closed_labels:
             return False
+        if label != "channel.telemetry":
+            return False
         try:
-            if label == "channel.telemetry":
-                payload = self.robot.create_telemetry_payload()
-            elif label == "channel.spatial":
-                payload = self.robot.create_spatial_payload()
-            elif label == "channel.event":
-                payload = self.robot.create_event_payload()
-            else:
-                payload = self.robot.create_control_payload()
+            payload = self.robot.create_telemetry_payload()
             channel.emit("send-string", json.dumps(payload, separators=(",", ":")))
         except Exception as exc:
             log(f"send-string failed label={label}: {exc}")

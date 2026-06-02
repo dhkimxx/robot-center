@@ -274,6 +274,38 @@ func (w *Worker) updateSubscriberStatus(roomID string, update func(*recorderSess
 	w.subscriberStatuses[statusKey] = status
 }
 
+func (w *Worker) resetRecorderTrackRuntime(roomID string, robotCode string) {
+	normalizedRobotCode := strings.TrimSpace(robotCode)
+	observedAt := time.Now().UTC()
+	w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
+		if normalizedRobotCode == "" {
+			status.trackLabels = map[string]struct{}{}
+			status.lastTrackLabel = ""
+			for existingRobotCode, robotStatus := range status.robotStatuses {
+				robotStatus.trackLabels = map[string]struct{}{}
+				robotStatus.lastTrackAt = time.Time{}
+				robotStatus.updatedAt = observedAt
+				status.robotStatuses[existingRobotCode] = robotStatus
+			}
+			return
+		}
+		prefix := normalizedRobotCode + ":"
+		for trackLabel := range status.trackLabels {
+			if strings.HasPrefix(trackLabel, prefix) {
+				delete(status.trackLabels, trackLabel)
+			}
+		}
+		if strings.HasPrefix(status.lastTrackLabel, prefix) {
+			status.lastTrackLabel = ""
+		}
+		robotStatus := ensureRecorderRobotRuntime(status, normalizedRobotCode)
+		robotStatus.trackLabels = map[string]struct{}{}
+		robotStatus.lastTrackAt = time.Time{}
+		robotStatus.updatedAt = observedAt
+		status.robotStatuses[normalizedRobotCode] = robotStatus
+	})
+}
+
 func (w *Worker) resolveSubscriberStatusKeyLocked(roomID string) string {
 	if _, ok := w.subscriberStatuses[roomID]; ok {
 		return roomID
@@ -374,6 +406,7 @@ func (w *Worker) runRecorderSession(ctx context.Context, target domain.Mission) 
 			if fromPeerID != "" {
 				targetPeerID = fromPeerID
 			}
+			w.resetRecorderTrackRuntime(roomID, payloadString(message.Payload, "robotCode"))
 			if err := w.answerRecorderOffer(ctx, peerConnection, connection, message.Payload, targetPeerID); err != nil {
 				w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
 					status.lastError = err.Error()

@@ -110,7 +110,7 @@ func recordingStorageMediaLabel(label string) string {
 	case "track.video_2":
 		return "thermal"
 	default:
-		return strings.TrimSpace(label)
+		return ""
 	}
 }
 
@@ -143,12 +143,12 @@ func (w *Worker) appendOpusPacket(ctx context.Context, roomID string, label stri
 
 func recordingStorageAudioLabel(label string) string {
 	switch strings.TrimSpace(label) {
-	case "track.audio_1", "audio":
+	case "track.audio_1":
 		return "audio"
 	case "track.audio_2":
 		return ""
 	default:
-		return strings.TrimSpace(label)
+		return ""
 	}
 }
 

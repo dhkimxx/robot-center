@@ -1,7 +1,7 @@
 ---
 title: "robot-team-webrtc-send-test-guide"
 created: 2026-05-27
-updated: '2026-06-01'
+updated: '2026-06-02'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>"]
 type: "guide"
@@ -35,6 +35,9 @@ history:
 - '2026-06-01 danya.kim <danya.kim@thundersoft.com>: remove stale verification result block from robot team guide'
 - '2026-06-01 danya.kim <danya.kim@thundersoft.com>: align robot API error guidance with current implementation'
 - '2026-06-01 danya.kim <danya.kim@thundersoft.com>: clarify GStreamer webrtcbin max-bundle and track identity expectations'
+- '2026-06-02 danya.kim <danya.kim@thundersoft.com>: clarify mid/msid track identity and telemetry-only payload scope'
+- '2026-06-02 danya.kim <danya.kim@thundersoft.com>: align reserved DataChannel payload guidance with GStreamer mock'
+- '2026-06-02 danya.kim <danya.kim@thundersoft.com>: separate GStreamer webrtcbin checklist from common SDP guidance'
 ---
 
 # Robot Team WebRTC Send Test Guide
@@ -525,6 +528,7 @@ Signaling message 개요:
 | `offer` | robot -> server | robot publisher SDP offer |
 | `answer` | server -> robot | SFU SDP answer |
 | `candidate` | both | ICE candidate |
+| `publish-warning` | server -> robot | publish는 계속 가능하지만 media track 계약 위반 같은 수정 필요 항목 알림 |
 | `publish-error` | server -> robot | active mission assignment 검증 실패 |
 
 WebRTC signaling 인증은 REST와 같은 `robotToken` 하나만 사용한다. app-server는 robot token으로 robotCode를 확인하고 active mission assignment를 기준으로 publish를 검증한다.
@@ -554,11 +558,11 @@ ICE candidate payload는 browser/Pion 표준 candidate 필드를 사용한다.
 }
 ```
 
-### 6.1 SDP / BUNDLE 호환성
+### 6.1 공통 SDP / BUNDLE 호환성
 
 Robot publisher는 `max-bundle` 정책을 사용할 수 있다. 관제 서버는 RFC BUNDLE 형태의 SDP를 기준으로 협상한다.
 
-GStreamer `webrtcbin` 같은 구현체는 `max-bundle` offer에서 bundle transport를 대표하지 않는 media section을 아래처럼 보낼 수 있다.
+`max-bundle` offer에서는 bundle transport를 대표하지 않는 media section이 아래처럼 `m=` port `0`과 `a=bundle-only`로 표현될 수 있다.
 
 ```text
 a=group:BUNDLE audio0 video1 video2 application3
@@ -586,6 +590,28 @@ a=sctp-port:5000
 - `answer` 적용 직후가 아니라 각 DataChannel OPEN 이후에만 payload를 보낸다.
 - client-side에서 SDP를 임의로 고쳐야 한다면 관제팀에 먼저 공유한다. 특히 `m=` line, `a=mid`, `a=sctp-port`, `a=msid`는 협상과 track 식별에 직접 영향을 준다.
 
+### 6.2 GStreamer webrtcbin 사용 시 확인사항
+
+GStreamer `webrtcbin`을 쓰는 Robot publisher는 아래 항목을 별도로 확인한다.
+
+| 확인 항목 | 기대 상태 |
+| --- | --- |
+| Bundle policy | `max-bundle` 사용 가능 |
+| Bundle group | `a=group:BUNDLE`에 audio/video/application mid가 모두 포함 |
+| DataChannel m-line | `m=application 0 ... webrtc-datachannel`과 `a=bundle-only` 조합 허용 |
+| SCTP | DataChannel media section에 `a=sctp-port` 포함 |
+| DataChannel 생성 시점 | offer 생성 전에 `channel.telemetry`, `channel.spatial`, `channel.event`, `channel.control` 생성 |
+| Payload 송신 시점 | 각 DataChannel OPEN 이후에만 송신 |
+| 확정 payload 채널 | 이번 테스트에서는 `channel.telemetry`만 payload schema 확정 |
+| track slot 검증 대상 | `a=msid`의 track id |
+| track slot 미검증 대상 | `a=mid` |
+
+GStreamer `webrtcbin`에서 자주 혼동되는 값:
+
+- `a=mid`는 WebRTC/BUNDLE 협상 식별자다. GStreamer `webrtcbin`이 만든 `audio0`, `video1`, `video2`, `application3` 같은 값을 유지한다.
+- 관제 track 계약 검증 대상은 `a=msid`의 track id다. `mid`를 `track.video_1` 같은 값으로 바꾸지 않는다.
+- `webrtctransceiver0` 같은 자동 track id는 WebRTC 연결 자체는 될 수 있지만 관제 계약상 invalid다. 서버/화면에서는 `unmapped.*`로 표시될 수 있다.
+
 ## 7. Media Track
 
 로봇팀 구현은 아래 canonical track slot만 사용한다.
@@ -612,7 +638,9 @@ a=sctp-port:5000
 
 - 가능한 SDK에서는 track id 또는 stream id에 `track.video_1`, `track.video_2`, `track.audio_1` 같은 canonical slot 이름을 넣는다.
 - SDP 기준으로는 media section의 `a=msid` track id 또는 `a=ssrc ... msid:` 값에 canonical slot 이름이 드러나야 한다.
-- GStreamer `webrtcbin`이 `webrtctransceiver0` 같은 자동 track id만 생성하면 WebRTC 연결과 media 수신은 될 수 있지만, 관제 표시 slot이 기대와 다를 수 있다.
+- GStreamer `webrtcbin`이 `webrtctransceiver0` 같은 자동 track id만 생성하면 WebRTC 연결과 media 수신은 될 수 있지만, 관제 계약상 invalid track이다.
+- invalid track은 관제 UI/health에서 `unmapped.*`로 표시될 수 있고 RGB/Thermal/Audio slot에 자동 배치되지 않는다.
+- `mid`는 검증 대상이 아니다. `a=mid:video1`은 그대로 두고 `a=msid:robot-publisher track.video_1`처럼 `msid` track id만 canonical slot으로 맞춘다.
 
 예시:
 
@@ -643,11 +671,12 @@ track identity는 DataChannel payload나 WebSocket query에 넣지 않는다. We
 | Label | Negotiation status | Payload schema status | 이번 테스트 필수 여부 |
 | --- | --- | --- | --- |
 | `channel.telemetry` | 확정 | 확정. `descriptors` / `samples` / `values` 구조 사용 | Yes |
-| `channel.spatial` | DataChannel label 예약 | 미확정. mock은 IMU/odometry 예시를 보내지만 실제 로봇 계약으로 고정하지 않음 | No |
+| `channel.spatial` | DataChannel label 예약 | 미확정. 현재 관제 mock은 payload를 송신하지 않고 open 협상만 확인 | No |
 | `channel.event` | DataChannel label 예약 | 미확정. alarm/fault/detection/mission event taxonomy는 별도 협의 필요 | No |
 | `channel.control` | DataChannel label 예약 | 미확정. command/ack/권한/감사 정책은 별도 협의 필요 | No |
 
 따라서 이번 로봇팀 송신 테스트에서 가스, GPS, battery 같은 센서 측정값은 `channel.telemetry`로 보낸다. `channel.spatial`, `channel.event`, `channel.control`은 offer/DataChannel negotiation에 포함할 수 있지만, payload 세부 schema는 이 문서에서 확정 계약으로 보지 않는다.
+관제팀 GStreamer mock도 schema가 확정된 `channel.telemetry` payload만 주기적으로 송신하며, `channel.spatial`, `channel.event`, `channel.control`은 DataChannel open 협상 확인용으로만 생성한다.
 
 `messageType`은 payload subtype 식별자이며 1차 라우팅 기준이 아니다. 현재 1차 라우팅 기준은 DataChannel label이다.
 

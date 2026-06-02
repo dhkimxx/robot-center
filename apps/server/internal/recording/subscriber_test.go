@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"robot-center/apps/server/internal/config"
 	"robot-center/apps/server/internal/domain"
 )
 
@@ -93,5 +94,65 @@ func TestSubscriberDataChannelStatusesExposeLifecycle(t *testing.T) {
 	}
 	if dataChannels[0].DetectedAt == nil || dataChannels[0].OpenedAt == nil || dataChannels[0].LastMessageAt == nil {
 		t.Fatalf("expected data channel lifecycle timestamps, got %#v", dataChannels[0])
+	}
+}
+
+func TestResetRecorderTrackRuntimeClearsStaleRobotTracksOnly(t *testing.T) {
+	worker := NewWorker(config.RecorderWorkerConfig{})
+	worker.subscriberStatuses["mission-001"] = recorderSessionStatus{
+		missionCode: "mission-001",
+		robotCodes: map[string]struct{}{
+			"robot-001": {},
+			"robot-002": {},
+		},
+		trackLabels: map[string]struct{}{
+			"robot-001:track.video_1": {},
+			"robot-001:video":         {},
+			"robot-002:track.video_1": {},
+		},
+		dataChannelLabels: map[string]struct{}{
+			"channel.telemetry": {},
+		},
+		robotStatuses: map[string]recorderRobotRuntime{
+			"robot-001": {
+				trackLabels: map[string]struct{}{
+					"track.video_1": {},
+					"video":         {},
+				},
+				dataChannelLabels: map[string]struct{}{
+					"channel.telemetry": {},
+				},
+				lastTrackAt: time.Now().UTC(),
+			},
+			"robot-002": {
+				trackLabels: map[string]struct{}{
+					"track.video_1": {},
+				},
+				lastTrackAt: time.Now().UTC(),
+			},
+		},
+		lastTrackLabel: "robot-001:video",
+	}
+
+	worker.resetRecorderTrackRuntime("mission-001", "robot-001")
+
+	status := worker.subscriberStatuses["mission-001"]
+	if _, ok := status.trackLabels["robot-001:track.video_1"]; ok {
+		t.Fatalf("expected robot-001 canonical stale track to be cleared")
+	}
+	if _, ok := status.trackLabels["robot-001:video"]; ok {
+		t.Fatalf("expected robot-001 fallback stale track to be cleared")
+	}
+	if _, ok := status.trackLabels["robot-002:track.video_1"]; !ok {
+		t.Fatalf("expected other robot track to remain")
+	}
+	if len(status.robotStatuses["robot-001"].trackLabels) != 0 {
+		t.Fatalf("expected robot-001 runtime tracks to be empty, got %#v", status.robotStatuses["robot-001"].trackLabels)
+	}
+	if len(status.robotStatuses["robot-001"].dataChannelLabels) != 1 {
+		t.Fatalf("expected robot-001 data channel runtime to be preserved")
+	}
+	if status.lastTrackLabel != "" {
+		t.Fatalf("expected stale lastTrackLabel to be cleared, got %q", status.lastTrackLabel)
 	}
 }

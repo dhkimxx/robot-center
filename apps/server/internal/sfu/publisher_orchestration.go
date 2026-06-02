@@ -97,10 +97,12 @@ func (h *Hub) removePublisherConnection(roomID string, robotCode string, peerID 
 
 func (h *Hub) publishRobotTrack(roomID string, robotCode string, remoteTrack *webrtc.TrackRemote) {
 	var label string
+	var publisherPeerID string
 	h.mu.RLock()
 	if currentRoom := h.rooms[roomID]; currentRoom != nil {
 		if publisher := currentRoom.publishers[robotCode]; publisher != nil {
 			label = normalizeTrackRole(remoteTrack, publisher.publishedTracks)
+			publisherPeerID = publisher.peerID
 		}
 	}
 	h.mu.RUnlock()
@@ -122,6 +124,9 @@ func (h *Hub) publishRobotTrack(roomID string, robotCode string, remoteTrack *we
 		log.Printf("sfu publisher missing room=%s robot=%s label=%s", roomID, robotCode, label)
 		return
 	}
+	if publisherPeerID == "" {
+		publisherPeerID = publisher.peerID
+	}
 	publishedTrack := &publishedTrack{
 		key:        trackKey,
 		robotCode:  robotCode,
@@ -139,6 +144,21 @@ func (h *Hub) publishRobotTrack(roomID string, robotCode string, remoteTrack *we
 	h.mu.Unlock()
 
 	log.Printf("sfu robot track published room=%s robot=%s label=%s key=%s kind=%s codec=%s", roomID, robotCode, label, trackKey, remoteTrack.Kind().String(), remoteTrack.Codec().MimeType)
+	if !isCanonicalTrackRole(label) {
+		log.Printf("sfu robot track unmapped room=%s robot=%s label=%s kind=%s stream=%s id=%s allowed=%v", roomID, robotCode, label, remoteTrack.Kind().String(), remoteTrack.StreamID(), remoteTrack.ID(), canonicalTrackRoles)
+		if publisherPeerID != "" {
+			h.sendServerSignal(roomID, publisherPeerID, "publish-warning", map[string]any{
+				"robotCode":       robotCode,
+				"warningCode":     "non_canonical_track",
+				"trackLabel":      label,
+				"trackId":         remoteTrack.ID(),
+				"streamId":        remoteTrack.StreamID(),
+				"kind":            remoteTrack.Kind().String(),
+				"allowedTrackIds": canonicalTrackRoles,
+				"message":         "media track msid track id must be one of the canonical robot track ids",
+			})
+		}
+	}
 	go h.forwardRTP(roomID, trackKey, remoteTrack, localTrack)
 	go h.ensureRoomSubscriberOffers(roomID)
 }

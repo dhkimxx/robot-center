@@ -35,8 +35,8 @@ The mock publishes:
 - `track.audio_1`: silent Opus-preferred audio
 - `track.audio_2`: reserved secondary audio slot
 - `channel.telemetry`: `SensorDescriptor` / `SensorSample` payloads for GPS, six-channel gas module values, battery
-- `channel.spatial`: `SensorDescriptor` / `SensorSample` payloads for IMU and odometry
-- `channel.event`: robot heartbeat events
+- `channel.spatial`: reserved channel; the mock creates the channel but does not emit payloads
+- `channel.event`: reserved channel; the mock creates the channel but does not emit payloads
 - `channel.control`: reserved stub; the mock creates the channel but does not emit control payloads
 
 Robot-team reference points:
@@ -44,7 +44,7 @@ Robot-team reference points:
 - Create media tracks and canonical DataChannels before `createOffer()` so the offer includes media sections and SCTP `m=application`.
 - Use the mission response `sfu.signalingUrl` and `turnServers` as-is.
 - Do not send DataChannel payloads immediately after `createDataChannel()` or immediately after applying the answer.
-- Send telemetry/spatial/event payloads only after the channel is OPEN. This mock gates sends with `channel.readyState == "open"`; SDKs with callbacks should use the equivalent open callback.
+- Send telemetry payloads only after `channel.telemetry` is OPEN. This mock gates sends with `channel.readyState == "open"`; SDKs with callbacks should use the equivalent open callback.
 - Keep `robotCode`, `missionId`, `missionCode`, and `channelRole` out of the robot payload. The server injects that context from the authenticated robot, room, and DataChannel label.
 
 Runtime options keep the robot-team integration path explicit:

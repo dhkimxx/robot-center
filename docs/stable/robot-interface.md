@@ -1,7 +1,7 @@
 ---
 title: "robot-interface"
 created: 2026-05-26
-updated: '2026-06-01'
+updated: '2026-06-02'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>"]
 type: "design"
@@ -25,6 +25,7 @@ history:
 - '2026-06-01 danya.kim <danya.kim@thundersoft.com>: separate public robot API namespace from operator and internal diagnostics'
 - '2026-06-01 danya.kim <danya.kim@thundersoft.com>: document robot-scoped /api/v1/robot namespace and token scope'
 - '2026-06-01 danya.kim <danya.kim@thundersoft.com>: remove Swagger reference from robot gateway contract'
+- '2026-06-02 danya.kim <danya.kim@thundersoft.com>: clarify canonical msid track contract and unmapped invalid tracks'
 ---
 
 # Robot Gateway Interface
@@ -254,6 +255,13 @@ P0 media track:
 
 서버는 track ID 또는 stream ID에서 canonical slot을 찾는다. Robot Gateway는 semantic 이름(`rgb`, `thermal`, `audio`)이나 media kind 순서에 의존하지 않고 위 slot을 명시한다.
 
+Track identity 계약:
+
+- `a=mid`는 WebRTC/BUNDLE 협상 식별자이며 관제 track slot 계약이 아니다. GStreamer `webrtcbin`의 `audio0`, `video1`, `video2`, `application3` 같은 값을 유지한다.
+- 관제 track slot 검증 대상은 `a=msid`의 track id다. `a=msid:robot-publisher track.video_1`처럼 canonical slot이 들어가야 한다.
+- `webrtctransceiver0` 같은 자동 track id는 WebRTC 연결 자체는 될 수 있지만 관제 계약상 invalid다. 서버와 UI는 이를 `unmapped.*`로 표시하고 RGB/Thermal/Audio slot에 자동 배치하지 않는다.
+- `mid`를 `track.video_1` 같은 값으로 바꾸는 것은 요구하지 않는다.
+
 ## 8. DataChannel
 
 DataChannel은 역할별로 분리한다.
@@ -283,6 +291,8 @@ DataChannel lifecycle 계약:
 - app-server SFU의 `lastDataAt`은 DataChannel open 시각이 아니라 실제 payload 수신 시각이다.
 
 DataChannel label은 위 canonical 값만 사용한다.
+
+현재 payload schema가 확정된 채널은 `channel.telemetry`다. `channel.spatial`, `channel.event`, `channel.control`은 label 예약과 open 협상 확인 대상이며, payload schema는 별도 합의 전까지 송신하지 않는다.
 
 DataChannel 메시지는 공통 envelope를 사용한다. sensor 저장 대상인 `channel.telemetry`, `channel.spatial` 메시지는 `descriptors` 또는 `samples`를 포함해야 한다.
 

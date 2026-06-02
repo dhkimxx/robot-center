@@ -562,8 +562,6 @@ class MockRobot:
         self.publish_tasks.extend(
             (
                 asyncio.create_task(self.data_channel_loop("channel.telemetry", self.telemetry_channel)),
-                asyncio.create_task(self.data_channel_loop("channel.event", self.event_channel)),
-                asyncio.create_task(self.data_channel_loop("channel.spatial", self.spatial_channel)),
             )
         )
 
@@ -608,6 +606,8 @@ class MockRobot:
         @channel.on("open")
         def on_open() -> None:
             self.log(f"{label} DataChannel open")
+            if label != "channel.telemetry":
+                self.log(f"{label} DataChannel idle: payload schema not finalized")
 
         @channel.on("close")
         def on_close() -> None:
@@ -672,14 +672,9 @@ class MockRobot:
             if channel.readyState != "open":
                 continue
             self.sequence += 1
-            if label == "channel.telemetry":
-                payload = self.create_telemetry_payload()
-            elif label == "channel.event":
-                payload = self.create_event_payload()
-            elif label == "channel.spatial":
-                payload = self.create_spatial_payload()
-            else:
-                payload = self.create_telemetry_payload()
+            if label != "channel.telemetry":
+                continue
+            payload = self.create_telemetry_payload()
             channel.send(json.dumps(payload, separators=(",", ":")))
 
     async def heartbeat_loop(self) -> None:
@@ -854,74 +849,6 @@ class MockRobot:
                     "values": {"batteryPercent": self.current_battery_percent()},
                 },
             ],
-        }
-
-    def create_event_payload(self) -> dict[str, Any]:
-        return {
-            "messageId": f"{self.robot_code}-event-{self.sequence}",
-            "messageType": "event.robot_heartbeat",
-            "event": {
-                "kind": "robot_state_changed",
-                "severity": "info",
-                "message": "mock robot streaming",
-            },
-        }
-
-    def create_spatial_payload(self) -> dict[str, Any]:
-        return {
-            "messageId": f"{self.robot_code}-spatial-{self.sequence}",
-            "messageType": "spatial.status",
-            "descriptors": [
-                {
-                    "sensorId": "spatial.imu_1",
-                    "sensorType": "imu",
-                    "label": "IMU",
-                    "enabled": True,
-                },
-                {
-                    "sensorId": "spatial.odometry_1",
-                    "sensorType": "odometry",
-                    "label": "Odometry",
-                    "unit": "m",
-                    "enabled": True,
-                },
-                {
-                    "sensorId": "spatial.point_cloud_front_1",
-                    "sensorType": "point_cloud",
-                    "label": "Front Point Cloud",
-                    "enabled": False,
-                },
-            ],
-            "samples": [
-                {
-                    "sensorId": "spatial.imu_1",
-                    "timestamp": utc_now_iso(),
-                    "values": {
-                        "frameId": "base_link",
-                        "linearAcceleration": {
-                            "x": math.sin(self.sequence / 4) * 0.05,
-                            "y": math.cos(self.sequence / 7) * 0.04,
-                            "z": 9.81,
-                        },
-                        "angularVelocity": {
-                            "x": 0.01,
-                            "y": 0.02,
-                            "z": math.sin(self.sequence / 9) * 0.03,
-                        },
-                    },
-                },
-                {
-                    "sensorId": "spatial.odometry_1",
-                    "timestamp": utc_now_iso(),
-                    "values": {
-                        "frameId": "odom",
-                        "x": (self.sequence % 200) * 0.04,
-                        "y": math.sin(self.sequence / 8) * 0.3,
-                        "yawDegree": (self.sequence * 3) % 360,
-                    },
-                },
-            ],
-            "state": "available",
         }
 
     def current_position(self) -> tuple[float, float]:

@@ -11,7 +11,7 @@ It follows the robot-facing contract:
 4. create media tracks and canonical DataChannels before create-offer
 5. send WebRTC offer
 6. apply SFU answer
-7. publish media and DataChannel payloads after DataChannel open
+7. publish media and telemetry DataChannel payloads after DataChannel open
 ```
 
 The mock intentionally uses:
@@ -21,6 +21,8 @@ The mock intentionally uses:
 - OPUS audio
 - two VP8 video test tracks
 - `channel.telemetry`, `channel.spatial`, `channel.event`, `channel.control`
+
+Only `channel.telemetry` sends periodic payloads. The other DataChannels are created to validate negotiation/open lifecycle while their payload schemas remain unfinalized.
 
 Run through the project script:
 

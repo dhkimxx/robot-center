@@ -1,6 +1,7 @@
 import { makeLiveChannelLabel } from "../../utils/formatters.js";
 import { makeMissionRobotKey } from "../missions/missionHelpers.js";
 import {
+  describeRemoteTrack,
   findRobotCodeForRemoteTrack,
   findRobotCodeFromDataMessage,
   findTrackSlot
@@ -22,8 +23,6 @@ export function createLiveConnectionHandlers({
   target,
   targetKey
 }) {
-  let videoTrackOrder = 0;
-
   return {
     onDataChannelMessage(label, message) {
       if (!attempt.isCurrent()) {
@@ -55,9 +54,14 @@ export function createLiveConnectionHandlers({
       const robotCode = findRobotCodeForRemoteTrack(event, missionTargets) || target.robotCode;
       const routedTargetKey = makeMissionRobotKey(missionCode, robotCode);
       const stream = new MediaStream([event.track]);
-      const slot = findTrackSlot(event, videoTrackOrder);
-      if (slot !== "audio") {
-        videoTrackOrder += 1;
+      const slot = findTrackSlot(event);
+      if (slot === "unmapped") {
+        appendLiveEvent(
+          routedTargetKey,
+          `미매핑 미디어 수신: ${describeRemoteTrack(event)}`,
+          { attemptId: attempt.attemptId }
+        );
+        return;
       }
       applyTrackStream(routedTargetKey, slot, stream, { attemptId: attempt.attemptId });
       appendLiveEvent(

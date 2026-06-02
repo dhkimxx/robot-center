@@ -15,11 +15,20 @@ const (
 	StreamRoleTrackAudio1 = "track.audio_1"
 	StreamRoleTrackAudio2 = "track.audio_2"
 
+	StreamRoleTrackUnmappedPrefix = "unmapped."
+
 	StreamRoleChannelTelemetry = "channel.telemetry"
 	StreamRoleChannelSpatial   = "channel.spatial"
 	StreamRoleChannelEvent     = "channel.event"
 	StreamRoleChannelControl   = "channel.control"
 )
+
+var canonicalTrackRoles = []string{
+	StreamRoleTrackVideo1,
+	StreamRoleTrackVideo2,
+	StreamRoleTrackAudio1,
+	StreamRoleTrackAudio2,
+}
 
 var canonicalDataChannelRoles = []string{
 	StreamRoleChannelTelemetry,
@@ -65,18 +74,31 @@ func newRobotStreamBundle(missionCode string, robotCode string) *RobotStreamBund
 
 func normalizeTrackRole(track *webrtc.TrackRemote, _ map[string]*publishedTrack) string {
 	raw := strings.ToLower(strings.TrimSpace(track.StreamID() + " " + track.ID()))
-	for _, role := range []string{StreamRoleTrackVideo1, StreamRoleTrackVideo2, StreamRoleTrackAudio1, StreamRoleTrackAudio2} {
+	for _, role := range canonicalTrackRoles {
 		if strings.Contains(raw, role) {
 			return role
 		}
 	}
-	if track.ID() != "" {
-		return utils.SafeTrackToken(track.ID())
+	return unmappedTrackRole(track)
+}
+
+func isCanonicalTrackRole(role string) bool {
+	for _, canonicalRole := range canonicalTrackRoles {
+		if role == canonicalRole {
+			return true
+		}
 	}
-	if track.StreamID() != "" {
-		return utils.SafeTrackToken(track.StreamID())
+	return false
+}
+
+func unmappedTrackRole(track *webrtc.TrackRemote) string {
+	for _, candidate := range []string{track.ID(), track.StreamID(), track.Kind().String()} {
+		token := utils.SafeTrackToken(candidate)
+		if token != "unknown" {
+			return StreamRoleTrackUnmappedPrefix + token
+		}
 	}
-	return utils.SafeTrackToken(track.Kind().String())
+	return StreamRoleTrackUnmappedPrefix + "unknown"
 }
 
 func normalizeDataChannelRole(label string) string {

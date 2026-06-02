@@ -124,7 +124,8 @@ export function makeLiveChannelLabel(label) {
     "track.video_1": "영상 1",
     "track.video_2": "영상 2",
     thermal: "Thermal",
-    rgb: "RGB"
+    rgb: "RGB",
+    unmapped: "미매핑"
   };
   return labels[label] ?? label;
 }

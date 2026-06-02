@@ -10,7 +10,10 @@ import (
 	"github.com/pion/webrtc/v4"
 
 	"robot-center/apps/server/internal/domain"
+	"robot-center/apps/server/internal/utils"
 )
+
+const recorderUnmappedTrackPrefix = "unmapped."
 
 func buildSignalingURL(baseURL string, roomID string) string {
 	parsed, err := url.Parse(baseURL)
@@ -430,29 +433,25 @@ func dereferenceUint16(value *uint16) uint16 {
 
 func classifyTrack(track *webrtc.TrackRemote) string {
 	raw := strings.ToLower(track.StreamID() + " " + track.ID() + " " + track.Codec().MimeType)
-	if strings.Contains(raw, "track.video_1") {
-		return "track.video_1"
+	for _, label := range []string{"track.video_1", "track.video_2", "track.audio_1", "track.audio_2"} {
+		if strings.Contains(raw, label) {
+			return label
+		}
 	}
-	if strings.Contains(raw, "track.video_2") {
-		return "track.video_2"
+	return recorderUnmappedTrackLabel(track)
+}
+
+func recorderUnmappedTrackLabel(track *webrtc.TrackRemote) string {
+	for _, candidate := range []string{track.ID(), track.StreamID()} {
+		if index := strings.Index(candidate, recorderUnmappedTrackPrefix); index >= 0 {
+			return utils.SafeTrackToken(candidate[index:])
+		}
 	}
-	if strings.Contains(raw, "track.audio_1") {
-		return "track.audio_1"
+	for _, candidate := range []string{track.ID(), track.StreamID(), track.Kind().String()} {
+		token := utils.SafeTrackToken(candidate)
+		if token != "unknown" {
+			return recorderUnmappedTrackPrefix + token
+		}
 	}
-	if strings.Contains(raw, "track.audio_2") {
-		return "track.audio_2"
-	}
-	if strings.Contains(raw, "thermal") {
-		return "thermal"
-	}
-	if strings.Contains(raw, "rgb") {
-		return "rgb"
-	}
-	if track.Kind() == webrtc.RTPCodecTypeAudio {
-		return "audio"
-	}
-	if track.Kind() == webrtc.RTPCodecTypeVideo {
-		return "video"
-	}
-	return track.Kind().String()
+	return recorderUnmappedTrackPrefix + "unknown"
 }
