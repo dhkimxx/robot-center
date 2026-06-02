@@ -37,6 +37,7 @@ export function useControlCenterController({
     missionLiveStatuses,
     recordings,
     statusError,
+    dataLoadState,
     loadAll,
     loadMissionLiveStatus
   } = useControlCenterData();
@@ -168,10 +169,10 @@ export function useControlCenterController({
   }, [missionControlCode, missionController]);
 
   useEffect(() => {
-    if (missionControlCode && !missions.some((mission) => mission.missionCode === missionControlCode)) {
+    if (dataLoadState.hasLoaded && missionControlCode && !missions.some((mission) => mission.missionCode === missionControlCode)) {
       setMissionControlCode("");
     }
-  }, [missionControlCode, missions]);
+  }, [dataLoadState.hasLoaded, missionControlCode, missions]);
 
   useEffect(() => {
     if (!missionControlCode) {
@@ -215,6 +216,7 @@ export function useControlCenterController({
     if (routeMissionControlCode) {
       return createMissionControlPageChrome({
         controlMission: missionControlMission,
+        isLoading: dataLoadState.isInitialLoading,
         missionTargets: missionControlTargets,
         onBackToMissionList: closeMissionControl,
         onEndMission: missionController.endMission,
@@ -225,6 +227,7 @@ export function useControlCenterController({
 
     if (routeMissionReplayCode) {
       return createMissionReplayPageChrome({
+        isLoading: dataLoadState.isInitialLoading,
         replayMission: missionReplayMission,
         routeMissionReplayCode
       });
@@ -232,6 +235,7 @@ export function useControlCenterController({
 
     if (activeSection === "robots") {
       return createRobotPageChrome({
+        isLoading: dataLoadState.isInitialLoading,
         liveStatuses: missionLiveStatuses,
         onOpenCreateRobotModal: robotController.openRobotCreateModal,
         robots
@@ -240,12 +244,14 @@ export function useControlCenterController({
 
     if (activeSection === "system") {
       return createSystemPageChrome({
+        isLoading: dataLoadState.isInitialLoading,
         liveStatuses: missionLiveStatuses,
         systemStatus
       });
     }
 
     return createMissionListPageChrome({
+      isLoading: dataLoadState.isInitialLoading,
       liveStatuses: missionLiveStatuses,
       missions,
       onOpenCreateMissionModal: missionController.openMissionCreateModal
@@ -253,6 +259,7 @@ export function useControlCenterController({
   }, [
     activeSection,
     closeMissionControl,
+    dataLoadState.isInitialLoading,
     missionControlMission,
     missionControlTargets,
     missionController.endMission,
@@ -270,11 +277,14 @@ export function useControlCenterController({
 
   return {
     statusError,
+    dataLoadState,
     notifications,
     dismissNotification,
     pageChrome,
     missionRouteProps: {
       controlMission: missionControlMission,
+      controlMissionCode: routeMissionControlCode,
+      dataLoadState,
       latestSensor,
       latestTelemetry,
       liveEvents: selectedLiveSession.events,
@@ -333,6 +343,7 @@ export function useControlCenterController({
     },
     robotRouteProps: {
       missions,
+      dataLoadState,
       onArchiveRobot: robotController.archiveRobot,
       onLoadConnectionInfo: robotController.loadConnectionInfo,
       onOpenCreateRobotModal: robotController.openRobotCreateModal,
@@ -343,6 +354,7 @@ export function useControlCenterController({
     },
     systemRouteProps: {
       onClearObjectStorage: clearSystemObjectStorage,
+      dataLoadState,
       statusError,
       systemStatus
     }

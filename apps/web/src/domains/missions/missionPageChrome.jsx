@@ -4,6 +4,7 @@ import { makeStatusLabel, missionTypeLabel } from "../../utils/formatters.js";
 import { countStreamingRobotsFromLiveStatuses } from "./missionHelpers.js";
 
 export function createMissionListPageChrome({
+  isLoading = false,
   liveStatuses,
   missions,
   onOpenCreateMissionModal
@@ -19,13 +20,16 @@ export function createMissionListPageChrome({
         임무 생성
       </Button>
     ),
-    meta: `진행 ${activeMissionCount}건 · 대기 ${readyMissionCount}건 · 종료 ${closedMissionCount}건 · 송출 로봇 ${streamingRobotCount}개`,
+    meta: isLoading
+      ? "임무 정보를 불러오는 중"
+      : `진행 ${activeMissionCount}건 · 대기 ${readyMissionCount}건 · 종료 ${closedMissionCount}건 · 송출 로봇 ${streamingRobotCount}개`,
     title: "임무"
   };
 }
 
 export function createMissionControlPageChrome({
   controlMission,
+  isLoading = false,
   missionTargets,
   onBackToMissionList,
   onEndMission,
@@ -63,17 +67,20 @@ export function createMissionControlPageChrome({
         </Button>
       </>
     ),
-    meta: `${controlMission?.missionCode ?? routeMissionControlCode} · ${controlType} · ${controlStatus} · 로봇 ${missionTargets.length}대`,
+    meta: isLoading
+      ? `${routeMissionControlCode} · 관제 정보 확인 중`
+      : `${controlMission?.missionCode ?? routeMissionControlCode} · ${controlType} · ${controlStatus} · 로봇 ${missionTargets.length}대`,
     title: controlMission?.name ?? "실시간 관제"
   };
 }
 
 export function createMissionReplayPageChrome({
+  isLoading = false,
   replayMission,
   routeMissionReplayCode
 }) {
   return {
-    meta: `${replayMission?.missionCode ?? routeMissionReplayCode} · 녹화 리플레이`,
+    meta: isLoading ? `${routeMissionReplayCode} · 리플레이 정보 확인 중` : `${replayMission?.missionCode ?? routeMissionReplayCode} · 녹화 리플레이`,
     title: replayMission?.name ?? "종료 임무 리플레이"
   };
 }

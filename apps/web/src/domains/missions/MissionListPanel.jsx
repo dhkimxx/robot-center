@@ -4,6 +4,7 @@ import ListRow from "../../components/ui/ListRow.jsx";
 import SectionHeader from "../../components/ui/SectionHeader.jsx";
 import StatusBadge from "../../components/ui/StatusBadge.jsx";
 import Surface from "../../components/ui/Surface.jsx";
+import { ListSkeleton } from "../../components/ui/Skeleton.jsx";
 import {
   makeStatusLabel,
   missionTypeLabel
@@ -16,6 +17,7 @@ import {
 } from "./missionHelpers.js";
 
 export function MissionListPanel({
+  isLoading = false,
   liveStatuses,
   missions,
   onSelectMission,
@@ -31,7 +33,9 @@ export function MissionListPanel({
         title="임무 목록"
       />
       <div className="grid min-h-0 auto-rows-max content-start gap-3 overflow-auto pr-1">
-        {missions.length === 0 ? (
+        {isLoading ? (
+          <ListSkeleton count={6} />
+        ) : missions.length === 0 ? (
           <EmptyState>생성된 임무가 없습니다.</EmptyState>
         ) : (
           <>

@@ -12,11 +12,19 @@ export function useControlCenterData() {
   const [missionLiveStatuses, setMissionLiveStatuses] = useState({});
   const [recordings, setRecordings] = useState([]);
   const [statusError, setStatusError] = useState("");
+  const [dataLoadState, setDataLoadState] = useState({
+    hasLoaded: false,
+    isLoading: false
+  });
   const requestSequenceRef = useRef(0);
 
   const loadAll = useCallback(async (options = {}) => {
     const requestSequence = requestSequenceRef.current + 1;
     requestSequenceRef.current = requestSequence;
+    setDataLoadState((current) => ({
+      ...current,
+      isLoading: true
+    }));
     let payloads;
     try {
       payloads = await Promise.all([
@@ -29,6 +37,10 @@ export function useControlCenterData() {
       if (requestSequence !== requestSequenceRef.current || options.isCancelled?.()) {
         return false;
       }
+      setDataLoadState((current) => ({
+        ...current,
+        isLoading: false
+      }));
       throw error;
     }
     if (requestSequence !== requestSequenceRef.current || options.isCancelled?.()) {
@@ -57,6 +69,10 @@ export function useControlCenterData() {
     setMissionLiveStatuses(nextLiveStatuses);
     setRecordings(recordingPayload.recordings ?? []);
     setStatusError("");
+    setDataLoadState({
+      hasLoaded: true,
+      isLoading: false
+    });
     return true;
   }, []);
 
@@ -114,6 +130,11 @@ export function useControlCenterData() {
     setRecordings,
     statusError,
     setStatusError,
+    dataLoadState: {
+      ...dataLoadState,
+      isInitialLoading: dataLoadState.isLoading && !dataLoadState.hasLoaded,
+      isRefreshing: dataLoadState.isLoading && dataLoadState.hasLoaded
+    },
     loadAll,
     loadMissionLiveStatus
   };

@@ -30,7 +30,7 @@ printf '\ndocker services:\n'
 docker compose -f "$COMPOSE_FILE" ps postgres minio turn 2>/dev/null || true
 
 printf '\nhealth:\n'
-for item in "app-server http://127.0.0.1:$APP_PORT/healthz" "recorder-worker http://127.0.0.1:$RECORDER_PORT/healthz" "system http://127.0.0.1:$APP_PORT/api/system/status"; do
+for item in "app-server http://127.0.0.1:$APP_PORT/healthz" "recorder-worker http://127.0.0.1:$RECORDER_PORT/healthz" "system http://127.0.0.1:$APP_PORT/api/v1/system/status"; do
   label="${item%% *}"
   url="${item#* }"
   if curl -fsS "$url" >/dev/null 2>&1; then
@@ -41,7 +41,7 @@ for item in "app-server http://127.0.0.1:$APP_PORT/healthz" "recorder-worker htt
 done
 
 printf '\nrtc config:\n'
-curl -fsS "http://127.0.0.1:$APP_PORT/api/rtc-config" 2>/dev/null | /usr/bin/python3 -m json.tool 2>/dev/null || printf '  unavailable\n'
+curl -fsS "http://127.0.0.1:$APP_PORT/api/v1/operator/rtc-config" 2>/dev/null | /usr/bin/python3 -m json.tool 2>/dev/null || printf '  unavailable\n'
 
 printf '\nrecorder subscriber:\n'
 curl -fsS "http://127.0.0.1:$RECORDER_PORT/healthz" 2>/dev/null | /usr/bin/python3 -c 'import json,sys; payload=json.load(sys.stdin); print(json.dumps(payload.get("subscriber", {}), ensure_ascii=False, indent=2))' 2>/dev/null || printf '  unavailable\n'

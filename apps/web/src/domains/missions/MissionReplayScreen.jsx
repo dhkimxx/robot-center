@@ -4,6 +4,7 @@ import EmptyState from "../../components/ui/EmptyState.jsx";
 import SectionHeader from "../../components/ui/SectionHeader.jsx";
 import StatusBadge from "../../components/ui/StatusBadge.jsx";
 import Surface from "../../components/ui/Surface.jsx";
+import { ListSkeleton, PanelSkeleton } from "../../components/ui/Skeleton.jsx";
 import { RecordingObjectList, makeRecordingStatusTone } from "../recordings/RecordingObjectList.jsx";
 import {
   makeRecordingRobotGroups,
@@ -19,6 +20,7 @@ import { cn } from "../../utils/cn.js";
 import { formatMissionRobotCount, getMissionRobotDetails } from "./missionHelpers.js";
 
 export function MissionReplayScreen({
+  isLoading = false,
   mission,
   missingMissionCode,
   onBackToMissionList,
@@ -45,11 +47,24 @@ export function MissionReplayScreen({
     }
   }, [robotGroups, selectedRobotCode]);
 
+  if (!mission && isLoading) {
+    return (
+      <Surface className="grid h-full min-h-0 content-start gap-4">
+        <SectionHeader
+          action={<Button size="sm" onClick={() => onBackToMissionList()}>임무 목록</Button>}
+          title="임무 리플레이"
+          meta={missingMissionCode || "확인 중"}
+        />
+        <PanelSkeleton rows={5} />
+      </Surface>
+    );
+  }
+
   if (!mission) {
     return (
       <Surface className="grid content-start gap-4">
         <SectionHeader
-          action={<Button size="sm" onClick={onBackToMissionList}>임무 목록</Button>}
+          action={<Button size="sm" onClick={() => onBackToMissionList()}>임무 목록</Button>}
           title="임무 리플레이"
           meta={missingMissionCode || "임무 없음"}
         />
@@ -70,7 +85,7 @@ export function MissionReplayScreen({
               {mission.missionCode} / {makeStatusLabel(mission.status)}
             </span>
           </div>
-          <Button size="sm" onClick={onBackToMissionList}>임무 목록</Button>
+          <Button size="sm" onClick={() => onBackToMissionList()}>임무 목록</Button>
         </div>
         <div className="flex min-w-0 items-start justify-between gap-4 max-[900px]:grid">
           <div className="min-w-0">
@@ -88,7 +103,12 @@ export function MissionReplayScreen({
         ) : null}
       </div>
 
-      {robotGroups.length === 0 ? (
+      {isLoading ? (
+        <div className="grid min-h-0 grid-cols-[280px_minmax(0,1fr)] gap-3 overflow-hidden max-[1180px]:grid-cols-1">
+          <ListSkeleton count={4} />
+          <PanelSkeleton rows={8} />
+        </div>
+      ) : robotGroups.length === 0 ? (
         <EmptyState>이 임무에 저장된 리플레이 파일이 없습니다.</EmptyState>
       ) : (
         <div className="grid min-h-0 grid-cols-[280px_minmax(0,1fr)] gap-3 overflow-hidden max-[1180px]:grid-cols-1">

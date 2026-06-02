@@ -7,8 +7,10 @@ import ListRow from "../../components/ui/ListRow.jsx";
 import SectionHeader from "../../components/ui/SectionHeader.jsx";
 import StatusBadge from "../../components/ui/StatusBadge.jsx";
 import Surface from "../../components/ui/Surface.jsx";
+import { ListSkeleton, PanelSkeleton } from "../../components/ui/Skeleton.jsx";
 
 export default function RobotsScreen({
+  dataLoadState,
   missions,
   onArchiveRobot,
   onLoadConnectionInfo,
@@ -17,6 +19,7 @@ export default function RobotsScreen({
   robots,
   selectedRobot
 }) {
+  const isInitialLoading = Boolean(dataLoadState?.isInitialLoading);
   const selectedRobotHasOpenMission = selectedRobot
     ? missions.some((mission) => getMissionRobotCodes(mission).includes(selectedRobot.robotCode) && ["ready", "active"].includes(mission.status))
     : false;
@@ -29,7 +32,9 @@ export default function RobotsScreen({
           title="등록 로봇"
         />
         <div className="grid min-h-0 auto-rows-max gap-2 overflow-auto pr-1">
-          {robots.length === 0 ? (
+          {isInitialLoading ? (
+            <ListSkeleton count={5} />
+          ) : robots.length === 0 ? (
             <EmptyState>등록된 로봇이 없습니다.</EmptyState>
           ) : (
             robots.map((robot) => {
@@ -57,7 +62,9 @@ export default function RobotsScreen({
           <SectionHeader meta={selectedRobot?.robotCode ?? "선택 없음"} title="로봇 상세" />
         </div>
         <div className="min-h-0 overflow-auto p-4">
-          {!selectedRobot ? (
+          {isInitialLoading ? (
+            <PanelSkeleton rows={5} />
+          ) : !selectedRobot ? (
             <EmptyState>로봇을 선택하세요.</EmptyState>
           ) : (
             <div className="grid gap-4">

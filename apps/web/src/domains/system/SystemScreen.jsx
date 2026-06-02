@@ -9,11 +9,13 @@ import MetricStrip from "../../components/ui/MetricStrip.jsx";
 import SectionHeader from "../../components/ui/SectionHeader.jsx";
 import StatusBadge from "../../components/ui/StatusBadge.jsx";
 import Surface from "../../components/ui/Surface.jsx";
+import { ListSkeleton, PanelSkeleton, SkeletonBlock } from "../../components/ui/Skeleton.jsx";
 import { cn } from "../../utils/cn.js";
 
-export default function SystemScreen({ onClearObjectStorage, statusError, systemStatus }) {
+export default function SystemScreen({ dataLoadState, onClearObjectStorage, statusError, systemStatus }) {
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const isInitialLoading = Boolean(dataLoadState?.isInitialLoading);
   const components = systemStatus?.components ?? [];
   const rooms = systemStatus?.sfuRooms ?? [];
   const environment = systemStatus?.config?.environment ?? "";
@@ -44,13 +46,23 @@ export default function SystemScreen({ onClearObjectStorage, statusError, system
       <section className="grid h-full min-h-0 grid-cols-[400px_minmax(0,1fr)] gap-3 max-[980px]:grid-cols-1">
         <div className="grid min-h-0 content-start gap-3 overflow-auto">
           <Surface>
-            <SectionHeader title="운영 요약" meta={statusError ? "응답 대기" : "정상 수신"} />
-            <MetricStrip items={summaryItems.map(([label, value]) => ({ label, value }))} />
+            <SectionHeader title="운영 요약" meta={isInitialLoading ? "확인 중" : statusError ? "응답 대기" : "정상 수신"} />
+            {isInitialLoading ? (
+              <div className="flex min-h-9 flex-wrap items-center gap-2 rounded-lg border border-slate-700/70 bg-slate-950/20 px-3">
+                <SkeletonBlock className="h-6 w-24 rounded-full" />
+                <SkeletonBlock className="h-6 w-24 rounded-full" />
+                <SkeletonBlock className="h-6 w-24 rounded-full" />
+              </div>
+            ) : (
+              <MetricStrip items={summaryItems.map(([label, value]) => ({ label, value }))} />
+            )}
           </Surface>
 
           <Surface>
-            <SectionHeader title="서비스 상태" meta={`${components.length}개 항목`} />
-            {statusError ? (
+            <SectionHeader title="서비스 상태" meta={isInitialLoading ? "확인 중" : `${components.length}개 항목`} />
+            {isInitialLoading ? (
+              <ListSkeleton count={4} />
+            ) : statusError ? (
               <EmptyState>응답 대기: {statusError}</EmptyState>
             ) : (
               <ul className="grid gap-2">
@@ -70,7 +82,7 @@ export default function SystemScreen({ onClearObjectStorage, statusError, system
           <Surface>
             <SectionHeader title="테스트 관리" meta={environment || "environment unknown"} />
             <div className="grid gap-3">
-              <ObjectStorageUsagePanel usage={objectStorageUsage} />
+              {isInitialLoading ? <PanelSkeleton rows={3} /> : <ObjectStorageUsagePanel usage={objectStorageUsage} />}
               <div className="grid gap-3 rounded-lg border border-red-400/15 bg-red-400/[0.06] p-3">
                 <div>
                   <strong className="block text-sm font-black text-red-100">Object Storage 전체 삭제</strong>
@@ -93,9 +105,11 @@ export default function SystemScreen({ onClearObjectStorage, statusError, system
         </div>
 
         <Surface className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
-          <SectionHeader title="실시간 연결" meta={`${rooms.length}개`} />
+          <SectionHeader title="실시간 연결" meta={isInitialLoading ? "확인 중" : `${rooms.length}개`} />
           <div className="grid min-h-0 auto-rows-max content-start gap-2 overflow-auto pr-1">
-            {rooms.length === 0 ? (
+            {isInitialLoading ? (
+              <ListSkeleton count={4} />
+            ) : rooms.length === 0 ? (
               <EmptyState>연결된 세션이 없습니다.</EmptyState>
             ) : (
               rooms.map((room) => (
