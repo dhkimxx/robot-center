@@ -294,6 +294,11 @@ func recordingStorageObjectForFileType(chunk domain.RecordingChunk, fileType str
 
 func (s *Store) ListRecordingChunks(ctx context.Context) ([]domain.RecordingChunk, error) {
 	rows, err := s.sqlDB.QueryContext(ctx, recordingChunkSelectSQL()+`
+		JOIN recording_sessions rs ON rs.id = rc.recording_session_id
+		WHERE NOT (
+			rs.ended_at IS NOT NULL
+			AND rc.status IN ('recording', 'pending')
+		)
 		ORDER BY rc.started_at DESC
 		LIMIT 300
 	`)
@@ -383,14 +388,23 @@ func (s *Store) findOrCreateRecordingSession(ctx context.Context, runner sqlCont
 	err := runner.QueryRowContext(ctx, `
 		SELECT id::text, started_at
 		FROM recording_sessions
-		WHERE mission_id = $1::uuid AND robot_id = $2::uuid AND ended_at IS NULL
-		ORDER BY started_at DESC
+		WHERE mission_id = $1::uuid AND robot_id = $2::uuid
+			AND (
+				ended_at IS NULL
+				OR EXISTS (
+					SELECT 1
+					FROM recording_chunks rc
+					WHERE rc.recording_session_id = recording_sessions.id
+						AND rc.status IN ('recording', 'pending')
+				)
+			)
+		ORDER BY (ended_at IS NULL) DESC, started_at DESC
 		LIMIT 1
 	`, missionID, robotID).Scan(&recordingSession.ID, &recordingSession.StartedAt)
 	if err == nil {
 		_, updateErr := runner.ExecContext(ctx, `
 			UPDATE recording_sessions
-			SET status = 'recording', chunk_duration_seconds = $2
+			SET status = 'recording', chunk_duration_seconds = $2, ended_at = NULL
 			WHERE id = $1::uuid
 		`, recordingSession.ID, chunkDurationSeconds)
 		return recordingSession, updateErr

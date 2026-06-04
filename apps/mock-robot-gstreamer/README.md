@@ -19,7 +19,7 @@ The mock intentionally uses:
 - GStreamer `webrtcbin`
 - `bundle-policy=max-bundle` by default
 - OPUS audio
-- two VP8 video test tracks
+- two H.264 video test tracks using `H264/90000` RTP clock
 - `channel.telemetry`, `channel.spatial`, `channel.event`, `channel.control`
 
 Only `channel.telemetry` sends periodic payloads. The other DataChannels are created to validate negotiation/open lifecycle while their payload schemas remain unfinalized.

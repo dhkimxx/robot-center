@@ -1,7 +1,7 @@
 ---
 title: "architecture"
 created: 2026-05-26
-updated: '2026-06-02'
+updated: '2026-06-04'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>"]
 type: "design"
@@ -32,6 +32,9 @@ history:
 - '2026-06-01 danya.kim <danya.kim@thundersoft.com>: clarify Swagger document endpoint outside actor API namespaces'
 - '2026-06-02 danya.kim <danya.kim@thundersoft.com>: document DataChannel-first live sensor flow and future sensor value interpreter'
 - '2026-06-02 danya.kim <danya.kim@thundersoft.com>: document sensor latest cache and active sensor value interpreter'
+- '2026-06-04 danya.kim <danya.kim@thundersoft.com>: Clarify H.264 video codec policy across SFU and recorder'
+- '2026-06-04 danya.kim <danya.kim@thundersoft.com>: Clarify H.264 recording precondition and negotiated SDP codec behavior'
+- '2026-06-04 danya.kim <danya.kim@thundersoft.com>: Clarify H264/90000 recording codec precondition'
 ---
 
 # Architecture
@@ -57,7 +60,7 @@ AI Web P0의 현재 서버/로봇/WebRTC/SFU/저장 아키텍처를 설명한다
 - SDP 내부 내용
 - ICE candidate JSON wrapper
 - DataChannel payload 상세 schema
-- codec, bitrate, resolution 정책
+- bitrate, resolution 정책
 - MinIO object key 상세 규칙
 
 ## 2. 현재 아키텍처 방향
@@ -215,7 +218,7 @@ recorder-worker
 -> all robot media/data subscribe
 ```
 
-SDP는 WebRTC가 생성하는 session description이다. 앱이 SDP 내부 codec line을 직접 계약으로 정의하지 않고, 현재는 Pion/브라우저/aiortc 협상 결과를 사용한다.
+SDP는 WebRTC가 생성하는 session description이다. payload type 번호, `a=mid`, `fmtp` 세부값은 Pion/브라우저/GStreamer 협상 결과를 사용한다. 현재 app-server는 SDP codec 협상을 코드 레벨에서 H.264로 강제 차단하지 않는다. 다만 recorder-worker의 MP4 저장 정상 동작 전제조건은 H.264 video이며, SDP codec line은 `H264/90000`이어야 한다. `90000`은 H.264 RTP timestamp clock rate다. Audio 기준은 Opus다.
 
 ICE는 relay-only 정책으로 TURN 경로를 기준으로 한다.
 

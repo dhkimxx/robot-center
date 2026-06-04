@@ -261,27 +261,46 @@ func (s *Store) refreshRecordingSessionStatusForChunk(ctx context.Context, runne
 		return err
 	}
 	_, err := runner.ExecContext(ctx, `
-		UPDATE recording_sessions rs
-		SET
-			status = CASE
-				WHEN EXISTS (
+		WITH session_state AS (
+			SELECT
+				rs.id,
+				EXISTS (
+					SELECT 1 FROM recording_chunks rc
+					WHERE rc.recording_session_id = rs.id
+						AND rc.status IN ('recording', 'pending')
+				) AS has_open_chunk,
+				EXISTS (
 					SELECT 1 FROM recording_chunks rc
 					WHERE rc.recording_session_id = rs.id
 						AND rc.status IN ('recording', 'pending', 'finalizing')
-				) THEN 'finalizing'
-				WHEN EXISTS (
+				) AS has_unfinished_chunk,
+				EXISTS (
 					SELECT 1 FROM recording_chunks rc
 					WHERE rc.recording_session_id = rs.id
 						AND rc.status = 'failed'
-				) THEN 'failed'
-				WHEN EXISTS (
+				) AS has_failed_chunk,
+				EXISTS (
 					SELECT 1 FROM recording_chunks rc
 					WHERE rc.recording_session_id = rs.id
 						AND rc.status = 'partial'
-				) THEN 'partial'
+				) AS has_partial_chunk
+			FROM recording_sessions rs
+			WHERE rs.id = $1::uuid
+		)
+		UPDATE recording_sessions rs
+		SET
+			status = CASE
+				WHEN session_state.has_open_chunk AND rs.ended_at IS NULL THEN 'recording'
+				WHEN session_state.has_unfinished_chunk THEN 'finalizing'
+				WHEN session_state.has_failed_chunk THEN 'failed'
+				WHEN session_state.has_partial_chunk THEN 'partial'
 				ELSE 'uploaded'
 			END,
-			ended_at = COALESCE(ended_at, now())
+			ended_at = CASE
+				WHEN session_state.has_open_chunk AND rs.ended_at IS NULL THEN NULL
+				ELSE COALESCE(rs.ended_at, now())
+			END
+		FROM session_state
 		WHERE rs.id = $1::uuid
 	`, sessionID)
 	return err

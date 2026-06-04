@@ -357,12 +357,18 @@ class PublishAttempt:
             "application/x-rtp,media=audio,encoding-name=OPUS,payload=111 ! webrtc. "
             "videotestsrc is-live=true pattern=ball ! "
             f"video/x-raw,width={self.robot.rgb_width},height={self.robot.rgb_height},framerate={fps}/1 ! "
-            "videoconvert ! vp8enc deadline=1 keyframe-max-dist=30 ! rtpvp8pay pt=96 ! "
-            "application/x-rtp,media=video,encoding-name=VP8,payload=96 ! webrtc. "
+            "videoconvert ! video/x-raw,format=I420 ! "
+            "x264enc tune=zerolatency speed-preset=ultrafast bitrate=900 key-int-max=30 byte-stream=true ! "
+            "video/x-h264,profile=baseline,stream-format=byte-stream,alignment=au ! "
+            "h264parse ! rtph264pay pt=96 config-interval=1 ! "
+            "application/x-rtp,media=video,encoding-name=H264,payload=96 ! webrtc. "
             "videotestsrc is-live=true pattern=gradient ! "
             f"video/x-raw,width={self.robot.thermal_width},height={self.robot.thermal_height},framerate={fps}/1 ! "
-            "videoconvert ! vp8enc deadline=1 keyframe-max-dist=30 ! rtpvp8pay pt=97 ! "
-            "application/x-rtp,media=video,encoding-name=VP8,payload=97 ! webrtc. "
+            "videoconvert ! video/x-raw,format=I420 ! "
+            "x264enc tune=zerolatency speed-preset=ultrafast bitrate=700 key-int-max=30 byte-stream=true ! "
+            "video/x-h264,profile=baseline,stream-format=byte-stream,alignment=au ! "
+            "h264parse ! rtph264pay pt=97 config-interval=1 ! "
+            "application/x-rtp,media=video,encoding-name=H264,payload=97 ! webrtc. "
         )
         self.pipeline = Gst.parse_launch(pipeline_description)
         self.webrtc = self.pipeline.get_by_name("webrtc")
