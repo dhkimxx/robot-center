@@ -1,0 +1,51 @@
+---
+title: "G-SEC-05 접근 제어 및 이상 행위 탐지"
+created: 2026-06-04
+updated: '2026-06-04'
+author: "danya.kim <danya.kim@thundersoft.com>"
+editors: ["danya.kim <danya.kim@thundersoft.com>"]
+type: "feature"
+status: "planned"
+tags: ["feature", "g_sec", "g-sec-05", "planned"]
+history:
+- "2026-06-04 danya.kim <danya.kim@thundersoft.com>: create feature document from XLSX feature code"
+- '2026-06-04 danya.kim <danya.kim@thundersoft.com>: organize features as flat feature-code documents'
+- '2026-06-04 danya.kim <danya.kim@thundersoft.com>: classify feature document by implementation status'
+---
+
+# G-SEC-05 접근 제어 및 이상 행위 탐지
+
+## Feature Metadata
+
+| 항목 | 값 |
+| --- | --- |
+| 기능 ID | `G-SEC-05` |
+| 중분류 | G. 보안 |
+| 기능명 | 접근 제어 및 이상 행위 탐지 |
+| 우선순위 | P1 |
+| 난이도 | 중 |
+
+## 현재 기반 우선 원칙
+
+본 문서는 기능 구현 후보이며, 현재 코드와 `docs/stable/*` 문서를 대체하지 않는다.
+
+현재 구현 기준과 충돌하면 stable 문서와 실제 코드 검증 결과를 우선한다.
+
+## 관제팀 구현 범위
+
+API 접근 제어, 관리자 작업 감사, 비정상 요청/연결 패턴 모니터링
+
+## 원본 XLSX 상세 설명
+
+IP 기반 접근 제어(Allowlist), 비정상 접근 패턴 탐지(시간대/위치/빈도), API 호출 이상 탐지(Rate Anomaly), 관리자 작업 승인 워크플로우(4-eyes principle), 침입 탐지 로그 실시간 모니터링.
+
+## 구현 메모
+
+- 구현 전 stable 계약과 현재 코드 구조를 먼저 확인한다.
+- 외부 로봇팀 계약에 영향을 주는 변경은 `docs/stable/robot-interface.md`를 함께 갱신한다.
+- WebRTC, 센서, 녹화, 로봇 등록 흐름을 바꾸면 Python Mock Robot 기반 E2E 검증을 수행한다.
+
+## 관련 문서
+
+- `docs/stable/architecture.md`
+- `docs/plans/webrtc-turn-auth-plan.md`
