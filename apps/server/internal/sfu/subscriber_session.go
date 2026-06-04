@@ -11,6 +11,8 @@ import (
 	"github.com/pion/webrtc/v4"
 )
 
+const maxPendingRemoteCandidates = 64
+
 func newSubscriberSession(peerID string, role string, selectedRobotCode string, peerConnection *webrtc.PeerConnection) *subscriberSession {
 	return &subscriberSession{
 		peerID:               peerID,
@@ -55,6 +57,25 @@ func (s *subscriberSession) createLocalOffer() (*webrtc.SessionDescription, erro
 		return nil, fmt.Errorf("local offer is missing")
 	}
 	return localDescription, nil
+}
+
+func (s *subscriberSession) queueRemoteCandidate(candidate webrtc.ICECandidateInit) int {
+	if len(s.pendingRemoteCandidates) >= maxPendingRemoteCandidates {
+		copy(s.pendingRemoteCandidates, s.pendingRemoteCandidates[1:])
+		s.pendingRemoteCandidates[len(s.pendingRemoteCandidates)-1] = candidate
+		return len(s.pendingRemoteCandidates)
+	}
+	s.pendingRemoteCandidates = append(s.pendingRemoteCandidates, candidate)
+	return len(s.pendingRemoteCandidates)
+}
+
+func (s *subscriberSession) drainPendingRemoteCandidates() []webrtc.ICECandidateInit {
+	if len(s.pendingRemoteCandidates) == 0 {
+		return nil
+	}
+	candidates := append([]webrtc.ICECandidateInit(nil), s.pendingRemoteCandidates...)
+	s.pendingRemoteCandidates = nil
+	return candidates
 }
 
 func (s *subscriberSession) beginOffer(currentRoom *room, forwardRTCP func(roomID string, trackKey string, packets []rtcp.Packet), requestKeyFrames func(roomID string, trackKey string, count int, interval time.Duration)) bool {

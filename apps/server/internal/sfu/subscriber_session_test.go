@@ -1,6 +1,10 @@
 package sfu
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/pion/webrtc/v4"
+)
 
 func TestOperatorSubscriberDoesNotAutoSelectRobot(t *testing.T) {
 	session := &subscriberSession{role: "operator"}
@@ -67,5 +71,63 @@ func TestCanonicalDataChannelRoles(t *testing.T) {
 		if got := normalizeDataChannelRole(input); got != want {
 			t.Fatalf("normalizeDataChannelRole(%q) = %q, want %q", input, got, want)
 		}
+	}
+}
+
+func TestHubQueuesSubscriberCandidateBeforeRemoteDescription(t *testing.T) {
+	hub := NewHub()
+	roomID := "mission-001"
+	operatorPeer := testPeer("operator-peer", roomID, "operator", "")
+	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer peerConnection.Close()
+
+	session := newSubscriberSession(operatorPeer.id, "operator", "robot-001", peerConnection)
+	hub.mu.Lock()
+	hub.rooms[roomID] = &room{
+		id: roomID,
+		peers: map[string]*peer{
+			operatorPeer.id: operatorPeer,
+		},
+		publishers: map[string]*publisherSession{},
+		subscribers: map[string]*subscriberSession{
+			operatorPeer.id: session,
+		},
+	}
+	hub.mu.Unlock()
+
+	err = hub.handleRemoteCandidate(operatorPeer, map[string]any{
+		"candidate":     "candidate:0 1 udp 2122252543 192.0.2.1 3478 typ host",
+		"sdpMid":        "0",
+		"sdpMLineIndex": float64(0),
+	})
+	if err != nil {
+		t.Fatalf("expected early subscriber candidate to be queued, got error: %v", err)
+	}
+	if len(session.pendingRemoteCandidates) != 1 {
+		t.Fatalf("pending candidate count = %d, want 1", len(session.pendingRemoteCandidates))
+	}
+	if session.pendingRemoteCandidates[0].Candidate == "" {
+		t.Fatalf("expected candidate to be preserved")
+	}
+}
+
+func TestSubscriberSessionDrainsPendingRemoteCandidates(t *testing.T) {
+	session := &subscriberSession{}
+	for i := 0; i < maxPendingRemoteCandidates+1; i++ {
+		session.queueRemoteCandidate(webrtc.ICECandidateInit{Candidate: "candidate"})
+	}
+	if len(session.pendingRemoteCandidates) != maxPendingRemoteCandidates {
+		t.Fatalf("pending candidate count = %d, want capped %d", len(session.pendingRemoteCandidates), maxPendingRemoteCandidates)
+	}
+
+	candidates := session.drainPendingRemoteCandidates()
+	if len(candidates) != maxPendingRemoteCandidates {
+		t.Fatalf("drained candidate count = %d, want %d", len(candidates), maxPendingRemoteCandidates)
+	}
+	if len(session.pendingRemoteCandidates) != 0 {
+		t.Fatalf("pending candidate queue should be empty after drain")
 	}
 }

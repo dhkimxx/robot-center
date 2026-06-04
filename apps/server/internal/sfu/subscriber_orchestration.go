@@ -166,18 +166,33 @@ func (h *Hub) handleSubscriberAnswer(sender *peer, payload map[string]any) error
 
 	h.mu.Lock()
 	needsOffer := false
+	var pendingCandidates []webrtc.ICECandidateInit
 	if currentRoom := h.rooms[sender.roomID]; currentRoom != nil {
 		if currentSession := currentRoom.subscribers[sender.id]; currentSession != nil {
 			currentSession.pendingOffer = false
 			needsOffer = currentSession.needsOffer
 			currentSession.needsOffer = false
+			pendingCandidates = currentSession.drainPendingRemoteCandidates()
 		}
 	}
 	h.mu.Unlock()
+	h.addSubscriberPendingRemoteCandidates(sender.roomID, sender.id, session.peerConnection, pendingCandidates)
 	if needsOffer {
 		go h.ensureSubscriberOffer(sender.roomID, sender.id)
 	}
 	return nil
+}
+
+func (h *Hub) addSubscriberPendingRemoteCandidates(roomID string, peerID string, peerConnection *webrtc.PeerConnection, candidates []webrtc.ICECandidateInit) {
+	if peerConnection == nil || len(candidates) == 0 {
+		return
+	}
+	for _, candidate := range candidates {
+		if err := peerConnection.AddICECandidate(candidate); err != nil {
+			log.Printf("sfu queued subscriber candidate ignored room=%s peer=%s: %v", roomID, peerID, err)
+		}
+	}
+	log.Printf("sfu subscriber candidate queue flushed room=%s peer=%s count=%d", roomID, peerID, len(candidates))
 }
 
 func (h *Hub) handleSubscriberRobotSelection(sender *peer, payload map[string]any) error {
@@ -265,6 +280,7 @@ func closeSubscriberSession(session *subscriberSession) {
 	session.dataChannels = map[string]*webrtc.DataChannel{}
 	session.attachedTracks = map[string]struct{}{}
 	session.attachedTrackSenders = map[string]*webrtc.RTPSender{}
+	session.pendingRemoteCandidates = nil
 	session.pendingOffer = false
 	session.needsOffer = false
 }

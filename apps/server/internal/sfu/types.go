@@ -121,15 +121,16 @@ type publishedTrack struct {
 }
 
 type subscriberSession struct {
-	peerID               string
-	role                 string
-	selectedRobotCode    string
-	peerConnection       *webrtc.PeerConnection
-	dataChannels         map[string]*webrtc.DataChannel
-	attachedTracks       map[string]struct{}
-	attachedTrackSenders map[string]*webrtc.RTPSender
-	pendingOffer         bool
-	needsOffer           bool
+	peerID                  string
+	role                    string
+	selectedRobotCode       string
+	peerConnection          *webrtc.PeerConnection
+	dataChannels            map[string]*webrtc.DataChannel
+	attachedTracks          map[string]struct{}
+	attachedTrackSenders    map[string]*webrtc.RTPSender
+	pendingRemoteCandidates []webrtc.ICECandidateInit
+	pendingOffer            bool
+	needsOffer              bool
 }
 
 type signalMessage struct {
