@@ -124,7 +124,7 @@ func assertStringListEqual(t *testing.T, actual []string, expected []string) {
 	}
 }
 
-func fileHasAvailableURL(files []dto.RecordingFileResponse, fileType string) bool {
+func fileHasAvailableURL(files []dto.OperatorRecordingFileResponse, fileType string) bool {
 	for _, file := range files {
 		if file.Type == fileType && file.Status == "available" {
 			return strings.Contains(file.URL, "http://center.local:9000/robot-center-poc/")

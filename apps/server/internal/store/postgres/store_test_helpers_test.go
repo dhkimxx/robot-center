@@ -30,8 +30,8 @@ func newPostgresTestStore(t *testing.T) *Store {
 		postgresDSN = postgrestest.Start(t).DSN
 	}
 	store, err := NewStore(context.Background(), Config{
-		DSN:       postgresDSN,
-		ServerURL: "http://test-server",
+		DSN:                postgresDSN,
+		AppServerPublicURL: "http://test-server",
 	})
 	if err != nil {
 		t.Fatalf("open postgres store: %v", err)

@@ -20,7 +20,7 @@ func (s *Server) handleRecordingTargets(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, dto.RecordingTargetsPayload(targets))
+	writeJSON(w, http.StatusOK, dto.RecorderRecordingTargetsPayload(targets))
 }
 
 func (s *Server) handleListRecordings(w http.ResponseWriter, r *http.Request) {
@@ -29,26 +29,38 @@ func (s *Server) handleListRecordings(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	response := make([]dto.RecordingChunkResponse, 0, len(recordings))
+	response := make([]dto.OperatorRecordingChunkResponse, 0, len(recordings))
 	for _, recording := range recordings {
-		response = append(response, s.createRecordingResponse(recording))
+		response = append(response, s.createOperatorRecordingResponse(recording))
 	}
-	writeJSON(w, http.StatusOK, dto.RecordingsPayload(response))
+	writeJSON(w, http.StatusOK, dto.OperatorRecordingsPayload(response))
 }
 
-func (s *Server) createRecordingResponse(recording domain.RecordingChunk) dto.RecordingChunkResponse {
-	response := dto.RecordingChunk(recording)
-	response.Files = []dto.RecordingFileResponse{
-		s.createRecordingFileResponse(recording, "rgb_audio_mp4", "RGB MP4", "video/mp4", recording.MediaObjectKeys["rgbMp4"], recording.AvailableFileTypes["rgb_audio_mp4"]),
-		s.createRecordingFileResponse(recording, "thermal_mp4", "Thermal MP4", "video/mp4", recording.MediaObjectKeys["thermal"], recording.AvailableFileTypes["thermal_mp4"]),
-		s.createRecordingFileResponse(recording, "sensor_jsonl", "Sensor JSONL", "application/x-ndjson", recording.MediaObjectKeys["sensor"], recording.AvailableFileTypes["sensor_jsonl"]),
-		s.createRecordingFileResponse(recording, "telemetry_jsonl", "Telemetry/GPS JSONL", "application/x-ndjson", recording.MediaObjectKeys["telemetry"], recording.AvailableFileTypes["telemetry_jsonl"]),
-		s.createRecordingFileResponse(recording, "manifest", "저장 메타데이터", "application/json", recording.ManifestObjectKey, recording.AvailableFileTypes["manifest"] || recording.Status == "uploaded"),
+func (s *Server) createOperatorRecordingResponse(recording domain.RecordingChunk) dto.OperatorRecordingChunkResponse {
+	response := dto.OperatorRecordingChunk(recording)
+	response.Status = normalizeRecordingResponseStatus(recording)
+	response.Files = []dto.OperatorRecordingFileResponse{
+		s.createOperatorRecordingFileResponse(recording, "rgb_audio_mp4", "RGB MP4", "video/mp4", recording.MediaObjectKeys["rgbMp4"], recording.AvailableFileTypes["rgb_audio_mp4"]),
+		s.createOperatorRecordingFileResponse(recording, "thermal_mp4", "Thermal MP4", "video/mp4", recording.MediaObjectKeys["thermal"], recording.AvailableFileTypes["thermal_mp4"]),
+		s.createOperatorRecordingFileResponse(recording, "sensor_jsonl", "Sensor JSONL", "application/x-ndjson", recording.MediaObjectKeys["sensor"], recording.AvailableFileTypes["sensor_jsonl"]),
+		s.createOperatorRecordingFileResponse(recording, "telemetry_jsonl", "Telemetry/GPS JSONL", "application/x-ndjson", recording.MediaObjectKeys["telemetry"], recording.AvailableFileTypes["telemetry_jsonl"]),
+		s.createOperatorRecordingFileResponse(recording, "manifest", "저장 메타데이터", "application/json", recording.ManifestObjectKey, recording.AvailableFileTypes["manifest"] || recording.Status == "uploaded"),
 	}
 	return response
 }
 
-func (s *Server) createRecordingFileResponse(recording domain.RecordingChunk, fileType string, label string, contentType string, objectKey string, available bool) dto.RecordingFileResponse {
+func normalizeRecordingResponseStatus(recording domain.RecordingChunk) string {
+	if recording.Status == "uploaded" && !hasAvailableRecordingVideo(recording) {
+		return "partial"
+	}
+	return recording.Status
+}
+
+func hasAvailableRecordingVideo(recording domain.RecordingChunk) bool {
+	return recording.AvailableFileTypes["rgb_audio_mp4"] || recording.AvailableFileTypes["thermal_mp4"]
+}
+
+func (s *Server) createOperatorRecordingFileResponse(recording domain.RecordingChunk, fileType string, label string, contentType string, objectKey string, available bool) dto.OperatorRecordingFileResponse {
 	status := "planned"
 	fileURL := ""
 	if available {
@@ -63,7 +75,7 @@ func (s *Server) createRecordingFileResponse(recording domain.RecordingChunk, fi
 	} else if recording.Status == "failed" {
 		status = "failed"
 	}
-	return dto.RecordingFileResponse{
+	return dto.OperatorRecordingFileResponse{
 		Type:        fileType,
 		Label:       label,
 		Status:      status,
@@ -79,8 +91,19 @@ func (s *Server) createStorageObjectURL(objectKey string) string {
 		return ""
 	}
 
-	publicURL, publicErr := url.Parse(s.config.PublicURL)
-	minioURL, minioErr := url.Parse(s.config.MinIOEndpoint)
+	publicMinIOURL := strings.TrimSpace(s.config.MinIOPublicURL)
+	if publicMinIOURL != "" {
+		fileURL := createObjectStorageURL(publicMinIOURL, s.config.MinIOBucket, objectKey)
+		if fileURL != "" {
+			return fileURL
+		}
+	}
+	return createObjectStorageURL(s.createLegacyStoragePublicBaseURL(), s.config.MinIOBucket, objectKey)
+}
+
+func (s *Server) createLegacyStoragePublicBaseURL() string {
+	publicURL, publicErr := url.Parse(s.config.AppServerPublicURL)
+	minioURL, minioErr := url.Parse(s.config.MinIOInternalURL)
 
 	scheme := "http"
 	if publicErr == nil && publicURL.Scheme != "" {
@@ -104,20 +127,31 @@ func (s *Server) createStorageObjectURL(objectKey string) string {
 	if minioErr == nil && minioURL.Port() != "" {
 		port = minioURL.Port()
 	}
-	bucket := strings.TrimSpace(s.config.MinIOBucket)
+	return fmt.Sprintf("%s://%s", scheme, net.JoinHostPort(host, port))
+}
+
+func createObjectStorageURL(baseURL string, bucket string, objectKey string) string {
+	parsedURL, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil || parsedURL.Scheme == "" || parsedURL.Host == "" {
+		return ""
+	}
+	bucket = strings.TrimSpace(bucket)
 	if bucket == "" {
 		bucket = "robot-center"
 	}
-	encodedPath := encodeObjectPath(bucket + "/" + objectKey)
-	return fmt.Sprintf("%s://%s/%s", scheme, net.JoinHostPort(host, port), encodedPath)
-}
-
-func encodeObjectPath(path string) string {
-	segments := strings.Split(path, "/")
-	for index, segment := range segments {
-		segments[index] = url.PathEscape(segment)
+	pathSegments := []string{}
+	if basePath := strings.Trim(parsedURL.Path, "/"); basePath != "" {
+		pathSegments = append(pathSegments, strings.Split(basePath, "/")...)
 	}
-	return strings.Join(segments, "/")
+	pathSegments = append(pathSegments, bucket)
+	if trimmedObjectKey := strings.Trim(objectKey, "/"); trimmedObjectKey != "" {
+		pathSegments = append(pathSegments, strings.Split(trimmedObjectKey, "/")...)
+	}
+	parsedURL.Path = "/" + strings.Join(pathSegments, "/")
+	parsedURL.RawPath = ""
+	parsedURL.RawQuery = ""
+	parsedURL.Fragment = ""
+	return parsedURL.String()
 }
 
 func (s *Server) handleRecorderTick(w http.ResponseWriter, r *http.Request) {
@@ -138,7 +172,7 @@ func (s *Server) handleRecorderTick(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, dto.RecordingTick(result))
+	writeJSON(w, http.StatusOK, dto.RecorderRecordingTick(result))
 }
 
 func (s *Server) handleRecorderFinalizationJobsClaim(w http.ResponseWriter, r *http.Request) {
@@ -210,7 +244,7 @@ func (s *Server) handleRecorderChunkUploaded(w http.ResponseWriter, r *http.Requ
 		writeStoreError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, dto.RecordingChunkPayload(s.createRecordingResponse(chunk)))
+	writeJSON(w, http.StatusOK, dto.RecorderRecordingChunkPayload(dto.RecorderRecordingChunk(chunk)))
 }
 
 func (s *Server) handleRecorderFileUploaded(w http.ResponseWriter, r *http.Request) {
@@ -224,7 +258,7 @@ func (s *Server) handleRecorderFileUploaded(w http.ResponseWriter, r *http.Reque
 		writeStoreError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, dto.RecordingChunkPayload(s.createRecordingResponse(chunk)))
+	writeJSON(w, http.StatusOK, dto.RecorderRecordingChunkPayload(dto.RecorderRecordingChunk(chunk)))
 }
 
 func decodeRecorderUploadMetadata(r *http.Request) (store.RecordingUploadMetadata, error) {

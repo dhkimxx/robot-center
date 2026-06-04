@@ -120,7 +120,7 @@ func (w *Worker) runSubscriberLoop(ctx context.Context) {
 	ticker := time.NewTicker(w.config.PollInterval)
 	defer ticker.Stop()
 
-	log.Printf("recorder-worker subscriber watching app-server=%s signaling=%s", w.config.AppServerURL, w.config.SFURecorderWebSocketURL())
+	log.Printf("recorder-worker subscriber watching app-server=%s signaling=%s", w.config.AppServerInternalURL, w.config.SFURecorderWebSocketURL())
 	w.syncSubscriberTargets(ctx)
 	for {
 		select {

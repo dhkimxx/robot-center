@@ -10,7 +10,7 @@ import (
 
 func TestRecordingEnvelopeShape(t *testing.T) {
 	now := time.Date(2026, 6, 2, 8, 0, 0, 0, time.UTC)
-	chunk := RecordingChunkResponse{
+	operatorChunk := OperatorRecordingChunkResponse{
 		ID:          "chunk-001",
 		MissionCode: "mission-001",
 		RobotCode:   "robot-001",
@@ -20,12 +20,36 @@ func TestRecordingEnvelopeShape(t *testing.T) {
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
+	recorderChunk := RecorderRecordingChunkResponse{
+		ID:          operatorChunk.ID,
+		MissionCode: operatorChunk.MissionCode,
+		RobotCode:   operatorChunk.RobotCode,
+		Status:      operatorChunk.Status,
+		StartedAt:   operatorChunk.StartedAt,
+		EndedAt:     operatorChunk.EndedAt,
+		CreatedAt:   operatorChunk.CreatedAt,
+		UpdatedAt:   operatorChunk.UpdatedAt,
+	}
 
-	assertRecordingJSONHasField(t, RecordingTargetsPayload([]domain.Mission{{MissionCode: "mission-001"}}), "targets")
-	assertRecordingJSONHasField(t, RecordingsPayload([]RecordingChunkResponse{chunk}), "recordings")
-	assertRecordingJSONHasField(t, RecordingChunkPayload(chunk), "chunk")
+	assertRecordingJSONHasField(t, RecorderRecordingTargetsPayload([]domain.Mission{{MissionCode: "mission-001"}}), "targets")
+	assertRecordingJSONHasField(t, OperatorRecordingsPayload([]OperatorRecordingChunkResponse{operatorChunk}), "recordings")
+	assertRecordingJSONHasField(t, RecorderRecordingChunkPayload(recorderChunk), "chunk")
 	assertRecordingJSONHasField(t, RecorderFinalizationJobsPayload([]domain.RecordingFinalizationJob{{ID: "job-001", Chunk: domain.RecordingChunk{ID: "chunk-001"}}}), "jobs")
 	assertRecordingJSONHasField(t, OKPayload(), "ok")
+}
+
+func TestRecorderRecordingChunkResponseOmitsOperatorFiles(t *testing.T) {
+	payload, err := json.Marshal(RecorderRecordingChunk(domain.RecordingChunk{ID: "chunk-001"}))
+	if err != nil {
+		t.Fatalf("marshal recorder chunk: %v", err)
+	}
+	fields := map[string]any{}
+	if err := json.Unmarshal(payload, &fields); err != nil {
+		t.Fatalf("unmarshal recorder chunk: %v", err)
+	}
+	if _, ok := fields["files"]; ok {
+		t.Fatalf("recorder chunk response must not expose operator playback files, got %s", string(payload))
+	}
 }
 
 func TestRecorderFinalizationJobPayloadShape(t *testing.T) {

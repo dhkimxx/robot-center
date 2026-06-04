@@ -102,6 +102,14 @@ func openAPIStringMapProperty(description string) map[string]any {
 	}
 }
 
+func openAPIStringArrayProperty(description string) map[string]any {
+	return map[string]any{
+		"type":        "array",
+		"description": description,
+		"items":       map[string]any{"type": "string"},
+	}
+}
+
 func openAPIBoolMapProperty(description string) map[string]any {
 	return map[string]any{
 		"type":        "object",

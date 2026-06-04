@@ -21,7 +21,7 @@ func NewServerWithStore(cfg config.AppServerConfig, repository store.Store) *Ser
 	services := service.NewServices(repository)
 	services.Storage = service.NewObjectStorageAdminService(service.ObjectStorageAdminConfig{
 		Environment: cfg.Environment,
-		Endpoint:    cfg.MinIOEndpoint,
+		Endpoint:    cfg.MinIOInternalURL,
 		Bucket:      cfg.MinIOBucket,
 		AccessKey:   cfg.MinIOAccessKey,
 		SecretKey:   cfg.MinIOSecretKey,
@@ -46,9 +46,9 @@ func NewServerWithStore(cfg config.AppServerConfig, repository store.Store) *Ser
 
 func NewServerFromConfig(ctx context.Context, cfg config.AppServerConfig) (*Server, error) {
 	repository, err := store.NewPostgresStore(ctx, store.PostgresConfig{
-		DSN:         cfg.PostgresDSN,
-		ServerURL:   cfg.PublicURL,
-		MinIOBucket: cfg.MinIOBucket,
+		DSN:                cfg.PostgresDSN,
+		AppServerPublicURL: cfg.AppServerPublicURL,
+		MinIOBucket:        cfg.MinIOBucket,
 	})
 	if err != nil {
 		return nil, err

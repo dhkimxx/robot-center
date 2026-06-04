@@ -55,7 +55,7 @@ func (c *HTTPAppServerClient) FetchRecordingTargets(ctx context.Context) ([]doma
 		return nil, fmt.Errorf("app-server returned %s", response.Status)
 	}
 
-	var payload dto.RecordingTargetsResponse
+	var payload dto.RecorderRecordingTargetsResponse
 	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
 		return nil, err
 	}
@@ -89,7 +89,7 @@ func (c *HTTPAppServerClient) CreateRecordingTick(ctx context.Context, target do
 		return domain.RecordingTickResult{}, fmt.Errorf("app-server returned %s", response.Status)
 	}
 
-	var result dto.RecordingTickResponse
+	var result dto.RecorderRecordingTickResponse
 	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
 		return domain.RecordingTickResult{}, err
 	}

@@ -40,17 +40,17 @@ type Worker struct {
 func NewWorker(cfg config.RecorderWorkerConfig) *Worker {
 	return newWorkerWithCollaborators(
 		cfg,
-		NewHTTPAppServerClient(cfg.AppServerURL, nil),
-		NewMinIOObjectStorage(cfg.MinIOEndpoint, cfg.MinIOAccessKey, cfg.MinIOSecretKey, cfg.MinIOBucket),
+		NewHTTPAppServerClient(cfg.AppServerInternalURL, nil),
+		NewMinIOObjectStorage(cfg.MinIOInternalURL, cfg.MinIOAccessKey, cfg.MinIOSecretKey, cfg.MinIOBucket),
 	)
 }
 
 func newWorkerWithCollaborators(cfg config.RecorderWorkerConfig, appServerClient AppServerClient, objectStorage ObjectStorage) *Worker {
 	if appServerClient == nil {
-		appServerClient = NewHTTPAppServerClient(cfg.AppServerURL, nil)
+		appServerClient = NewHTTPAppServerClient(cfg.AppServerInternalURL, nil)
 	}
 	if objectStorage == nil {
-		objectStorage = NewMinIOObjectStorage(cfg.MinIOEndpoint, cfg.MinIOAccessKey, cfg.MinIOSecretKey, cfg.MinIOBucket)
+		objectStorage = NewMinIOObjectStorage(cfg.MinIOInternalURL, cfg.MinIOAccessKey, cfg.MinIOSecretKey, cfg.MinIOBucket)
 	}
 	hostname, _ := os.Hostname()
 	if strings.TrimSpace(hostname) == "" {
@@ -80,7 +80,7 @@ func (w *Worker) Run(ctx context.Context) {
 	ticker := time.NewTicker(w.config.PollInterval)
 	defer ticker.Stop()
 
-	log.Printf("recorder-worker polling app-server=%s interval=%s chunk=%s", w.config.AppServerURL, w.config.PollInterval, w.config.RecordingChunkDuration)
+	log.Printf("recorder-worker polling app-server=%s interval=%s chunk=%s", w.config.AppServerInternalURL, w.config.PollInterval, w.config.RecordingChunkDuration)
 	w.startRecorderDataQueueWorkers(ctx)
 	go w.runSubscriberLoop(ctx)
 	w.tick(ctx)

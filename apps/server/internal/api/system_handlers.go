@@ -31,16 +31,18 @@ func (s *Server) handleSystemStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	sfuRooms := s.sfuHub.Summaries()
 	writeJSON(w, http.StatusOK, dto.SystemStatus(dto.SystemStatusInput{
-		Environment:          s.config.Environment,
-		PublicURL:            s.config.PublicURL,
-		MinIOEndpoint:        s.config.MinIOEndpoint,
-		MinIOBucket:          s.config.MinIOBucket,
-		RecorderWorkerStatus: s.componentHTTPStatus(requestContext, s.config.RecorderWorkerURL+"/healthz"),
-		ObjectStorage:        s.readObjectStorageStatus(requestContext),
-		RobotCount:           len(robots),
-		MissionCount:         len(missions),
-		RecordingCount:       len(recordings),
-		SFURooms:             sfuRooms,
+		Environment:               s.config.Environment,
+		AppServerPublicURL:        s.config.AppServerPublicURL,
+		RecorderWorkerInternalURL: s.config.RecorderWorkerInternalURL,
+		MinIOInternalURL:          s.config.MinIOInternalURL,
+		MinIOPublicURL:            s.config.MinIOPublicURL,
+		MinIOBucket:               s.config.MinIOBucket,
+		RecorderWorkerStatus:      s.componentHTTPStatus(requestContext, s.config.RecorderWorkerInternalURL+"/healthz"),
+		ObjectStorage:             s.readObjectStorageStatus(requestContext),
+		RobotCount:                len(robots),
+		MissionCount:              len(missions),
+		RecordingCount:            len(recordings),
+		SFURooms:                  sfuRooms,
 	}))
 }
 

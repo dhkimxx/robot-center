@@ -50,7 +50,7 @@ func (s *Server) openAPISpec() map[string]any {
 		},
 		"servers": []map[string]any{
 			{
-				"url":         openAPIServerURL(s.config.PublicURL),
+				"url":         openAPIServerURL(s.config.AppServerPublicURL),
 				"description": "관제 API 서버",
 			},
 		},

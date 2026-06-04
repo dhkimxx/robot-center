@@ -17,16 +17,18 @@ type SystemStatusResponse struct {
 }
 
 type SystemStatusInput struct {
-	Environment          string
-	PublicURL            string
-	MinIOEndpoint        string
-	MinIOBucket          string
-	RecorderWorkerStatus string
-	ObjectStorage        ObjectStorageStatusResponse
-	RobotCount           int
-	MissionCount         int
-	RecordingCount       int
-	SFURooms             []sfu.RoomSummary
+	Environment               string
+	AppServerPublicURL        string
+	RecorderWorkerInternalURL string
+	MinIOInternalURL          string
+	MinIOPublicURL            string
+	MinIOBucket               string
+	RecorderWorkerStatus      string
+	ObjectStorage             ObjectStorageStatusResponse
+	RobotCount                int
+	MissionCount              int
+	RecordingCount            int
+	SFURooms                  []sfu.RoomSummary
 }
 
 type SystemComponentStatus struct {
@@ -35,10 +37,12 @@ type SystemComponentStatus struct {
 }
 
 type SystemConfigResponse struct {
-	Environment   string `json:"environment"`
-	PublicURL     string `json:"publicUrl"`
-	MinIOEndpoint string `json:"minioEndpoint"`
-	MinIOBucket   string `json:"minioBucket"`
+	Environment               string `json:"environment"`
+	AppServerPublicURL        string `json:"appServerPublicUrl"`
+	RecorderWorkerInternalURL string `json:"recorderWorkerInternalUrl"`
+	MinIOInternalURL          string `json:"minioInternalUrl"`
+	MinIOPublicURL            string `json:"minioPublicUrl,omitempty"`
+	MinIOBucket               string `json:"minioBucket"`
 }
 
 type SystemSummaryResponse struct {
@@ -92,10 +96,12 @@ func SystemStatus(input SystemStatusInput) SystemStatusResponse {
 			{Name: "minio", Status: "configured"},
 		},
 		Config: SystemConfigResponse{
-			Environment:   input.Environment,
-			PublicURL:     input.PublicURL,
-			MinIOEndpoint: input.MinIOEndpoint,
-			MinIOBucket:   input.MinIOBucket,
+			Environment:               input.Environment,
+			AppServerPublicURL:        input.AppServerPublicURL,
+			RecorderWorkerInternalURL: input.RecorderWorkerInternalURL,
+			MinIOInternalURL:          input.MinIOInternalURL,
+			MinIOPublicURL:            input.MinIOPublicURL,
+			MinIOBucket:               input.MinIOBucket,
 		},
 		ObjectStorage: input.ObjectStorage,
 		Summary: SystemSummaryResponse{

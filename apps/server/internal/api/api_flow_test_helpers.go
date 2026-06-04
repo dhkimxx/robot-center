@@ -36,14 +36,14 @@ func newAPIFlowTestServer(t *testing.T) apiFlowTestServer {
 
 	appServer, err := NewServerFromConfig(context.Background(), config.AppServerConfig{
 		PostgresDSN:               postgresContainer.DSN,
-		PublicURL:                 "http://center.local",
-		RecorderWorkerURL:         recorderHealth.URL,
+		AppServerPublicURL:        "http://center.local",
+		RecorderWorkerInternalURL: recorderHealth.URL,
 		SFUWebSocketPublicBaseURL: "ws://center.local",
 		TURNPublicURL:             "turn:127.0.0.1:3478?transport=udp",
 		TURNInternalURL:           "turn:127.0.0.1:3478?transport=udp",
 		TURNUsername:              "robot",
 		TURNPassword:              "robot-pass",
-		MinIOEndpoint:             "http://127.0.0.1:9000",
+		MinIOInternalURL:          "http://127.0.0.1:9000",
 		MinIOBucket:               "robot-center-poc",
 	})
 	if err != nil {

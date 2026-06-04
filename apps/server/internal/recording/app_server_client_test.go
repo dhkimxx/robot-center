@@ -63,13 +63,13 @@ func TestHTTPAppServerClientUsesRecorderDTOs(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method + " " + r.URL.Path {
 		case "GET /api/v1/recorder/recording-targets":
-			writeClientTestJSON(t, w, dto.RecordingTargetsPayload([]domain.Mission{mission}))
+			writeClientTestJSON(t, w, dto.RecorderRecordingTargetsPayload([]domain.Mission{mission}))
 		case "POST /api/v1/recorder/tick":
 			request := decodeClientTestJSON[dto.RecorderTickRequest](t, r)
 			if request.MissionCode != mission.MissionCode || request.RobotCode != mission.RobotCode || request.ChunkDurationSeconds != 60 {
 				t.Fatalf("unexpected tick request: %#v", request)
 			}
-			writeClientTestJSON(t, w, dto.RecordingTick(domain.RecordingTickResult{
+			writeClientTestJSON(t, w, dto.RecorderRecordingTick(domain.RecordingTickResult{
 				Chunk:    chunk,
 				Manifest: map[string]any{"chunkId": chunk.ID},
 			}))

@@ -58,7 +58,7 @@ func (s *Store) CreateRobot(ctx context.Context, input repo.CreateRobotInput) (d
 	}
 
 	return robot, domain.RobotConnectionInfo{
-		ServerURL:  s.serverURL,
+		ServerURL:  s.appServerPublicURL,
 		RobotCode:  robot.RobotCode,
 		RobotToken: token,
 	}, nil
@@ -176,7 +176,7 @@ func (s *Store) GetRobotConnectionInfo(ctx context.Context, robotCode string) (d
 		return domain.RobotConnectionInfo{}, errors.New("robot token plaintext is unavailable")
 	}
 	return domain.RobotConnectionInfo{
-		ServerURL:  s.serverURL,
+		ServerURL:  s.appServerPublicURL,
 		RobotCode:  strings.TrimSpace(robotCode),
 		RobotToken: token,
 	}, nil
@@ -208,7 +208,7 @@ func (s *Store) RotateRobotConnectionToken(ctx context.Context, robotCode string
 		return domain.RobotConnectionInfo{}, err
 	}
 	return domain.RobotConnectionInfo{
-		ServerURL:  s.serverURL,
+		ServerURL:  s.appServerPublicURL,
 		RobotCode:  strings.TrimSpace(robotCode),
 		RobotToken: token,
 	}, nil

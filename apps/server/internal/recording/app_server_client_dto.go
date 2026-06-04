@@ -6,7 +6,7 @@ import (
 	"robot-center/apps/server/internal/utils"
 )
 
-func missionsFromResponses(responses []dto.MissionResponse) []domain.Mission {
+func missionsFromResponses(responses []dto.RecorderRecordingTargetResponse) []domain.Mission {
 	missions := make([]domain.Mission, 0, len(responses))
 	for _, response := range responses {
 		missions = append(missions, missionFromResponse(response))
@@ -14,7 +14,7 @@ func missionsFromResponses(responses []dto.MissionResponse) []domain.Mission {
 	return missions
 }
 
-func missionFromResponse(response dto.MissionResponse) domain.Mission {
+func missionFromResponse(response dto.RecorderRecordingTargetResponse) domain.Mission {
 	return domain.Mission{
 		ID:          response.ID,
 		MissionCode: response.MissionCode,
@@ -31,14 +31,14 @@ func missionFromResponse(response dto.MissionResponse) domain.Mission {
 	}
 }
 
-func recordingTickResultFromResponse(response dto.RecordingTickResponse) domain.RecordingTickResult {
+func recordingTickResultFromResponse(response dto.RecorderRecordingTickResponse) domain.RecordingTickResult {
 	return domain.RecordingTickResult{
 		Chunk:    recordingChunkFromResponse(response.Chunk),
 		Manifest: response.Manifest,
 	}
 }
 
-func recordingChunkFromResponse(response dto.RecordingChunkResponse) domain.RecordingChunk {
+func recordingChunkFromResponse(response dto.RecorderRecordingChunkResponse) domain.RecordingChunk {
 	return domain.RecordingChunk{
 		ID:                 response.ID,
 		RecordingSessionID: response.RecordingSessionID,
@@ -58,7 +58,7 @@ func recordingChunkFromResponse(response dto.RecordingChunkResponse) domain.Reco
 	}
 }
 
-func recordingFinalizationJobsFromResponses(responses []dto.RecordingFinalizationJobResponse) []domain.RecordingFinalizationJob {
+func recordingFinalizationJobsFromResponses(responses []dto.RecorderFinalizationJobResponse) []domain.RecordingFinalizationJob {
 	jobs := make([]domain.RecordingFinalizationJob, 0, len(responses))
 	for _, response := range responses {
 		jobs = append(jobs, recordingFinalizationJobFromResponse(response))
@@ -66,7 +66,7 @@ func recordingFinalizationJobsFromResponses(responses []dto.RecordingFinalizatio
 	return jobs
 }
 
-func recordingFinalizationJobFromResponse(response dto.RecordingFinalizationJobResponse) domain.RecordingFinalizationJob {
+func recordingFinalizationJobFromResponse(response dto.RecorderFinalizationJobResponse) domain.RecordingFinalizationJob {
 	return domain.RecordingFinalizationJob{
 		ID:                 response.ID,
 		RecordingChunkID:   response.RecordingChunkID,

@@ -23,7 +23,7 @@ func TestControlPlaneFlowSmoke(t *testing.T) {
 		t.Fatalf("expected active robot mission, got %#v", robotMission)
 	}
 
-	recordingTick := requestJSON[dto.RecordingTickResponse](t, server.baseURL, http.MethodPost, "/api/v1/recorder/tick", "", dto.RecorderTickRequest{
+	recordingTick := requestJSON[dto.RecorderRecordingTickResponse](t, server.baseURL, http.MethodPost, "/api/v1/recorder/tick", "", dto.RecorderTickRequest{
 		MissionCode:          mission.code,
 		RobotCode:            robot.code,
 		ChunkDurationSeconds: 600,

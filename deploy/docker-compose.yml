@@ -71,13 +71,14 @@ services:
       APP_SERVER_HTTP_ADDR: ":8080"
       APP_SERVER_PUBLIC_URL: ${APP_SERVER_PUBLIC_URL:-http://localhost:8080}
       WEB_STATIC_DIR: /app/web
-      RECORDER_WORKER_URL: http://recorder-worker:8082
+      RECORDER_WORKER_INTERNAL_URL: ${RECORDER_WORKER_INTERNAL_URL:-http://recorder-worker:8082}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_DB: ${POSTGRES_DB:-robot_center}
       POSTGRES_USER: ${POSTGRES_USER:-robot_center}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-robot_center}
-      MINIO_ENDPOINT: http://minio:9000
+      MINIO_INTERNAL_URL: ${MINIO_INTERNAL_URL:-http://minio:9000}
+      MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL:-}
       MINIO_BUCKET: ${MINIO_BUCKET:-robot-center}
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
@@ -110,13 +111,13 @@ services:
       RECORDER_WORKER_HTTP_ADDR: ":8082"
       RECORDER_WORKER_POLL_INTERVAL: ${RECORDER_WORKER_POLL_INTERVAL:-5s}
       RECORDING_CHUNK_DURATION: ${RECORDING_CHUNK_DURATION:-10m}
-      APP_SERVER_PUBLIC_URL: http://app-server:8080
+      APP_SERVER_INTERNAL_URL: ${APP_SERVER_INTERNAL_URL:-http://app-server:8080}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_DB: ${POSTGRES_DB:-robot_center}
       POSTGRES_USER: ${POSTGRES_USER:-robot_center}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-robot_center}
-      MINIO_ENDPOINT: http://minio:9000
+      MINIO_INTERNAL_URL: ${MINIO_INTERNAL_URL:-http://minio:9000}
       MINIO_BUCKET: ${MINIO_BUCKET:-robot-center}
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}

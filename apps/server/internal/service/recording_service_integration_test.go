@@ -121,8 +121,8 @@ func newRecordingServiceIntegrationFixture(t *testing.T) (*Services, string) {
 	t.Helper()
 	postgresContainer := postgrestest.Start(t)
 	repository, err := store.NewPostgresStore(context.Background(), store.PostgresConfig{
-		DSN:       postgresContainer.DSN,
-		ServerURL: "http://test-server",
+		DSN:                postgresContainer.DSN,
+		AppServerPublicURL: "http://test-server",
 	})
 	if err != nil {
 		t.Fatalf("open postgres store: %v", err)

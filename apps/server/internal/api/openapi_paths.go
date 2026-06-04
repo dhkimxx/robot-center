@@ -32,7 +32,7 @@ func openAPIRTCConfigPath() map[string]any {
 
 func openAPIRecordingTargetsPath() map[string]any {
 	return map[string]any{
-		"get": openAPIOperation("Recorder API", "listRecordingTargets", "녹화 대상 임무 조회", "recorder-worker가 구독해야 하는 active mission 목록을 반환합니다.", "RecordingTargetsResponse", ""),
+		"get": openAPIOperation("Recorder API", "listRecordingTargets", "녹화 대상 임무 조회", "recorder-worker가 구독해야 하는 active mission 목록을 반환합니다.", "RecorderRecordingTargetsResponse", ""),
 	}
 }
 
@@ -62,13 +62,13 @@ func openAPISensorLatestPath() map[string]any {
 
 func openAPIRecordingsPath() map[string]any {
 	return map[string]any{
-		"get": openAPIOperation("Operator API", "listRecordings", "녹화 chunk 조회", "저장된 recording chunk와 파일 상태 목록을 반환합니다.", "RecordingsResponse", ""),
+		"get": openAPIOperation("Operator API", "listRecordings", "녹화 chunk 조회", "저장된 recording chunk와 파일 상태 목록을 반환합니다.", "OperatorRecordingsResponse", ""),
 	}
 }
 
 func openAPIRecorderTickPath() map[string]any {
 	return map[string]any{
-		"post": openAPIOperation("Recorder API", "applyRecorderTick", "녹화 tick 반영", "recorder-worker가 mission/robot 기준 chunk 생성을 요청합니다.", "RecordingTickResponse", "RecorderTickRequest"),
+		"post": openAPIOperation("Recorder API", "applyRecorderTick", "녹화 tick 반영", "recorder-worker가 mission/robot 기준 chunk 생성을 요청합니다.", "RecorderRecordingTickResponse", "RecorderTickRequest"),
 	}
 }
 
@@ -86,13 +86,13 @@ func openAPIRecorderFinalizationJobStatusPath(operationID string, summary string
 
 func openAPIRecorderChunkUploadedPath() map[string]any {
 	return map[string]any{
-		"post": openAPIOperationWithParameters("Recorder API", "markRecorderChunkUploaded", "녹화 chunk 업로드 완료", "recorder-worker가 chunk manifest 업로드 완료를 보고합니다.", "RecordingChunkEnvelope", "RecorderUploadRequest", []map[string]any{openAPIPathParameter("chunkID", "recording chunk ID")}),
+		"post": openAPIOperationWithParameters("Recorder API", "markRecorderChunkUploaded", "녹화 chunk 업로드 완료", "recorder-worker가 chunk manifest 업로드 완료를 보고합니다.", "RecorderRecordingChunkEnvelope", "RecorderUploadRequest", []map[string]any{openAPIPathParameter("chunkID", "recording chunk ID")}),
 	}
 }
 
 func openAPIRecorderFileUploadedPath() map[string]any {
 	return map[string]any{
-		"post": openAPIOperationWithParameters("Recorder API", "markRecorderFileUploaded", "녹화 파일 업로드 완료", "recorder-worker가 chunk의 개별 파일 업로드 완료를 보고합니다.", "RecordingChunkEnvelope", "RecorderUploadRequest", []map[string]any{openAPIPathParameter("chunkID", "recording chunk ID"), openAPIPathParameter("fileType", "업로드된 파일 타입")}),
+		"post": openAPIOperationWithParameters("Recorder API", "markRecorderFileUploaded", "녹화 파일 업로드 완료", "recorder-worker가 chunk의 개별 파일 업로드 완료를 보고합니다.", "RecorderRecordingChunkEnvelope", "RecorderUploadRequest", []map[string]any{openAPIPathParameter("chunkID", "recording chunk ID"), openAPIPathParameter("fileType", "업로드된 파일 타입")}),
 	}
 }
 

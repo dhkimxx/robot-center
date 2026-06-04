@@ -23,23 +23,25 @@ func openAPISchemas() map[string]any {
 		"ClearSensorDataRequest": openAPIObjectSchema("Sensor 데이터 초기화 요청입니다.", map[string]any{
 			"confirmation": openAPIStringProperty("초기화 확인 문자열입니다.", "CLEAR_SENSOR_DATA"),
 		}),
-		"RTCConfigResponse":         openAPIRTCConfigResponseSchema(),
-		"RecordingTargetsResponse":  openAPIArrayEnvelopeSchema("targets", "#/components/schemas/Mission", "녹화 대상 임무 목록입니다."),
-		"SensorDescriptorsResponse": openAPIArrayEnvelopeSchema("sensorDescriptors", "#/components/schemas/SensorDescriptor", "센서 descriptor 목록입니다."),
-		"SensorSamplesResponse":     openAPIArrayEnvelopeSchema("sensorSamples", "#/components/schemas/SensorSample", "센서 sample 목록입니다."),
-		"SensorLatestEnvelope":      openAPISensorLatestEnvelopeSchema(),
-		"SensorEnvelopeRequest":     openAPISensorEnvelopeRequestSchema(),
-		"SensorDescriptor":          openAPISensorDescriptorSchema(),
-		"SensorSample":              openAPISensorSampleSchema(),
-		"SensorLatest":              openAPISensorLatestSchema(),
-		"SensorValueReading":        openAPISensorValueReadingSchema(),
-		"RecordingsResponse":        openAPIArrayEnvelopeSchema("recordings", "#/components/schemas/RecordingChunk", "녹화 chunk 목록입니다."),
-		"RecordingChunkEnvelope":    openAPIObjectSchema("녹화 chunk 응답입니다.", map[string]any{"chunk": map[string]any{"$ref": "#/components/schemas/RecordingChunk"}}),
-		"RecordingChunk":            openAPIRecordingChunkSchema(),
-		"RecordingFile":             openAPIRecordingFileSchema(),
-		"RecordingTickRequest":      openAPIRecorderTickRequestSchema(),
-		"RecordingTickResponse":     openAPIObjectSchema("녹화 tick 처리 결과입니다.", map[string]any{"chunk": map[string]any{"$ref": "#/components/schemas/RecordingChunk"}, "manifest": openAPIGenericObjectProperty("녹화 manifest")}),
-		"RecorderUploadRequest":     openAPIRecorderUploadRequestSchema(),
+		"RTCConfigResponse":                openAPIRTCConfigResponseSchema(),
+		"RecorderRecordingTargetsResponse": openAPIArrayEnvelopeSchema("targets", "#/components/schemas/RecorderRecordingTarget", "recorder-worker 내부 녹화 대상 임무 목록입니다."),
+		"RecorderRecordingTarget":          openAPIRecorderRecordingTargetSchema(),
+		"SensorDescriptorsResponse":        openAPIArrayEnvelopeSchema("sensorDescriptors", "#/components/schemas/SensorDescriptor", "센서 descriptor 목록입니다."),
+		"SensorSamplesResponse":            openAPIArrayEnvelopeSchema("sensorSamples", "#/components/schemas/SensorSample", "센서 sample 목록입니다."),
+		"SensorLatestEnvelope":             openAPISensorLatestEnvelopeSchema(),
+		"SensorEnvelopeRequest":            openAPISensorEnvelopeRequestSchema(),
+		"SensorDescriptor":                 openAPISensorDescriptorSchema(),
+		"SensorSample":                     openAPISensorSampleSchema(),
+		"SensorLatest":                     openAPISensorLatestSchema(),
+		"SensorValueReading":               openAPISensorValueReadingSchema(),
+		"OperatorRecordingsResponse":       openAPIArrayEnvelopeSchema("recordings", "#/components/schemas/OperatorRecordingChunk", "관제 UI가 조회하는 녹화 chunk 목록입니다."),
+		"OperatorRecordingChunk":           openAPIOperatorRecordingChunkSchema(),
+		"OperatorRecordingFile":            openAPIOperatorRecordingFileSchema(),
+		"RecorderRecordingChunkEnvelope":   openAPIObjectSchema("recorder-worker 내부 녹화 chunk 응답입니다.", map[string]any{"chunk": map[string]any{"$ref": "#/components/schemas/RecorderRecordingChunk"}}),
+		"RecorderRecordingChunk":           openAPIRecorderRecordingChunkSchema(),
+		"RecorderTickRequest":              openAPIRecorderTickRequestSchema(),
+		"RecorderRecordingTickResponse":    openAPIObjectSchema("recorder-worker 내부 녹화 tick 처리 결과입니다.", map[string]any{"chunk": map[string]any{"$ref": "#/components/schemas/RecorderRecordingChunk"}, "manifest": openAPIGenericObjectProperty("녹화 manifest")}),
+		"RecorderUploadRequest":            openAPIRecorderUploadRequestSchema(),
 		"RecorderFinalizationClaimRequest": openAPIObjectSchema("녹화 finalization job claim 요청입니다.", map[string]any{
 			"workerId":            openAPIStringProperty("recorder-worker ID입니다.", "recorder-1"),
 			"limit":               map[string]any{"type": "integer", "example": 5},
@@ -116,10 +118,12 @@ func openAPISystemComponentStatusSchema() map[string]any {
 
 func openAPISystemConfigSchema() map[string]any {
 	return openAPIObjectSchema("시스템 설정 요약입니다.", map[string]any{
-		"environment":   openAPIStringProperty("실행 환경입니다.", "development"),
-		"publicUrl":     openAPIStringProperty("관제 서버 public URL입니다.", "http://center.local"),
-		"minioEndpoint": openAPIStringProperty("Object Storage endpoint입니다.", "http://127.0.0.1:9000"),
-		"minioBucket":   openAPIStringProperty("Object Storage bucket입니다.", "robot-center-poc"),
+		"environment":               openAPIStringProperty("실행 환경입니다.", "development"),
+		"appServerPublicUrl":        openAPIStringProperty("브라우저/로봇이 접근하는 app-server 외부 URL입니다.", "http://center.local:18080"),
+		"recorderWorkerInternalUrl": openAPIStringProperty("app-server가 Docker 내부에서 recorder-worker에 접근하는 URL입니다.", "http://recorder-worker:8082"),
+		"minioInternalUrl":          openAPIStringProperty("서버 컴포넌트가 Docker 내부에서 Object Storage에 접근하는 URL입니다.", "http://minio:9000"),
+		"minioPublicUrl":            openAPIStringProperty("브라우저가 녹화 파일을 읽는 Object Storage 외부 URL입니다.", "http://center.local:19000"),
+		"minioBucket":               openAPIStringProperty("Object Storage bucket입니다.", "robot-center-poc"),
 	})
 }
 
@@ -264,8 +268,38 @@ func openAPIMissionLiveStatusResponseSchema() map[string]any {
 	})
 }
 
-func openAPIRecordingChunkSchema() map[string]any {
-	return openAPIObjectSchema("녹화 chunk입니다.", map[string]any{
+func openAPIRecorderRecordingTargetSchema() map[string]any {
+	return openAPIObjectSchema("recorder-worker 내부 녹화 대상 임무입니다.", map[string]any{
+		"id":          openAPIStringProperty("mission ID입니다.", "uuid"),
+		"missionCode": openAPIStringProperty("mission code입니다.", "mission-001"),
+		"name":        openAPIStringProperty("임무 이름입니다.", "산악 구조"),
+		"missionType": openAPIStringProperty("임무 유형입니다.", "mountain_rescue"),
+		"status":      openAPIStringProperty("임무 상태입니다.", "active"),
+		"siteNote":    openAPIStringProperty("현장 메모입니다.", "북쪽 능선"),
+		"robotCode":   openAPIStringProperty("대표 robot code입니다.", "robot-001"),
+		"robotCodes":  openAPIStringArrayProperty("배정된 robot code 목록입니다."),
+		"startedAt":   openAPINullableDateTimeProperty("시작 시각입니다."),
+		"endedAt":     openAPINullableDateTimeProperty("종료 시각입니다."),
+		"createdAt":   openAPIDateTimeProperty("생성 시각입니다."),
+		"updatedAt":   openAPIDateTimeProperty("수정 시각입니다."),
+	})
+}
+
+func openAPIOperatorRecordingChunkSchema() map[string]any {
+	properties := openAPIRecordingChunkProperties()
+	properties["files"] = map[string]any{
+		"type":  "array",
+		"items": map[string]any{"$ref": "#/components/schemas/OperatorRecordingFile"},
+	}
+	return openAPIObjectSchema("관제 UI가 조회하는 녹화 chunk입니다.", properties)
+}
+
+func openAPIRecorderRecordingChunkSchema() map[string]any {
+	return openAPIObjectSchema("recorder-worker 내부 녹화 chunk입니다.", openAPIRecordingChunkProperties())
+}
+
+func openAPIRecordingChunkProperties() map[string]any {
+	return map[string]any{
 		"id":                 openAPIStringProperty("chunk ID입니다.", "uuid"),
 		"recordingSessionId": openAPIStringProperty("recording session ID입니다.", "uuid"),
 		"missionId":          openAPIStringProperty("mission ID입니다.", "uuid"),
@@ -281,21 +315,17 @@ func openAPIRecordingChunkSchema() map[string]any {
 		"availableFileTypes": openAPIBoolMapProperty("사용 가능한 파일 타입 map입니다."),
 		"createdAt":          openAPIDateTimeProperty("생성 시각입니다."),
 		"updatedAt":          openAPIDateTimeProperty("수정 시각입니다."),
-		"files": map[string]any{
-			"type":  "array",
-			"items": map[string]any{"$ref": "#/components/schemas/RecordingFile"},
-		},
-	})
+	}
 }
 
-func openAPIRecordingFileSchema() map[string]any {
-	return openAPIObjectSchema("녹화 파일 상태입니다.", map[string]any{
+func openAPIOperatorRecordingFileSchema() map[string]any {
+	return openAPIObjectSchema("관제 UI가 조회하는 녹화 파일 상태입니다.", map[string]any{
 		"type":        openAPIStringProperty("파일 타입입니다.", "rgb_audio_mp4"),
 		"label":       openAPIStringProperty("표시 label입니다.", "RGB MP4"),
 		"status":      openAPIStringProperty("파일 상태입니다.", "available"),
 		"contentType": openAPIStringProperty("content type입니다.", "video/mp4"),
 		"objectKey":   openAPIStringProperty("object storage key입니다.", "missions/mission-001/rgb.mp4"),
-		"url":         openAPIStringProperty("다운로드 URL입니다.", "http://center.local:9000/bucket/object"),
+		"url":         openAPIStringProperty("브라우저가 접근하는 외부 다운로드 URL입니다.", "http://center.local:19000/bucket/object"),
 	})
 }
 
@@ -315,7 +345,7 @@ func openAPIRecorderFinalizationJobSchema() map[string]any {
 		"createdAt":          openAPIDateTimeProperty("생성 시각입니다."),
 		"updatedAt":          openAPIDateTimeProperty("수정 시각입니다."),
 		"completedAt":        openAPINullableDateTimeProperty("완료 시각입니다."),
-		"chunk":              map[string]any{"$ref": "#/components/schemas/RecordingChunk"},
+		"chunk":              map[string]any{"$ref": "#/components/schemas/RecorderRecordingChunk"},
 	})
 }
 

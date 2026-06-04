@@ -13,7 +13,7 @@ func TestRecorderAPIFlow(t *testing.T) {
 	robot := server.createRobot(t, "Recorder Robot")
 	mission := server.createStartedMission(t, robot)
 
-	targetsPayload := requestJSON[dto.RecordingTargetsResponse](t, server.baseURL, http.MethodGet, "/api/v1/recorder/recording-targets", "", nil)
+	targetsPayload := requestJSON[dto.RecorderRecordingTargetsResponse](t, server.baseURL, http.MethodGet, "/api/v1/recorder/recording-targets", "", nil)
 	if len(targetsPayload.Targets) != 1 {
 		t.Fatalf("expected one recording target, got %#v", targetsPayload)
 	}
@@ -149,7 +149,7 @@ func TestRecorderAPIFlow(t *testing.T) {
 		t.Fatalf("expected sensor latest to be empty after clear, got %#v", sensorLatestAfterClearPayload)
 	}
 
-	recordingTickPayload := requestJSON[dto.RecordingTickResponse](t, server.baseURL, http.MethodPost, "/api/v1/recorder/tick", "", dto.RecorderTickRequest{
+	recordingTickPayload := requestJSON[dto.RecorderRecordingTickResponse](t, server.baseURL, http.MethodPost, "/api/v1/recorder/tick", "", dto.RecorderTickRequest{
 		MissionCode:          mission.code,
 		RobotCode:            robot.code,
 		ChunkDurationSeconds: 600,
@@ -160,18 +160,25 @@ func TestRecorderAPIFlow(t *testing.T) {
 		t.Fatalf("expected recording chunk, got %#v", chunk)
 	}
 
-	uploadedPayload := requestJSON[dto.RecordingChunkEnvelopeResponse](t, server.baseURL, http.MethodPost, "/api/v1/recorder/chunks/"+chunk.ID+"/uploaded", "", nil)
+	uploadedPayload := requestJSON[dto.RecorderRecordingChunkEnvelopeResponse](t, server.baseURL, http.MethodPost, "/api/v1/recorder/chunks/"+chunk.ID+"/uploaded", "", nil)
 	uploadedChunk := uploadedPayload.Chunk
 	if uploadedChunk.Status != "uploaded" {
-		t.Fatalf("expected uploaded chunk, got %#v", uploadedChunk)
+		t.Fatalf("expected recorder chunk uploaded state, got %#v", uploadedChunk)
 	}
-	fileUploadedPayload := requestJSON[dto.RecordingChunkEnvelopeResponse](t, server.baseURL, http.MethodPost, "/api/v1/recorder/chunks/"+chunk.ID+"/files/rgb_audio_mp4/uploaded", "", nil)
+	operatorRecordingsBeforeVideoPayload := requestJSON[dto.OperatorRecordingsResponse](t, server.baseURL, http.MethodGet, "/api/v1/operator/recordings", "", nil)
+	if len(operatorRecordingsBeforeVideoPayload.Recordings) != 1 || operatorRecordingsBeforeVideoPayload.Recordings[0].Status != "partial" {
+		t.Fatalf("expected operator playback state to be partial before video files are available, got %#v", operatorRecordingsBeforeVideoPayload)
+	}
+	fileUploadedPayload := requestJSON[dto.RecorderRecordingChunkEnvelopeResponse](t, server.baseURL, http.MethodPost, "/api/v1/recorder/chunks/"+chunk.ID+"/files/rgb_audio_mp4/uploaded", "", nil)
 	fileUploadedChunk := fileUploadedPayload.Chunk
+	if fileUploadedChunk.Status != "uploaded" {
+		t.Fatalf("expected uploaded chunk after video file is available, got %#v", fileUploadedChunk)
+	}
 	if fileUploadedChunk.AvailableFileTypes["rgb_audio_mp4"] != true {
 		t.Fatalf("expected rgb mp4 available flag, got %#v", fileUploadedChunk)
 	}
 
-	recordingsPayload := requestJSON[dto.RecordingsResponse](t, server.baseURL, http.MethodGet, "/api/v1/operator/recordings", "", nil)
+	recordingsPayload := requestJSON[dto.OperatorRecordingsResponse](t, server.baseURL, http.MethodGet, "/api/v1/operator/recordings", "", nil)
 	if len(recordingsPayload.Recordings) != 1 {
 		t.Fatalf("expected one recording, got %#v", recordingsPayload)
 	}

@@ -14,17 +14,17 @@ import (
 )
 
 type Config struct {
-	DSN         string
-	ServerURL   string
-	MinIOBucket string
+	DSN                string
+	AppServerPublicURL string
+	MinIOBucket        string
 }
 
 type Store struct {
-	db          *gorm.DB
-	sqlDB       *sql.DB
-	sqlTx       *sql.Tx
-	serverURL   string
-	minioBucket string
+	db                 *gorm.DB
+	sqlDB              *sql.DB
+	sqlTx              *sql.Tx
+	appServerPublicURL string
+	minioBucket        string
 }
 
 func stringWithDefault(value string, fallback string) string {
@@ -43,10 +43,10 @@ func NewStore(ctx context.Context, cfg Config) (*Store, error) {
 	sqlDB.SetMaxIdleConns(5)
 	sqlDB.SetConnMaxLifetime(30 * time.Minute)
 	store := &Store{
-		db:          db,
-		sqlDB:       sqlDB,
-		serverURL:   cfg.ServerURL,
-		minioBucket: stringWithDefault(strings.TrimSpace(cfg.MinIOBucket), "robot-center"),
+		db:                 db,
+		sqlDB:              sqlDB,
+		appServerPublicURL: cfg.AppServerPublicURL,
+		minioBucket:        stringWithDefault(strings.TrimSpace(cfg.MinIOBucket), "robot-center"),
 	}
 	if err := store.runAutoMigrations(ctx); err != nil {
 		_ = sqlDB.Close()

@@ -72,7 +72,7 @@ type recorderRobotHealth struct {
 }
 
 func (s *Server) fetchRecorderRuntimeSnapshot(ctx context.Context) service.RecorderRuntimeSnapshot {
-	targetURL := strings.TrimSpace(s.config.RecorderWorkerURL)
+	targetURL := strings.TrimSpace(s.config.RecorderWorkerInternalURL)
 	if targetURL == "" {
 		return service.RecorderRuntimeSnapshot{}
 	}

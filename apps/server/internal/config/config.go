@@ -8,11 +8,12 @@ import (
 type AppServerConfig struct {
 	Environment               string
 	HTTPAddress               string
-	PublicURL                 string
+	AppServerPublicURL        string
 	WebStaticDir              string
-	RecorderWorkerURL         string
+	RecorderWorkerInternalURL string
 	PostgresDSN               string
-	MinIOEndpoint             string
+	MinIOInternalURL          string
+	MinIOPublicURL            string
 	MinIOBucket               string
 	MinIOAccessKey            string
 	MinIOSecretKey            string
@@ -26,7 +27,7 @@ type AppServerConfig struct {
 type RecorderWorkerConfig struct {
 	Environment                 string
 	HTTPAddress                 string
-	AppServerURL                string
+	AppServerInternalURL        string
 	SFUWebSocketInternalBaseURL string
 	TURNInternalURL             string
 	TURNUsername                string
@@ -34,7 +35,7 @@ type RecorderWorkerConfig struct {
 	PollInterval                time.Duration
 	RecordingChunkDuration      time.Duration
 	PostgresDSN                 string
-	MinIOEndpoint               string
+	MinIOInternalURL            string
 	MinIOBucket                 string
 	MinIOAccessKey              string
 	MinIOSecretKey              string
@@ -46,11 +47,12 @@ func LoadAppServerConfig() AppServerConfig {
 	return AppServerConfig{
 		Environment:               getEnv("APP_ENV", "development"),
 		HTTPAddress:               getEnv("APP_SERVER_HTTP_ADDR", ":8080"),
-		PublicURL:                 getEnv("APP_SERVER_PUBLIC_URL", "http://localhost:8080"),
+		AppServerPublicURL:        getEnv("APP_SERVER_PUBLIC_URL", "http://localhost:8080"),
 		WebStaticDir:              getEnv("WEB_STATIC_DIR", ""),
-		RecorderWorkerURL:         getEnv("RECORDER_WORKER_URL", "http://localhost:8082"),
+		RecorderWorkerInternalURL: getEnvWithFallback("RECORDER_WORKER_INTERNAL_URL", "RECORDER_WORKER_URL", "http://localhost:8082"),
 		PostgresDSN:               buildPostgresDSN(),
-		MinIOEndpoint:             getEnv("MINIO_ENDPOINT", "http://localhost:9000"),
+		MinIOInternalURL:          getEnvWithFallback("MINIO_INTERNAL_URL", "MINIO_ENDPOINT", "http://localhost:9000"),
+		MinIOPublicURL:            getEnv("MINIO_PUBLIC_URL", ""),
 		MinIOBucket:               getEnv("MINIO_BUCKET", "robot-center"),
 		MinIOAccessKey:            getEnv("MINIO_ROOT_USER", "minioadmin"),
 		MinIOSecretKey:            getEnv("MINIO_ROOT_PASSWORD", "minioadmin"),
@@ -68,7 +70,7 @@ func LoadRecorderWorkerConfig() RecorderWorkerConfig {
 	return RecorderWorkerConfig{
 		Environment:                 getEnv("APP_ENV", "development"),
 		HTTPAddress:                 getEnv("RECORDER_WORKER_HTTP_ADDR", ":8082"),
-		AppServerURL:                getEnv("APP_SERVER_PUBLIC_URL", "http://localhost:8080"),
+		AppServerInternalURL:        getEnvWithFallback("APP_SERVER_INTERNAL_URL", "APP_SERVER_PUBLIC_URL", "http://localhost:8080"),
 		SFUWebSocketInternalBaseURL: getEnv("SFU_WS_INTERNAL_BASE_URL", legacySFUWebSocketBaseURL),
 		TURNInternalURL:             getEnv("TURN_INTERNAL_URL", legacyTURNURL),
 		TURNUsername:                getEnv("TURN_USERNAME", "robot"),
@@ -76,7 +78,7 @@ func LoadRecorderWorkerConfig() RecorderWorkerConfig {
 		PollInterval:                getDurationEnv("RECORDER_WORKER_POLL_INTERVAL", 5*time.Second),
 		RecordingChunkDuration:      getDurationEnv("RECORDING_CHUNK_DURATION", 10*time.Minute),
 		PostgresDSN:                 buildPostgresDSN(),
-		MinIOEndpoint:               getEnv("MINIO_ENDPOINT", "http://localhost:9000"),
+		MinIOInternalURL:            getEnvWithFallback("MINIO_INTERNAL_URL", "MINIO_ENDPOINT", "http://localhost:9000"),
 		MinIOBucket:                 getEnv("MINIO_BUCKET", "robot-center"),
 		MinIOAccessKey:              getEnv("MINIO_ROOT_USER", "minioadmin"),
 		MinIOSecretKey:              getEnv("MINIO_ROOT_PASSWORD", "minioadmin"),
@@ -89,6 +91,14 @@ func getEnv(key string, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func getEnvWithFallback(key string, legacyKey string, fallback string) string {
+	value := os.Getenv(key)
+	if value != "" {
+		return value
+	}
+	return getEnv(legacyKey, fallback)
 }
 
 func getDurationEnv(key string, fallback time.Duration) time.Duration {

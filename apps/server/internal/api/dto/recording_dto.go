@@ -7,26 +7,26 @@ import (
 	"robot-center/apps/server/internal/utils"
 )
 
-type RecordingChunkResponse struct {
-	ID                 string                  `json:"id"`
-	RecordingSessionID string                  `json:"recordingSessionId"`
-	MissionID          string                  `json:"missionId"`
-	MissionCode        string                  `json:"missionCode"`
-	RobotCode          string                  `json:"robotCode"`
-	ChunkIndex         int                     `json:"chunkIndex"`
-	Status             string                  `json:"status"`
-	StartedAt          time.Time               `json:"startedAt"`
-	EndedAt            time.Time               `json:"endedAt"`
-	DurationSeconds    int                     `json:"durationSeconds"`
-	ManifestObjectKey  string                  `json:"manifestObjectKey"`
-	MediaObjectKeys    map[string]string       `json:"mediaObjectKeys"`
-	AvailableFileTypes map[string]bool         `json:"availableFileTypes,omitempty"`
-	CreatedAt          time.Time               `json:"createdAt"`
-	UpdatedAt          time.Time               `json:"updatedAt"`
-	Files              []RecordingFileResponse `json:"files,omitempty"`
+type OperatorRecordingChunkResponse struct {
+	ID                 string                          `json:"id"`
+	RecordingSessionID string                          `json:"recordingSessionId"`
+	MissionID          string                          `json:"missionId"`
+	MissionCode        string                          `json:"missionCode"`
+	RobotCode          string                          `json:"robotCode"`
+	ChunkIndex         int                             `json:"chunkIndex"`
+	Status             string                          `json:"status"`
+	StartedAt          time.Time                       `json:"startedAt"`
+	EndedAt            time.Time                       `json:"endedAt"`
+	DurationSeconds    int                             `json:"durationSeconds"`
+	ManifestObjectKey  string                          `json:"manifestObjectKey"`
+	MediaObjectKeys    map[string]string               `json:"mediaObjectKeys"`
+	AvailableFileTypes map[string]bool                 `json:"availableFileTypes,omitempty"`
+	CreatedAt          time.Time                       `json:"createdAt"`
+	UpdatedAt          time.Time                       `json:"updatedAt"`
+	Files              []OperatorRecordingFileResponse `json:"files,omitempty"`
 }
 
-type RecordingFileResponse struct {
+type OperatorRecordingFileResponse struct {
 	Type        string `json:"type"`
 	Label       string `json:"label"`
 	Status      string `json:"status"`
@@ -35,43 +35,76 @@ type RecordingFileResponse struct {
 	URL         string `json:"url,omitempty"`
 }
 
-type RecordingTickResponse struct {
-	Chunk    RecordingChunkResponse `json:"chunk"`
-	Manifest map[string]any         `json:"manifest"`
+type OperatorRecordingsResponse struct {
+	Recordings []OperatorRecordingChunkResponse `json:"recordings"`
 }
 
-type RecordingTargetsResponse struct {
-	Targets []MissionResponse `json:"targets"`
+type RecorderRecordingTargetResponse struct {
+	ID          string     `json:"id"`
+	MissionCode string     `json:"missionCode"`
+	Name        string     `json:"name"`
+	MissionType string     `json:"missionType"`
+	Status      string     `json:"status"`
+	SiteNote    string     `json:"siteNote,omitempty"`
+	RobotCode   string     `json:"robotCode,omitempty"`
+	RobotCodes  []string   `json:"robotCodes,omitempty"`
+	StartedAt   *time.Time `json:"startedAt,omitempty"`
+	EndedAt     *time.Time `json:"endedAt,omitempty"`
+	CreatedAt   time.Time  `json:"createdAt"`
+	UpdatedAt   time.Time  `json:"updatedAt"`
 }
 
-type RecordingsResponse struct {
-	Recordings []RecordingChunkResponse `json:"recordings"`
+type RecorderRecordingTargetsResponse struct {
+	Targets []RecorderRecordingTargetResponse `json:"targets"`
 }
 
-type RecordingChunkEnvelopeResponse struct {
-	Chunk RecordingChunkResponse `json:"chunk"`
+type RecorderRecordingChunkResponse struct {
+	ID                 string            `json:"id"`
+	RecordingSessionID string            `json:"recordingSessionId"`
+	MissionID          string            `json:"missionId"`
+	MissionCode        string            `json:"missionCode"`
+	RobotCode          string            `json:"robotCode"`
+	ChunkIndex         int               `json:"chunkIndex"`
+	Status             string            `json:"status"`
+	StartedAt          time.Time         `json:"startedAt"`
+	EndedAt            time.Time         `json:"endedAt"`
+	DurationSeconds    int               `json:"durationSeconds"`
+	ManifestObjectKey  string            `json:"manifestObjectKey"`
+	MediaObjectKeys    map[string]string `json:"mediaObjectKeys"`
+	AvailableFileTypes map[string]bool   `json:"availableFileTypes,omitempty"`
+	CreatedAt          time.Time         `json:"createdAt"`
+	UpdatedAt          time.Time         `json:"updatedAt"`
 }
 
-type RecordingFinalizationJobResponse struct {
-	ID                 string                 `json:"id"`
-	RecordingChunkID   string                 `json:"recordingChunkId"`
-	RecordingSessionID string                 `json:"recordingSessionId"`
-	MissionID          string                 `json:"missionId"`
-	RobotID            string                 `json:"robotId"`
-	Status             string                 `json:"status"`
-	Reason             string                 `json:"reason,omitempty"`
-	Attempts           int                    `json:"attempts"`
-	LockedBy           string                 `json:"lockedBy,omitempty"`
-	LockedUntil        *time.Time             `json:"lockedUntil,omitempty"`
-	LastError          string                 `json:"lastError,omitempty"`
-	CreatedAt          time.Time              `json:"createdAt"`
-	UpdatedAt          time.Time              `json:"updatedAt"`
-	CompletedAt        *time.Time             `json:"completedAt,omitempty"`
-	Chunk              RecordingChunkResponse `json:"chunk"`
+type RecorderRecordingTickResponse struct {
+	Chunk    RecorderRecordingChunkResponse `json:"chunk"`
+	Manifest map[string]any                 `json:"manifest"`
+}
+
+type RecorderRecordingChunkEnvelopeResponse struct {
+	Chunk RecorderRecordingChunkResponse `json:"chunk"`
+}
+
+type RecorderFinalizationJobResponse struct {
+	ID                 string                         `json:"id"`
+	RecordingChunkID   string                         `json:"recordingChunkId"`
+	RecordingSessionID string                         `json:"recordingSessionId"`
+	MissionID          string                         `json:"missionId"`
+	RobotID            string                         `json:"robotId"`
+	Status             string                         `json:"status"`
+	Reason             string                         `json:"reason,omitempty"`
+	Attempts           int                            `json:"attempts"`
+	LockedBy           string                         `json:"lockedBy,omitempty"`
+	LockedUntil        *time.Time                     `json:"lockedUntil,omitempty"`
+	LastError          string                         `json:"lastError,omitempty"`
+	CreatedAt          time.Time                      `json:"createdAt"`
+	UpdatedAt          time.Time                      `json:"updatedAt"`
+	CompletedAt        *time.Time                     `json:"completedAt,omitempty"`
+	Chunk              RecorderRecordingChunkResponse `json:"chunk"`
 }
 
 type RecorderFinalizationJobsResponse struct {
-	Jobs []RecordingFinalizationJobResponse `json:"jobs"`
+	Jobs []RecorderFinalizationJobResponse `json:"jobs"`
 }
 
 type RecorderTickRequest struct {
@@ -100,8 +133,8 @@ type RecorderFinalizationStatusRequest struct {
 	Reason   string `json:"reason,omitempty"`
 }
 
-func RecordingChunk(chunk domain.RecordingChunk) RecordingChunkResponse {
-	return RecordingChunkResponse{
+func OperatorRecordingChunk(chunk domain.RecordingChunk) OperatorRecordingChunkResponse {
+	return OperatorRecordingChunkResponse{
 		ID:                 chunk.ID,
 		RecordingSessionID: chunk.RecordingSessionID,
 		MissionID:          chunk.MissionID,
@@ -120,26 +153,67 @@ func RecordingChunk(chunk domain.RecordingChunk) RecordingChunkResponse {
 	}
 }
 
-func RecordingTargetsPayload(targets []domain.Mission) RecordingTargetsResponse {
-	return RecordingTargetsResponse{
-		Targets: Missions(targets),
-	}
-}
-
-func RecordingsPayload(recordings []RecordingChunkResponse) RecordingsResponse {
-	return RecordingsResponse{
+func OperatorRecordingsPayload(recordings []OperatorRecordingChunkResponse) OperatorRecordingsResponse {
+	return OperatorRecordingsResponse{
 		Recordings: recordings,
 	}
 }
 
-func RecordingChunkPayload(chunk RecordingChunkResponse) RecordingChunkEnvelopeResponse {
-	return RecordingChunkEnvelopeResponse{
+func RecorderRecordingTarget(mission domain.Mission) RecorderRecordingTargetResponse {
+	return RecorderRecordingTargetResponse{
+		ID:          mission.ID,
+		MissionCode: mission.MissionCode,
+		Name:        mission.Name,
+		MissionType: mission.MissionType,
+		Status:      mission.Status,
+		SiteNote:    mission.SiteNote,
+		RobotCode:   mission.RobotCode,
+		RobotCodes:  append([]string(nil), mission.RobotCodes...),
+		StartedAt:   mission.StartedAt,
+		EndedAt:     mission.EndedAt,
+		CreatedAt:   mission.CreatedAt,
+		UpdatedAt:   mission.UpdatedAt,
+	}
+}
+
+func RecorderRecordingTargetsPayload(targets []domain.Mission) RecorderRecordingTargetsResponse {
+	response := make([]RecorderRecordingTargetResponse, 0, len(targets))
+	for _, target := range targets {
+		response = append(response, RecorderRecordingTarget(target))
+	}
+	return RecorderRecordingTargetsResponse{
+		Targets: response,
+	}
+}
+
+func RecorderRecordingChunk(chunk domain.RecordingChunk) RecorderRecordingChunkResponse {
+	return RecorderRecordingChunkResponse{
+		ID:                 chunk.ID,
+		RecordingSessionID: chunk.RecordingSessionID,
+		MissionID:          chunk.MissionID,
+		MissionCode:        chunk.MissionCode,
+		RobotCode:          chunk.RobotCode,
+		ChunkIndex:         chunk.ChunkIndex,
+		Status:             chunk.Status,
+		StartedAt:          chunk.StartedAt,
+		EndedAt:            chunk.EndedAt,
+		DurationSeconds:    chunk.DurationSeconds,
+		ManifestObjectKey:  chunk.ManifestObjectKey,
+		MediaObjectKeys:    utils.CopyStringMap(chunk.MediaObjectKeys),
+		AvailableFileTypes: utils.CopyBoolMap(chunk.AvailableFileTypes),
+		CreatedAt:          chunk.CreatedAt,
+		UpdatedAt:          chunk.UpdatedAt,
+	}
+}
+
+func RecorderRecordingChunkPayload(chunk RecorderRecordingChunkResponse) RecorderRecordingChunkEnvelopeResponse {
+	return RecorderRecordingChunkEnvelopeResponse{
 		Chunk: chunk,
 	}
 }
 
-func RecordingFinalizationJob(job domain.RecordingFinalizationJob) RecordingFinalizationJobResponse {
-	return RecordingFinalizationJobResponse{
+func RecorderFinalizationJob(job domain.RecordingFinalizationJob) RecorderFinalizationJobResponse {
+	return RecorderFinalizationJobResponse{
 		ID:                 job.ID,
 		RecordingChunkID:   job.RecordingChunkID,
 		RecordingSessionID: job.RecordingSessionID,
@@ -154,23 +228,23 @@ func RecordingFinalizationJob(job domain.RecordingFinalizationJob) RecordingFina
 		CreatedAt:          job.CreatedAt,
 		UpdatedAt:          job.UpdatedAt,
 		CompletedAt:        job.CompletedAt,
-		Chunk:              RecordingChunk(job.Chunk),
+		Chunk:              RecorderRecordingChunk(job.Chunk),
 	}
 }
 
 func RecorderFinalizationJobsPayload(jobs []domain.RecordingFinalizationJob) RecorderFinalizationJobsResponse {
-	response := make([]RecordingFinalizationJobResponse, 0, len(jobs))
+	response := make([]RecorderFinalizationJobResponse, 0, len(jobs))
 	for _, job := range jobs {
-		response = append(response, RecordingFinalizationJob(job))
+		response = append(response, RecorderFinalizationJob(job))
 	}
 	return RecorderFinalizationJobsResponse{
 		Jobs: response,
 	}
 }
 
-func RecordingTick(result domain.RecordingTickResult) RecordingTickResponse {
-	return RecordingTickResponse{
-		Chunk:    RecordingChunk(result.Chunk),
+func RecorderRecordingTick(result domain.RecordingTickResult) RecorderRecordingTickResponse {
+	return RecorderRecordingTickResponse{
+		Chunk:    RecorderRecordingChunk(result.Chunk),
 		Manifest: result.Manifest,
 	}
 }
