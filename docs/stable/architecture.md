@@ -35,6 +35,8 @@ history:
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: Clarify H.264 video codec policy across SFU and recorder'
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: Clarify H.264 recording precondition and negotiated SDP codec behavior'
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: Clarify H264/90000 recording codec precondition'
+- '2026-06-04 danya.kim <danya.kim@thundersoft.com>: reorganize docs directories by document purpose'
+- '2026-06-04 danya.kim <danya.kim@thundersoft.com>: replace removed multi-robot checklist reference with deployment verification guide'
 ---
 
 # Architecture
@@ -728,4 +730,4 @@ PostgreSQL / MinIO
 -> sensor/recording 저장
 ```
 
-검증 기준은 현재 코드 실행 결과와 `docs/stable/multi-robot-sfu-checklist.md`를 함께 따른다.
+검증 기준은 현재 코드 실행 결과와 `docs/guides/dev-server-docker-deployment.md`의 배포 완료 기준을 함께 따른다.

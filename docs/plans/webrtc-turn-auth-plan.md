@@ -1,7 +1,7 @@
 ---
 title: "webrtc-turn-auth-plan"
 created: 2026-05-27
-updated: '2026-06-01'
+updated: '2026-06-04'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>"]
 type: "roadmap"
@@ -11,6 +11,7 @@ history:
 - "2026-05-27 danya.kim <danya.kim@thundersoft.com>: initial plan for TURN, operator WebSocket, and recorder WebSocket authentication"
 - "2026-06-01 danya.kim <danya.kim@thundersoft.com>: update robot-facing signaling path to /api/v1/robot/sfu/ws"
 - '2026-06-01 danya.kim <danya.kim@thundersoft.com>: clarify Robot API token scope and returned data boundary'
+- '2026-06-04 danya.kim <danya.kim@thundersoft.com>: reorganize docs directories by document purpose'
 ---
 
 # WebRTC / TURN Authentication Plan
@@ -232,8 +233,8 @@ Authorization: Bearer {recorderServiceToken}
 - `.env.example`
 - `.env.dev-server` 운용 가이드
 - `deploy/docker-compose.yml`
-- `docs/planned/dev-server-docker-deployment.md`
-- `docs/planned/robot-team-webrtc-send-test-guide.md`
+- `docs/guides/dev-server-docker-deployment.md`
+- `docs/guides/robot-team-webrtc-send-test-guide.md`
 - `docs/stable/robot-interface.md`
 
 작업:

@@ -1,7 +1,7 @@
 ---
 title: "dev-server-docker-deployment"
 created: 2026-05-27
-updated: '2026-06-01'
+updated: '2026-06-04'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>"]
 type: "runbook"
@@ -14,6 +14,8 @@ history:
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: document docker TURN NAT mapping and verified recorder runtime volume'
 - '2026-05-27 danya.kim <danya.kim@thundersoft.com>: expand TURN relay range for repeated WebRTC reconnect tests'
 - '2026-06-01 danya.kim <danya.kim@thundersoft.com>: update dev-server verification endpoints to role-based /api/v1 namespaces'
+- '2026-06-04 danya.kim <danya.kim@thundersoft.com>: reorganize docs directories by document purpose'
+- '2026-06-04 danya.kim <danya.kim@thundersoft.com>: absorb multi-robot SFU regression checks into deployment verification'
 ---
 
 # Dev Server Docker Deployment
@@ -22,7 +24,7 @@ history:
 
 이 문서는 관제팀이 임시 개발서버에 `robot-center` 관제 스택을 Docker로 배포하는 절차를 정의한다.
 
-로봇팀 연동 절차와 WebRTC 송신 계약은 `docs/planned/robot-team-webrtc-send-test-guide.md`를 따른다.
+로봇팀 연동 절차와 WebRTC 송신 계약은 `docs/guides/robot-team-webrtc-send-test-guide.md`를 따른다.
 
 ## 2. 서버 기준
 
@@ -265,5 +267,9 @@ docker compose \
 - robot 생성과 connection-info 조회 가능
 - mission 생성과 start 가능
 - Android Robot 2대 기준 heartbeat, mission 조회, WebSocket join, relay ICE connected 확인
+- mission room id가 `missionCode`이고 robot별 publisher가 subscriber 수와 무관하게 1개씩 유지됨
+- operator A/B가 같은 mission room에서 서로 다른 robot을 선택해도 각자 선택한 robot의 RGB/Thermal/sensor만 표시됨
+- operator 한 명의 robot 선택 변경/브라우저 종료가 다른 operator와 recorder-worker 수신을 끊지 않음
+- recorder-worker가 같은 mission room의 모든 robot track/data를 수신하고 recording metadata를 robotCode별로 분리함
 - recorder-worker health에서 `iceState=connected`, robot별 track/data 수신, append failure 0 확인
 - recorder runtime volume(`/app/.runtime`)에 h264/ogg/jsonl 파일이 생성됨

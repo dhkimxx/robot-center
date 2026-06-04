@@ -1,7 +1,7 @@
 ---
 title: "ai-agent"
 created: 2026-05-26
-updated: 2026-05-26
+updated: '2026-06-04'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>"]
 type: "design"
@@ -9,6 +9,8 @@ status: "planned"
 tags: ["ai-agent", "eino", "llm", "sop", "control"]
 history:
 - "2026-05-26 danya.kim <danya.kim@thundersoft.com>: moved into docs/planned lifecycle structure"
+- '2026-06-04 danya.kim <danya.kim@thundersoft.com>: align AI Agent API candidates with operator namespace baseline'
+- '2026-06-04 danya.kim <danya.kim@thundersoft.com>: reorganize docs directories by document purpose'
 ---
 
 # AI Agent
@@ -20,6 +22,19 @@ history:
 관제센터 AI Agent 기능을 Go 기반 Eino로 구현하기 위한 기능, 입력 데이터, 출력 포맷, 도구, 실행 흐름, 저장 정책을 정의한다.
 
 본 문서는 PoC 기준이며, AI Agent는 SOP 근거를 바탕으로 제어 명령 초안을 생성할 수 있다. 단, 명령 실행은 반드시 관제요원 또는 지휘관 승인 후 서버가 수행한다.
+
+## 현재 기반 우선 원칙
+
+본 문서는 AI Agent 기능의 planned 문서이며, 현재 관제 서버/API 구조를 대체하지 않는다.
+
+AI Agent API 후보는 현재 프로젝트의 actor별 namespace를 따른다.
+
+- Operator 기능: `/api/v1/operator/*`
+- Robot Gateway 기능: `/api/v1/robot/*`
+- Recorder 기능: `/api/v1/recorder/*`
+- System 기능: `/api/v1/system/*`
+
+Agent가 사용하는 mission 식별자는 operator API path에서는 `missionCode`를 우선 사용하고, 서버 내부에서 필요 시 `missionId`로 resolve한다.
 
 ## Eino 적용 기준
 
@@ -545,10 +560,12 @@ Agent는 다음 데이터만 근거로 사용한다.
 
 ## API 후보
 
+아래 endpoint는 구현 후보이며, 현재 관제 서버의 actor별 namespace를 기준으로 작성한다.
+
 ### 상황 요약 생성
 
 ```http
-POST /api/missions/{missionId}/agent/situation-summary
+POST /api/v1/operator/missions/{missionCode}/agent/situation-summary
 ```
 
 Request:
@@ -573,13 +590,13 @@ Response:
 ### SOP 추천 생성
 
 ```http
-POST /api/missions/{missionId}/agent/sop-recommendations
+POST /api/v1/operator/missions/{missionCode}/agent/sop-recommendations
 ```
 
 ### 제어 명령 초안 생성
 
 ```http
-POST /api/missions/{missionId}/agent/control-drafts
+POST /api/v1/operator/missions/{missionCode}/agent/control-drafts
 ```
 
 Request:
@@ -594,7 +611,7 @@ Request:
 ### 제어 명령 초안 승인
 
 ```http
-POST /api/missions/{missionId}/agent/control-drafts/{draftId}/approve
+POST /api/v1/operator/missions/{missionCode}/agent/control-drafts/{draftId}/approve
 ```
 
 Response:
@@ -609,13 +626,13 @@ Response:
 ### 제어 명령 초안 반려
 
 ```http
-POST /api/missions/{missionId}/agent/control-drafts/{draftId}/reject
+POST /api/v1/operator/missions/{missionCode}/agent/control-drafts/{draftId}/reject
 ```
 
 ### 관제 Q&A
 
 ```http
-POST /api/missions/{missionId}/agent/chat
+POST /api/v1/operator/missions/{missionCode}/agent/chat
 ```
 
 Request:
@@ -630,13 +647,13 @@ Request:
 ### 보고서 초안 생성
 
 ```http
-POST /api/missions/{missionId}/agent/report-draft
+POST /api/v1/operator/missions/{missionCode}/agent/report-draft
 ```
 
 ### Agent run 조회
 
 ```http
-GET /api/agent/runs/{agentRunId}
+GET /api/v1/operator/agent/runs/{agentRunId}
 ```
 
 ## DB 확장 후보

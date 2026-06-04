@@ -40,6 +40,7 @@ history:
 - '2026-06-02 danya.kim <danya.kim@thundersoft.com>: separate GStreamer webrtcbin checklist from common SDP guidance'
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: Clarify H.264 as recording precondition without server-side codec enforcement'
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: Clarify H264/90000 RTP clock requirement for recording validation'
+- '2026-06-04 danya.kim <danya.kim@thundersoft.com>: reorganize docs directories by document purpose'
 ---
 
 # Robot Team WebRTC Send Test Guide
