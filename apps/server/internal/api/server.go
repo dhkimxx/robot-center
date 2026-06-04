@@ -4,11 +4,14 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"time"
+
 	"robot-center/apps/server/internal/config"
 	"robot-center/apps/server/internal/service"
 	"robot-center/apps/server/internal/sfu"
 	"robot-center/apps/server/internal/store"
-	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 type Server struct {
@@ -65,47 +68,18 @@ func NewServerFromConfig(ctx context.Context, cfg config.AppServerConfig) (*Serv
 }
 
 func (s *Server) Handler() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", s.handleHealth)
-	mux.HandleFunc("GET /swagger/index.html", s.handleSwaggerUI)
-	mux.HandleFunc("GET /swagger/openapi.json", s.handleOpenAPIJSON)
-	mux.HandleFunc("GET /api/v1/system/status", s.handleSystemStatus)
-	mux.HandleFunc("POST /api/v1/system/object-storage/clear", s.handleClearObjectStorage)
-	mux.HandleFunc("POST /api/v1/system/sensors/clear", s.handleClearSensorData)
-	mux.HandleFunc("GET /api/v1/operator/rtc-config", s.handleRTCConfig)
-	mux.HandleFunc("GET /api/v1/operator/sensor-descriptors", s.handleListSensorDescriptors)
-	mux.HandleFunc("GET /api/v1/operator/sensor-samples", s.handleListSensorSamples)
-	mux.HandleFunc("GET /api/v1/operator/sensor-latest", s.handleListSensorLatest)
-	mux.HandleFunc("GET /api/v1/operator/recordings", s.handleListRecordings)
-	mux.HandleFunc("GET /api/v1/operator/robots", s.handleListRobots)
-	mux.HandleFunc("POST /api/v1/operator/robots", s.handleCreateRobot)
-	mux.HandleFunc("PATCH /api/v1/operator/robots/{robotCode}", s.handleUpdateRobot)
-	mux.HandleFunc("DELETE /api/v1/operator/robots/{robotCode}", s.handleArchiveRobot)
-	mux.HandleFunc("GET /api/v1/operator/robots/{robotCode}/connection-info", s.handleGetRobotConnectionInfo)
-	mux.HandleFunc("POST /api/v1/operator/robots/{robotCode}/connection-token", s.handleRotateRobotConnectionToken)
-	mux.HandleFunc("GET /api/v1/operator/missions", s.handleListMissions)
-	mux.HandleFunc("GET /api/v1/operator/missions/{missionCode}/live-status", s.handleMissionLiveStatus)
-	mux.HandleFunc("POST /api/v1/operator/missions", s.handleCreateMission)
-	mux.HandleFunc("POST /api/v1/operator/missions/{missionCode}/start", s.handleStartMission)
-	mux.HandleFunc("POST /api/v1/operator/missions/{missionCode}/end", s.handleEndMission)
-	mux.HandleFunc("GET /api/v1/operator/sfu/ws", s.handleOperatorSFUWebSocket)
-	mux.HandleFunc("GET /api/v1/recorder/recording-targets", s.handleRecordingTargets)
-	mux.HandleFunc("POST /api/v1/recorder/tick", s.handleRecorderTick)
-	mux.HandleFunc("POST /api/v1/recorder/finalization-jobs/claim", s.handleRecorderFinalizationJobsClaim)
-	mux.HandleFunc("POST /api/v1/recorder/finalization-jobs/{jobID}/completed", s.handleRecorderFinalizationJobCompleted)
-	mux.HandleFunc("POST /api/v1/recorder/finalization-jobs/{jobID}/partial", s.handleRecorderFinalizationJobPartial)
-	mux.HandleFunc("POST /api/v1/recorder/finalization-jobs/{jobID}/failed", s.handleRecorderFinalizationJobFailed)
-	mux.HandleFunc("POST /api/v1/recorder/chunks/{chunkID}/uploaded", s.handleRecorderChunkUploaded)
-	mux.HandleFunc("POST /api/v1/recorder/chunks/{chunkID}/files/{fileType}/uploaded", s.handleRecorderFileUploaded)
-	mux.HandleFunc("POST /api/v1/recorder/sensor-samples", s.handleCreateSensorSamples)
-	mux.HandleFunc("GET /api/v1/recorder/sfu/ws", s.handleRecorderSFUWebSocket)
-	mux.HandleFunc("POST /api/v1/robot/heartbeat", s.handleRobotAPIHeartbeat)
-	mux.HandleFunc("GET /api/v1/robot/mission", s.handleRobotAPIMission)
-	mux.HandleFunc("GET /api/v1/robot/sfu/ws", s.handleRobotSFUWebSocket)
+	gin.SetMode(gin.ReleaseMode)
+	router := gin.New()
+	router.RedirectTrailingSlash = false
+	router.RedirectFixedPath = false
+	router.HandleMethodNotAllowed = true
+	router.Use(gin.Recovery(), appHeaderMiddleware())
+
+	s.registerRoutes(router)
 
 	if s.config.WebStaticDir != "" {
-		mux.Handle("/", s.staticHandler())
+		router.NoRoute(gin.WrapH(s.staticHandler()))
 	}
 
-	return withRequestHeaders(mux)
+	return router
 }

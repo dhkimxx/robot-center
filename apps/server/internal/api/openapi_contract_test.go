@@ -5,27 +5,84 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-
-	"robot-center/apps/server/internal/api/dto"
 )
 
-func TestOpenAPIContractUsesRoleBasedPaths(t *testing.T) {
+func TestSwaggerDocsUseRoleBasedPathsAndRobotSecurity(t *testing.T) {
 	server := newAPIFlowTestServer(t)
-	openAPI := requestJSON[map[string]any](t, server.baseURL, http.MethodGet, "/swagger/openapi.json", "", nil)
+	swaggerDoc := requestJSON[map[string]any](t, server.baseURL, http.MethodGet, "/swagger/doc.json", "", nil)
+	openAPIAlias := requestJSON[map[string]any](t, server.baseURL, http.MethodGet, "/swagger/openapi.json", "", nil)
 
-	info := openAPI["info"].(map[string]any)
+	assertGeneratedSwaggerContract(t, "Swagger", swaggerDoc)
+	assertGeneratedSwaggerContract(t, "OpenAPI alias", openAPIAlias)
+	if !reflect.DeepEqual(swaggerDoc["paths"], openAPIAlias["paths"]) {
+		t.Fatalf("expected /swagger/openapi.json to expose the generated Swagger paths")
+	}
+	if !reflect.DeepEqual(swaggerDoc["securityDefinitions"], openAPIAlias["securityDefinitions"]) {
+		t.Fatalf("expected /swagger/openapi.json to expose the generated Swagger security definitions")
+	}
+}
+
+func assertGeneratedSwaggerContract(t *testing.T, label string, swaggerDoc map[string]any) {
+	t.Helper()
+
+	if swaggerDoc["swagger"] != "2.0" {
+		t.Fatalf("expected %s to serve Swagger 2.0 doc, got %#v", label, swaggerDoc["swagger"])
+	}
+	info := swaggerDoc["info"].(map[string]any)
 	if !strings.Contains(info["description"].(string), "관제 서버") {
-		t.Fatalf("expected Korean OpenAPI description, got %#v", info)
+		t.Fatalf("expected Korean %s description, got %#v", label, info)
 	}
 	forbiddenOpenAPIWords := []string{"개발 서버", "테스트 슬롯", "테스트용", "Mock Robot"}
 	for _, forbiddenWord := range forbiddenOpenAPIWords {
 		if strings.Contains(info["description"].(string), forbiddenWord) {
-			t.Fatalf("OpenAPI description should be API-reference oriented, got %#v", info)
+			t.Fatalf("%s description should be API-reference oriented, got %#v", label, info)
 		}
 	}
 
-	paths := openAPI["paths"].(map[string]any)
-	expectedPaths := []string{
+	paths := swaggerDoc["paths"].(map[string]any)
+	assertRoleBasedAPIPaths(t, label, paths)
+
+	securityDefinitions := swaggerDoc["securityDefinitions"].(map[string]any)
+	robotSecurity, ok := securityDefinitions["RobotBearerAuth"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected %s RobotBearerAuth security definition, got %#v", label, securityDefinitions)
+	}
+	if robotSecurity["in"] != "header" || robotSecurity["name"] != "Authorization" {
+		t.Fatalf("expected %s RobotBearerAuth to use Authorization header, got %#v", label, robotSecurity)
+	}
+
+	robotHeartbeatPath := paths["/api/v1/robot/heartbeat"].(map[string]any)
+	robotHeartbeatPost := robotHeartbeatPath["post"].(map[string]any)
+	security := robotHeartbeatPost["security"].([]any)
+	if len(security) != 1 {
+		t.Fatalf("expected %s robot heartbeat to require RobotBearerAuth, got %#v", label, security)
+	}
+}
+
+func assertRoleBasedAPIPaths(t *testing.T, label string, paths map[string]any) {
+	t.Helper()
+
+	expectedPaths := expectedRoleBasedAPIPaths()
+	if len(paths) != len(expectedPaths) {
+		t.Fatalf("expected %d %s paths, got %d: %#v", len(expectedPaths), label, len(paths), paths)
+	}
+	for _, expectedPath := range expectedPaths {
+		if _, ok := paths[expectedPath]; !ok {
+			t.Fatalf("expected %s path %s, got %#v", label, expectedPath, paths)
+		}
+	}
+	for path := range paths {
+		if path != "/healthz" && !strings.HasPrefix(path, "/api/v1/") {
+			t.Fatalf("expected role-based /api/v1 path or /healthz in %s, got %s", label, path)
+		}
+		if strings.Contains(path, "/api/v1/recoder/") {
+			t.Fatalf("recoder typo must not be documented in %s, got %s", label, path)
+		}
+	}
+}
+
+func expectedRoleBasedAPIPaths() []string {
+	return []string{
 		"/healthz",
 		"/api/v1/system/status",
 		"/api/v1/system/object-storage/clear",
@@ -58,132 +115,4 @@ func TestOpenAPIContractUsesRoleBasedPaths(t *testing.T) {
 		"/api/v1/robot/mission",
 		"/api/v1/robot/sfu/ws",
 	}
-	if len(paths) != len(expectedPaths) {
-		t.Fatalf("expected %d OpenAPI paths, got %d: %#v", len(expectedPaths), len(paths), paths)
-	}
-	for _, expectedPath := range expectedPaths {
-		if _, ok := paths[expectedPath]; !ok {
-			t.Fatalf("expected OpenAPI path %s, got %#v", expectedPath, paths)
-		}
-	}
-	for path := range paths {
-		if path != "/healthz" && !strings.HasPrefix(path, "/api/v1/") {
-			t.Fatalf("expected role-based /api/v1 path or /healthz, got %s", path)
-		}
-		if strings.Contains(path, "/api/v1/recoder/") {
-			t.Fatalf("recoder typo must not be documented, got %s", path)
-		}
-	}
-}
-
-func TestOpenAPISchemasMatchDTOFields(t *testing.T) {
-	server := newAPIFlowTestServer(t)
-	openAPI := requestJSON[map[string]any](t, server.baseURL, http.MethodGet, "/swagger/openapi.json", "", nil)
-
-	type schemaContract struct {
-		name string
-		dto  any
-	}
-	contracts := []schemaContract{
-		{name: "HealthResponse", dto: dto.HealthResponse{}},
-		{name: "SystemStatusResponse", dto: dto.SystemStatusResponse{}},
-		{name: "SystemComponentStatus", dto: dto.SystemComponentStatus{}},
-		{name: "SystemConfig", dto: dto.SystemConfigResponse{}},
-		{name: "ObjectStorageStatus", dto: dto.ObjectStorageStatusResponse{}},
-		{name: "SystemSummary", dto: dto.SystemSummaryResponse{}},
-		{name: "RTCConfigResponse", dto: dto.RTCConfigResponse{}},
-		{name: "RecorderRecordingTargetsResponse", dto: dto.RecorderRecordingTargetsResponse{}},
-		{name: "RecorderRecordingTarget", dto: dto.RecorderRecordingTargetResponse{}},
-		{name: "OperatorRecordingsResponse", dto: dto.OperatorRecordingsResponse{}},
-		{name: "OperatorRecordingChunk", dto: dto.OperatorRecordingChunkResponse{}},
-		{name: "OperatorRecordingFile", dto: dto.OperatorRecordingFileResponse{}},
-		{name: "RecorderRecordingChunkEnvelope", dto: dto.RecorderRecordingChunkEnvelopeResponse{}},
-		{name: "RecorderRecordingChunk", dto: dto.RecorderRecordingChunkResponse{}},
-		{name: "RecorderRecordingTickResponse", dto: dto.RecorderRecordingTickResponse{}},
-		{name: "RecorderUploadRequest", dto: dto.RecorderUploadRequest{}},
-		{name: "RecorderFinalizationClaimRequest", dto: dto.RecorderFinalizationClaimRequest{}},
-		{name: "RecorderFinalizationStatusRequest", dto: dto.RecorderFinalizationStatusRequest{}},
-		{name: "RecorderFinalizationJobsResponse", dto: dto.RecorderFinalizationJobsResponse{}},
-		{name: "RecorderFinalizationJob", dto: dto.RecorderFinalizationJobResponse{}},
-		{name: "OKResponse", dto: dto.OKResponse{}},
-		{name: "RobotsResponse", dto: dto.RobotsResponse{}},
-		{name: "RobotEnvelope", dto: dto.RobotEnvelopeResponse{}},
-		{name: "CreateRobotRequest", dto: dto.CreateRobotRequest{}},
-		{name: "UpdateRobotRequest", dto: dto.UpdateRobotRequest{}},
-		{name: "CreateRobotResponse", dto: dto.CreateRobotResponse{}},
-		{name: "RobotConnectionInfoEnvelope", dto: dto.RobotConnectionInfoEnvelopeResponse{}},
-		{name: "Robot", dto: dto.RobotResponse{}},
-		{name: "RobotConnectionInfo", dto: dto.RobotConnectionInfoResponse{}},
-		{name: "MissionsResponse", dto: dto.MissionsResponse{}},
-		{name: "MissionResponseEnvelope", dto: dto.MissionEnvelopeResponse{}},
-		{name: "Mission", dto: dto.MissionResponse{}},
-		{name: "CreateMissionRequest", dto: dto.CreateMissionRequest{}},
-		{name: "MissionLiveStatusResponse", dto: dto.MissionLiveStatusResponse{}},
-		{name: "RobotHeartbeatRequest", dto: dto.RobotHeartbeatRequest{}},
-		{name: "RobotHeartbeatResponse", dto: dto.RobotHeartbeatResponse{}},
-		{name: "RobotMissionResponse", dto: dto.RobotMissionResponse{}},
-		{name: "RobotSFUConfig", dto: dto.RobotSFUConfigResponse{}},
-		{name: "TurnServer", dto: dto.RobotTurnServerResponse{}},
-		{name: "ErrorResponse", dto: dto.ErrorResponse{}},
-	}
-	for _, contract := range contracts {
-		assertOpenAPISchemaMatchesDTOFields(t, openAPI, contract.name, contract.dto)
-	}
-}
-
-func assertOpenAPISchemaMatchesDTOFields(t *testing.T, openAPI map[string]any, schemaName string, dtoValue any) {
-	t.Helper()
-
-	schemas := openAPI["components"].(map[string]any)["schemas"].(map[string]any)
-	schema, ok := schemas[schemaName].(map[string]any)
-	if !ok {
-		t.Fatalf("expected OpenAPI schema %s", schemaName)
-	}
-	properties, ok := schema["properties"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected OpenAPI schema %s properties, got %#v", schemaName, schema)
-	}
-
-	expected := dtoJSONFields(dtoValue)
-	actual := make(map[string]struct{}, len(properties))
-	for field := range properties {
-		actual[field] = struct{}{}
-	}
-	for field := range expected {
-		if _, ok := actual[field]; !ok {
-			t.Fatalf("expected OpenAPI schema %s to include DTO field %q; schema=%#v", schemaName, field, properties)
-		}
-	}
-	for field := range actual {
-		if _, ok := expected[field]; !ok {
-			t.Fatalf("expected OpenAPI schema %s not to include non-DTO field %q; dtoFields=%#v schema=%#v", schemaName, field, expected, properties)
-		}
-	}
-}
-
-func dtoJSONFields(dtoValue any) map[string]struct{} {
-	dtoType := reflect.TypeOf(dtoValue)
-	for dtoType.Kind() == reflect.Pointer {
-		dtoType = dtoType.Elem()
-	}
-
-	fields := map[string]struct{}{}
-	for index := 0; index < dtoType.NumField(); index++ {
-		field := dtoType.Field(index)
-		if field.PkgPath != "" {
-			continue
-		}
-		if field.Anonymous {
-			for embeddedField := range dtoJSONFields(reflect.New(field.Type).Elem().Interface()) {
-				fields[embeddedField] = struct{}{}
-			}
-			continue
-		}
-		jsonName := strings.Split(field.Tag.Get("json"), ",")[0]
-		if jsonName == "" || jsonName == "-" {
-			continue
-		}
-		fields[jsonName] = struct{}{}
-	}
-	return fields
 }

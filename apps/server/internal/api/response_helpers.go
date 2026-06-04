@@ -34,10 +34,3 @@ func writeStoreError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusBadRequest, err)
 	}
 }
-
-func withRequestHeaders(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("X-Robot-Center", "app-server")
-		next.ServeHTTP(w, r)
-	})
-}

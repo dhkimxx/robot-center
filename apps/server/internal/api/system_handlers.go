@@ -12,6 +12,13 @@ import (
 	"time"
 )
 
+// @Summary 시스템 상태 조회
+// @Description app-server, recorder-worker, storage, SFU room 상태 요약을 반환합니다.
+// @Tags 시스템 API
+// @Produce json
+// @Success 200 {object} dto.SystemStatusResponse
+// @Failure 500 {object} dto.ErrorResponse
+// @Router /api/v1/system/status [get]
 func (s *Server) handleSystemStatus(w http.ResponseWriter, r *http.Request) {
 	requestContext := r.Context()
 	robots, err := s.services.Robots.ListRobots(requestContext)
@@ -57,6 +64,17 @@ func (s *Server) readObjectStorageStatus(ctx context.Context) dto.ObjectStorageS
 	return dto.ObjectStorageStatus(usage)
 }
 
+// @Summary Object Storage 초기화
+// @Description 확인 문자열을 받은 뒤 테스트용 object storage 데이터를 정리합니다. production 환경에서는 실행되지 않습니다.
+// @Tags 시스템 API
+// @Accept json
+// @Produce json
+// @Param request body dto.ClearObjectStorageRequest true "Object Storage 초기화 요청"
+// @Success 200 {object} dto.ClearObjectStorageResponse
+// @Failure 400 {object} dto.ErrorResponse
+// @Failure 403 {object} dto.ErrorResponse
+// @Failure 500 {object} dto.ErrorResponse
+// @Router /api/v1/system/object-storage/clear [post]
 func (s *Server) handleClearObjectStorage(w http.ResponseWriter, r *http.Request) {
 	var request dto.ClearObjectStorageRequest
 	if err := decodeJSON(r, &request); err != nil {
@@ -82,6 +100,17 @@ func (s *Server) handleClearObjectStorage(w http.ResponseWriter, r *http.Request
 	})
 }
 
+// @Summary Sensor 데이터 초기화
+// @Description 확인 문자열을 받은 뒤 테스트용 sensor descriptor와 sample 데이터를 정리합니다. production 환경에서는 실행되지 않습니다.
+// @Tags 시스템 API
+// @Accept json
+// @Produce json
+// @Param request body dto.ClearSensorDataRequest true "Sensor 데이터 초기화 요청"
+// @Success 200 {object} dto.ClearSensorDataResponse
+// @Failure 400 {object} dto.ErrorResponse
+// @Failure 403 {object} dto.ErrorResponse
+// @Failure 500 {object} dto.ErrorResponse
+// @Router /api/v1/system/sensors/clear [post]
 func (s *Server) handleClearSensorData(w http.ResponseWriter, r *http.Request) {
 	var request dto.ClearSensorDataRequest
 	if err := decodeJSON(r, &request); err != nil {

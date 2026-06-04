@@ -9,6 +9,13 @@ import (
 	"robot-center/apps/server/internal/store"
 )
 
+// @Summary Robot SFU WebSocket 연결
+// @Description Robot publisher가 mission room에 WebRTC signaling용 WebSocket으로 접속합니다.
+// @Tags Robot API
+// @Security RobotBearerAuth
+// @Param room query string true "접속할 missionCode room"
+// @Success 101 {string} string "Switching Protocols"
+// @Router /api/v1/robot/sfu/ws [get]
 func (s *Server) handleRobotSFUWebSocket(w http.ResponseWriter, r *http.Request) {
 	roomID, ok := s.sfuRoomID(w, r)
 	if !ok {
@@ -38,6 +45,12 @@ func (s *Server) handleRobotSFUWebSocket(w http.ResponseWriter, r *http.Request)
 	})
 }
 
+// @Summary Operator SFU WebSocket 연결
+// @Description 관제 UI operator peer가 mission room에 WebRTC signaling용 WebSocket으로 접속합니다.
+// @Tags Operator API
+// @Param room query string true "접속할 missionCode room"
+// @Success 101 {string} string "Switching Protocols"
+// @Router /api/v1/operator/sfu/ws [get]
 func (s *Server) handleOperatorSFUWebSocket(w http.ResponseWriter, r *http.Request) {
 	roomID, ok := s.sfuRoomID(w, r)
 	if !ok {
@@ -53,6 +66,12 @@ func (s *Server) handleOperatorSFUWebSocket(w http.ResponseWriter, r *http.Reque
 	})
 }
 
+// @Summary Recorder SFU WebSocket 연결
+// @Description recorder-worker peer가 mission room에 WebRTC signaling용 WebSocket으로 접속합니다.
+// @Tags Recorder API
+// @Param room query string true "접속할 missionCode room"
+// @Success 101 {string} string "Switching Protocols"
+// @Router /api/v1/recorder/sfu/ws [get]
 func (s *Server) handleRecorderSFUWebSocket(w http.ResponseWriter, r *http.Request) {
 	roomID, ok := s.sfuRoomID(w, r)
 	if !ok {

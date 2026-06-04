@@ -13,6 +13,17 @@ import (
 	"time"
 )
 
+// @Summary Robot heartbeat 반영
+// @Description Robot token으로 인증된 로봇의 heartbeat와 상태를 반영합니다.
+// @Tags Robot API
+// @Accept json
+// @Produce json
+// @Security RobotBearerAuth
+// @Param request body dto.RobotHeartbeatRequest true "Robot heartbeat 요청"
+// @Success 200 {object} dto.RobotHeartbeatResponse
+// @Failure 400 {object} dto.ErrorResponse
+// @Failure 401 {object} dto.ErrorResponse
+// @Router /api/v1/robot/heartbeat [post]
 func (s *Server) handleRobotAPIHeartbeat(w http.ResponseWriter, r *http.Request) {
 	var request dto.RobotHeartbeatRequest
 	if err := decodeJSON(r, &request); err != nil {
@@ -34,6 +45,15 @@ func (s *Server) handleRobotAPIHeartbeat(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, dto.RobotHeartbeatPayload(robot, time.Now().UTC()))
 }
 
+// @Summary Robot active mission 조회
+// @Description Robot token으로 인증된 로봇의 현재 active mission과 SFU 연결 정보를 반환합니다.
+// @Tags Robot API
+// @Produce json
+// @Security RobotBearerAuth
+// @Success 200 {object} dto.RobotMissionResponse
+// @Failure 400 {object} dto.ErrorResponse
+// @Failure 401 {object} dto.ErrorResponse
+// @Router /api/v1/robot/mission [get]
 func (s *Server) handleRobotAPIMission(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(r.URL.Query().Get("robotCode")) != "" {
 		writeError(w, http.StatusBadRequest, errors.New("robotCode query is not allowed for robot API mission lookup"))

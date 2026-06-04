@@ -15,6 +15,14 @@ import (
 	"robot-center/apps/server/internal/config"
 )
 
+// @title Robot Center 관제 API
+// @version 0.1
+// @description Robot Center 관제 서버 API입니다. Robot, Operator, Recorder, System 역할별 API를 제공합니다.
+// @BasePath /
+// @securityDefinitions.apikey RobotBearerAuth
+// @in header
+// @name Authorization
+// @description Robot API에서 사용하는 Bearer robotToken입니다.
 func main() {
 	healthcheck := flag.Bool("healthcheck", false, "run an HTTP healthcheck against the local app-server")
 	flag.Parse()

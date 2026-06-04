@@ -14,6 +14,15 @@ import (
 	"time"
 )
 
+// @Summary 임무 live status 조회
+// @Description 임무에 배정된 로봇의 연결, 스트림, 녹화 상태를 반환합니다.
+// @Tags Operator API
+// @Produce json
+// @Param missionCode path string true "임무 코드"
+// @Success 200 {object} dto.MissionLiveStatusResponse
+// @Failure 404 {object} dto.ErrorResponse
+// @Failure 500 {object} dto.ErrorResponse
+// @Router /api/v1/operator/missions/{missionCode}/live-status [get]
 func (s *Server) handleMissionLiveStatus(w http.ResponseWriter, r *http.Request) {
 	missionCode := strings.TrimSpace(r.PathValue("missionCode"))
 	missions, err := s.services.Missions.ListMissions(r.Context())

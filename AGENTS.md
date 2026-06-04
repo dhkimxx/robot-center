@@ -66,6 +66,15 @@ Go 서버 작업 시:
 - PostgreSQL 작업은 schema/migration과 store 구현을 함께 확인한다.
 - WebRTC signaling, recorder, storage 흐름은 실제 실행 상태로 검증한다.
 
+Swagger 문서 작업 시:
+
+- API endpoint, request/response DTO, 인증 방식, status code, query/path/body parameter를 바꾸면 handler의 Swagger 주석을 함께 갱신한다.
+- Swagger 설명은 한국어로 작성하고, Robot/Operator/Recorder/System 역할 기준으로 책임을 명확히 분리한다.
+- `/swagger/doc.json`을 canonical 문서로 보고, `/swagger/openapi.json`은 동일 생성 문서의 호환 alias로만 취급한다.
+- 수동 OpenAPI builder를 다시 만들지 않는다. 문서 소스는 handler 주석과 generated `apps/server/internal/api/swaggerdocs`로 단일화한다.
+- Swagger 주석 수정 후 `./scripts/generate-server-swagger.sh`를 실행해 generated docs를 갱신한다.
+- 완료 전 `./scripts/generate-server-swagger.sh --check` 또는 `GOTOOLCHAIN=go1.24.4 go test ./internal/api -run TestGeneratedSwaggerDocsAreFresh -count=1`로 생성 문서 최신성을 확인한다.
+
 ## 2. 프론트엔드 작업 규칙
 
 프론트엔드는 실제 관제 도구처럼 동작해야 한다.
@@ -131,6 +140,7 @@ UI 원칙:
 ```text
 1. Server/API
    verify: health endpoint와 system status가 OK인지 확인
+   verify: API 계약 변경 시 Swagger 주석과 generated docs가 최신인지 확인
 
 2. Web UI
    verify: http://127.0.0.1:18080 접속 가능

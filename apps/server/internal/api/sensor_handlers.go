@@ -13,6 +13,15 @@ import (
 	"time"
 )
 
+// @Summary 센서 descriptor 조회
+// @Description missionId, robotCode 조건으로 센서 descriptor 목록을 조회합니다.
+// @Tags Operator API
+// @Produce json
+// @Param missionId query string false "mission ID 또는 missionCode"
+// @Param robotCode query string false "로봇 코드"
+// @Success 200 {object} dto.SensorDescriptorsResponse
+// @Failure 500 {object} dto.ErrorResponse
+// @Router /api/v1/operator/sensor-descriptors [get]
 func (s *Server) handleListSensorDescriptors(w http.ResponseWriter, r *http.Request) {
 	missionID := strings.TrimSpace(r.URL.Query().Get("missionId"))
 	robotCode := strings.TrimSpace(r.URL.Query().Get("robotCode"))
@@ -24,6 +33,17 @@ func (s *Server) handleListSensorDescriptors(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusOK, dto.SensorDescriptorsPayload(descriptors))
 }
 
+// @Summary 센서 sample 조회
+// @Description missionId, robotCode, sensorId 조건과 limit으로 센서 sample 목록을 조회합니다.
+// @Tags Operator API
+// @Produce json
+// @Param missionId query string false "mission ID 또는 missionCode"
+// @Param robotCode query string false "로봇 코드"
+// @Param sensorId query string false "센서 ID"
+// @Param limit query int false "조회 개수 제한"
+// @Success 200 {object} dto.SensorSamplesResponse
+// @Failure 500 {object} dto.ErrorResponse
+// @Router /api/v1/operator/sensor-samples [get]
 func (s *Server) handleListSensorSamples(w http.ResponseWriter, r *http.Request) {
 	missionID := strings.TrimSpace(r.URL.Query().Get("missionId"))
 	robotCode := strings.TrimSpace(r.URL.Query().Get("robotCode"))
@@ -37,6 +57,15 @@ func (s *Server) handleListSensorSamples(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, dto.SensorSamplesPayload(samples))
 }
 
+// @Summary 센서 latest 조회
+// @Description missionId, robotCode 조건으로 센서별 최신 sample을 조회합니다.
+// @Tags Operator API
+// @Produce json
+// @Param missionId query string false "mission ID 또는 missionCode"
+// @Param robotCode query string false "로봇 코드"
+// @Success 200 {object} dto.SensorLatestListResponse
+// @Failure 500 {object} dto.ErrorResponse
+// @Router /api/v1/operator/sensor-latest [get]
 func (s *Server) handleListSensorLatest(w http.ResponseWriter, r *http.Request) {
 	missionID := strings.TrimSpace(r.URL.Query().Get("missionId"))
 	robotCode := strings.TrimSpace(r.URL.Query().Get("robotCode"))
@@ -48,6 +77,16 @@ func (s *Server) handleListSensorLatest(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, dto.SensorLatestList(missionID, robotCode, latest))
 }
 
+// @Summary 센서 sample 저장
+// @Description recorder-worker가 DataChannel sensor envelope를 저장합니다.
+// @Tags Recorder API
+// @Accept json
+// @Produce json
+// @Param request body dto.SensorEnvelopeRequest true "센서 envelope"
+// @Success 201 {object} dto.SensorSamplesResponse
+// @Failure 400 {object} dto.ErrorResponse
+// @Failure 500 {object} dto.ErrorResponse
+// @Router /api/v1/recorder/sensor-samples [post]
 func (s *Server) handleCreateSensorSamples(w http.ResponseWriter, r *http.Request) {
 	envelope, err := decodeSensorEnvelope(r)
 	if err != nil {
