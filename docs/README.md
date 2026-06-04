@@ -11,6 +11,9 @@ history:
 - "2026-06-04 danya.kim <danya.kim@thundersoft.com>: define docs directory structure and priority"
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: reorganize docs directories by document purpose'
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: remove imported document category after distilling useful content'
+- '2026-06-04 danya.kim <danya.kim@thundersoft.com>: add feature code catalog to docs structure examples'
+- '2026-06-04 danya.kim <danya.kim@thundersoft.com>: describe features as feature-code based documents'
+- '2026-06-04 danya.kim <danya.kim@thundersoft.com>: document English ASCII feature filename examples'
 ---
 
 # Docs
@@ -42,17 +45,16 @@ stable > guides > plans > features
 
 ### `features/`
 
-앞으로 만들 기능의 요구사항 또는 후보를 정리한다.
+앞으로 만들 기능의 요구사항 또는 후보를 기능 코드 단위로 정리한다.
 
-여기 문서는 구현 기준이 아니라 backlog와 기능 설계 초안이다. 기능이 구현되고 계약이 확정되면 관련 stable 문서를 갱신한다.
+여기 문서는 구현 기준이 아니라 backlog와 기능 설계 초안이다. 파일명은 원본 XLSX의 기능 코드와 기능명을 포함한다. 기능이 구현되고 계약이 확정되면 관련 stable 문서를 갱신한다.
 
 예:
 
-- scenarios
-- AI Agent
-- mission planning
-- sensor/event/spatial
-- recording/replay 확장
+- `d-srv-03-video-sensor-integrated-dashboard.md`
+- `d-srv-07-video-recording-replay-vms.md`
+- `f-llm-03-situation-awareness-summary.md`
+- `i-com-02-video-streaming-optimization.md`
 
 ### `plans/`
 
