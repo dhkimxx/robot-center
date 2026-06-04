@@ -17,6 +17,7 @@ type LiveStatusInput struct {
 	Mission         domain.Mission
 	Robots          []domain.Robot
 	RecordingChunks []domain.RecordingChunk
+	StreamSessions  []domain.RobotStreamSession
 	ObservedRooms   []sfu.ObservedRoomSummary
 	Recorder        RecorderRuntimeSnapshot
 	Now             time.Time
@@ -55,6 +56,7 @@ func (s *LiveStatusService) BuildMissionLiveStatus(input LiveStatusInput) domain
 
 	robotsByCode := indexRobotsByCode(input.Robots)
 	latestChunksByRobot := latestRecordingChunksByRobot(input.RecordingChunks, input.Mission.MissionCode)
+	streamSessionsByRobot := streamSessionsForMission(input.StreamSessions, input.Mission.MissionCode)
 	observedPublishersByRobot := observedPublishersForRoom(input.ObservedRooms, input.Mission.MissionCode)
 	recorderRobotsByCode := recorderRuntimeForRoom(input.Recorder, input.Mission.MissionCode)
 
@@ -68,6 +70,7 @@ func (s *LiveStatusService) BuildMissionLiveStatus(input LiveStatusInput) domain
 	for _, robotCode := range robotCodes {
 		robot := robotsByCode[robotCode]
 		streamStatus := buildLiveStreamStatus(input.Mission, observedPublishersByRobot[robotCode], now, freshnessWindow)
+		streamStatus = applyLiveStreamSessionHistory(streamStatus, streamSessionsByRobot[robotCode])
 		recordingStatus := buildLiveRecordingStatus(streamStatus, recorderRobotsByCode[robotCode], latestChunksByRobot[robotCode], input.Recorder.Available, now, freshnessWindow)
 		status.Robots = append(status.Robots, domain.RobotLiveStatus{
 			RobotCode:   robotCode,
@@ -150,6 +153,7 @@ func buildLiveStreamStatus(mission domain.Mission, publisher *sfu.ObservedPublis
 	}
 	status.TrackCount = publisher.TrackCount
 	status.DataChannelCount = publisher.DataChannelCount
+	status.StartedAt = cloneDomainTimePointer(publisher.FirstTrackAt)
 	status.LastTrackAt = cloneDomainTimePointer(publisher.LastTrackAt)
 	status.LastDataAt = cloneDomainTimePointer(publisher.LastDataAt)
 	if isInactiveObservedICEState(publisher.ICEState) {
@@ -232,6 +236,25 @@ func latestRecordingChunksByRobot(chunks []domain.RecordingChunk, missionCode st
 	return output
 }
 
+func streamSessionsForMission(sessions []domain.RobotStreamSession, missionCode string) map[string][]domain.RobotStreamSession {
+	output := map[string][]domain.RobotStreamSession{}
+	for _, session := range sessions {
+		if session.MissionCode != missionCode || strings.TrimSpace(session.RobotCode) == "" {
+			continue
+		}
+		output[session.RobotCode] = append(output[session.RobotCode], session)
+	}
+	for robotCode := range output {
+		sort.Slice(output[robotCode], func(i, j int) bool {
+			if output[robotCode][i].StartedAt.Equal(output[robotCode][j].StartedAt) {
+				return output[robotCode][i].CreatedAt.After(output[robotCode][j].CreatedAt)
+			}
+			return output[robotCode][i].StartedAt.After(output[robotCode][j].StartedAt)
+		})
+	}
+	return output
+}
+
 func observedPublishersForRoom(rooms []sfu.ObservedRoomSummary, missionCode string) map[string]*sfu.ObservedPublisherSummary {
 	output := map[string]*sfu.ObservedPublisherSummary{}
 	for _, room := range rooms {
@@ -260,6 +283,25 @@ func recorderRuntimeForRoom(snapshot RecorderRuntimeSnapshot, missionCode string
 		return output
 	}
 	return output
+}
+
+func applyLiveStreamSessionHistory(status domain.LiveStreamStatus, sessions []domain.RobotStreamSession) domain.LiveStreamStatus {
+	if len(sessions) == 0 {
+		return status
+	}
+	status.ReconnectCount = len(sessions) - 1
+	for _, session := range sessions {
+		if status.LastMediaAt == nil && session.LastMediaAt != nil {
+			status.LastMediaAt = cloneDomainTimePointer(session.LastMediaAt)
+		}
+		if status.PreviousEndedAt == nil && session.EndedAt != nil {
+			status.PreviousEndedAt = cloneDomainTimePointer(session.EndedAt)
+		}
+		if status.LastMediaAt != nil && status.PreviousEndedAt != nil {
+			break
+		}
+	}
+	return status
 }
 
 func isInactiveObservedICEState(state string) bool {

@@ -27,6 +27,7 @@ func (s *Store) runAutoMigrations(ctx context.Context) error {
 		&model.RobotSessionModel{},
 		&model.BrowserSessionModel{},
 		&model.RecorderSessionModel{},
+		&model.RobotStreamSessionModel{},
 		&model.SensorDescriptorModel{},
 		&model.SensorSampleModel{},
 		&model.SensorLatestSampleModel{},
@@ -57,6 +58,11 @@ func (s *Store) applyPostAutoMigrateDDL(db *gorm.DB) error {
 			WHERE is_active = true`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS recording_sessions_open_unique
 			ON recording_sessions(mission_id, robot_id)
+			WHERE ended_at IS NULL`,
+		`CREATE INDEX IF NOT EXISTS robot_stream_sessions_mission_robot_started_idx
+			ON robot_stream_sessions(mission_id, robot_id, started_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS robot_stream_sessions_open_idx
+			ON robot_stream_sessions(mission_id, robot_id)
 			WHERE ended_at IS NULL`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS sensor_descriptors_id_mission_robot_sensor_unique
 			ON sensor_descriptors(id, mission_id, robot_id, sensor_id)`,
@@ -271,6 +277,7 @@ func baseModelTableNames() []string {
 		model.RobotSessionModel{}.TableName(),
 		model.BrowserSessionModel{}.TableName(),
 		model.RecorderSessionModel{}.TableName(),
+		model.RobotStreamSessionModel{}.TableName(),
 		model.SensorDescriptorModel{}.TableName(),
 		model.SensorSampleModel{}.TableName(),
 		model.SensorLatestSampleModel{}.TableName(),
@@ -420,6 +427,8 @@ func foreignKeyConstraintStatements() []string {
 		{Name: "browser_sessions_mission_fk", Table: "browser_sessions", Columns: "mission_id", ReferenceTable: "missions", ReferenceColumn: "id", OnDelete: "CASCADE"},
 		{Name: "browser_sessions_user_fk", Table: "browser_sessions", Columns: "user_id", ReferenceTable: "users", ReferenceColumn: "id", OnDelete: "SET NULL"},
 		{Name: "recorder_sessions_mission_fk", Table: "recorder_sessions", Columns: "mission_id", ReferenceTable: "missions", ReferenceColumn: "id", OnDelete: "CASCADE"},
+		{Name: "robot_stream_sessions_mission_fk", Table: "robot_stream_sessions", Columns: "mission_id", ReferenceTable: "missions", ReferenceColumn: "id", OnDelete: "CASCADE"},
+		{Name: "robot_stream_sessions_robot_fk", Table: "robot_stream_sessions", Columns: "robot_id", ReferenceTable: "robots", ReferenceColumn: "id"},
 		{Name: "sensor_descriptors_mission_fk", Table: "sensor_descriptors", Columns: "mission_id", ReferenceTable: "missions", ReferenceColumn: "id", OnDelete: "CASCADE"},
 		{Name: "sensor_descriptors_robot_fk", Table: "sensor_descriptors", Columns: "robot_id", ReferenceTable: "robots", ReferenceColumn: "id"},
 		{Name: "sensor_samples_descriptor_identity_fk", Table: "sensor_samples", Columns: "descriptor_id, mission_id, robot_id, sensor_id", ReferenceTable: "sensor_descriptors", ReferenceColumn: "id, mission_id, robot_id, sensor_id", OnDelete: "CASCADE"},

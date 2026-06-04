@@ -33,8 +33,12 @@ type LiveStreamStatusResponse struct {
 	RoomID           string     `json:"roomId"`
 	TrackCount       int        `json:"trackCount"`
 	DataChannelCount int        `json:"dataChannelCount"`
+	StartedAt        *time.Time `json:"startedAt,omitempty"`
 	LastTrackAt      *time.Time `json:"lastTrackAt,omitempty"`
 	LastDataAt       *time.Time `json:"lastDataAt,omitempty"`
+	LastMediaAt      *time.Time `json:"lastMediaAt,omitempty"`
+	PreviousEndedAt  *time.Time `json:"previousEndedAt,omitempty"`
+	ReconnectCount   int        `json:"reconnectCount"`
 	Reason           string     `json:"reason,omitempty"`
 }
 

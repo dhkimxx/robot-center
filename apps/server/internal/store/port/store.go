@@ -5,5 +5,6 @@ type Store interface {
 	MissionStore
 	SensorStore
 	RecordingStore
+	StreamSessionStore
 	StorageAdminStore
 }

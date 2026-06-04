@@ -80,6 +80,7 @@ func TestHubObservedRoomsSummarizePublisherActivity(t *testing.T) {
 	currentRoom := hub.ensureRoomLocked(roomID)
 	publisher := newPublisherSession("robot-peer", "robot-001", nil)
 	publisher.iceState = "connected"
+	publisher.firstTrackAt = &observedAt
 	publisher.lastTrackAt = &observedAt
 	publisher.lastDataAt = &observedAt
 	publisher.updatedAt = observedAt
@@ -114,6 +115,9 @@ func TestHubObservedRoomsSummarizePublisherActivity(t *testing.T) {
 	}
 	if publisherSummary.SubscriberCount != 2 {
 		t.Fatalf("expected operator and recorder subscriber count, got %#v", publisherSummary)
+	}
+	if publisherSummary.FirstTrackAt == nil || !publisherSummary.FirstTrackAt.Equal(observedAt) {
+		t.Fatalf("expected first track time to be preserved, got %#v", publisherSummary.FirstTrackAt)
 	}
 }
 
@@ -157,6 +161,67 @@ func TestHubObservedRoomsCountCanonicalTracksOnly(t *testing.T) {
 	}
 }
 
+func TestHubEmitsPublisherMediaActivityEvents(t *testing.T) {
+	eventChannel := make(chan PublisherEvent, 4)
+	hub := NewHub(Config{
+		OnPublisherEvent: func(event PublisherEvent) {
+			eventChannel <- event
+		},
+	})
+	roomID := "mission-001"
+	robotCode := "robot-001"
+	trackKey := publishedTrackKey(robotCode, StreamRoleTrackVideo1)
+	observedAt := time.Date(2026, 6, 4, 4, 30, 0, 0, time.UTC)
+
+	hub.mu.Lock()
+	currentRoom := hub.ensureRoomLocked(roomID)
+	publisher := newPublisherSession("robot-peer", robotCode, nil)
+	publisher.publishedTracks[trackKey] = &publishedTrack{
+		key:       trackKey,
+		robotCode: robotCode,
+		label:     StreamRoleTrackVideo1,
+	}
+	currentRoom.publishers[robotCode] = publisher
+	hub.mu.Unlock()
+
+	hub.markPublisherTrackActivity(roomID, trackKey, observedAt)
+	startedEvent := readPublisherEvent(t, eventChannel)
+	if startedEvent.Type != PublisherEventMediaStarted || startedEvent.PublisherPeerID != "robot-peer" {
+		t.Fatalf("unexpected started event: %#v", startedEvent)
+	}
+
+	hub.markPublisherTrackActivity(roomID, trackKey, observedAt.Add(time.Second))
+	assertNoPublisherEvent(t, eventChannel)
+
+	hub.markPublisherTrackActivity(roomID, trackKey, observedAt.Add(11*time.Second))
+	activeEvent := readPublisherEvent(t, eventChannel)
+	if activeEvent.Type != PublisherEventMediaActive {
+		t.Fatalf("unexpected active event: %#v", activeEvent)
+	}
+}
+
+func TestHubEmitsPublisherEndedEventWhenPublisherCloses(t *testing.T) {
+	eventChannel := make(chan PublisherEvent, 2)
+	hub := NewHub(Config{
+		OnPublisherEvent: func(event PublisherEvent) {
+			eventChannel <- event
+		},
+	})
+	roomID := "mission-001"
+	robotCode := "robot-001"
+
+	hub.mu.Lock()
+	currentRoom := hub.ensureRoomLocked(roomID)
+	currentRoom.publishers[robotCode] = newPublisherSession("robot-peer", robotCode, nil)
+	hub.closePublisherForPeerLocked(currentRoom, "robot-peer", "peer_left")
+	hub.mu.Unlock()
+
+	event := readPublisherEvent(t, eventChannel)
+	if event.Type != PublisherEventEnded || event.Reason != "peer_left" || event.RobotCode != robotCode {
+		t.Fatalf("unexpected ended event: %#v", event)
+	}
+}
+
 func TestHubPublishedTrackKeysAreRobotScoped(t *testing.T) {
 	rgbA := publishedTrackKey("robot-001", StreamRoleTrackVideo1)
 	rgbB := publishedTrackKey("robot-002", StreamRoleTrackVideo1)
@@ -168,5 +233,25 @@ func TestHubPublishedTrackKeysAreRobotScoped(t *testing.T) {
 	}
 	if localStreamID("robot-001") != "robot-robot-001" {
 		t.Fatalf("expected robot-scoped local stream id")
+	}
+}
+
+func readPublisherEvent(t *testing.T, eventChannel <-chan PublisherEvent) PublisherEvent {
+	t.Helper()
+	select {
+	case event := <-eventChannel:
+		return event
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for publisher event")
+		return PublisherEvent{}
+	}
+}
+
+func assertNoPublisherEvent(t *testing.T, eventChannel <-chan PublisherEvent) {
+	t.Helper()
+	select {
+	case event := <-eventChannel:
+		t.Fatalf("unexpected publisher event: %#v", event)
+	case <-time.After(50 * time.Millisecond):
 	}
 }

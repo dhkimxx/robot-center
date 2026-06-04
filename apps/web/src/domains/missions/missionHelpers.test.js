@@ -3,7 +3,9 @@ import {
   createMissionRobotTargets,
   getBusyRobotReasonForMissionCreate,
   getMissionRobotDetails,
-  groupMissionsByLifecycle
+  groupMissionsByLifecycle,
+  makeLiveRecordingTimingLabel,
+  makeLiveStreamTimingLabel
 } from "./missionHelpers.js";
 
 describe("missionHelpers", () => {
@@ -114,5 +116,39 @@ describe("missionHelpers", () => {
 
     expect(groups.openMissions.map((mission) => mission.missionCode)).toEqual(["mission-active", "mission-ready"]);
     expect(groups.closedMissions.map((mission) => mission.missionCode)).toEqual(["mission-ended"]);
+  });
+
+  it("summarizes live stream timing for current and interrupted publishers", () => {
+    const now = new Date("2026-06-04T04:35:20Z").getTime();
+
+    expect(makeLiveStreamTimingLabel({
+      state: "streaming",
+      startedAt: "2026-06-04T04:35:00Z",
+      lastTrackAt: "2026-06-04T04:35:15Z",
+      reconnectCount: 1
+    }, now)).toContain("최근 수신 5초 전");
+    expect(makeLiveStreamTimingLabel({
+      state: "streaming",
+      startedAt: "2026-06-04T04:35:00Z",
+      lastTrackAt: "2026-06-04T04:35:15Z",
+      reconnectCount: 1
+    }, now)).toContain("재접속 1회");
+
+    expect(makeLiveStreamTimingLabel({
+      state: "waiting",
+      lastMediaAt: "2026-06-04T04:34:00Z"
+    }, now)).toContain("송출 끊김");
+  });
+
+  it("summarizes the active recording chunk window", () => {
+    expect(makeLiveRecordingTimingLabel({
+      state: "recording",
+      latestChunk: {
+        chunkIndex: 0,
+        startedAt: "2026-06-04T04:30:00Z",
+        endedAt: "2026-06-04T04:40:00Z",
+        status: "recording"
+      }
+    })).toContain("녹화 chunk #0");
   });
 });

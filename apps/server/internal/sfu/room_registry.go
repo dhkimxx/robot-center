@@ -108,6 +108,7 @@ func observedPublisherSummary(currentRoom *room, publisher *publisherSession) Ob
 		DataChannels:      dataChannels,
 		DataChannelStates: dataChannelStates,
 		JoinedAt:          publisher.joinedAt,
+		FirstTrackAt:      cloneTimePointer(publisher.firstTrackAt),
 		LastTrackAt:       cloneTimePointer(publisher.lastTrackAt),
 		LastDataAt:        cloneTimePointer(publisher.lastDataAt),
 		UpdatedAt:         publisher.updatedAt,
@@ -157,7 +158,7 @@ func (h *Hub) registerPeer(joinedPeer *peer) ([]*peer, []*peer) {
 	for _, existingPeer := range currentRoom.peers {
 		if shouldReplacePeer(existingPeer, joinedPeer) {
 			delete(currentRoom.peers, existingPeer.id)
-			h.closePublisherForPeerLocked(currentRoom, existingPeer.id)
+			h.closePublisherForPeerLocked(currentRoom, existingPeer.id, "peer_replaced")
 			replacedPeers = append(replacedPeers, existingPeer)
 			continue
 		}
@@ -283,14 +284,14 @@ func (h *Hub) unregisterPeer(leavingPeer *peer) {
 	if currentRoom != nil {
 		delete(currentRoom.peers, leavingPeer.id)
 		if leavingPeer.role == "robot" {
-			h.closePublisherForPeerLocked(currentRoom, leavingPeer.id)
+			h.closePublisherForPeerLocked(currentRoom, leavingPeer.id, "peer_left")
 		}
 		if session := currentRoom.subscribers[leavingPeer.id]; session != nil {
 			closeSubscriberSession(session)
 			delete(currentRoom.subscribers, leavingPeer.id)
 		}
 		if len(currentRoom.peers) == 0 {
-			h.closePublisherConnectionsLocked(currentRoom)
+			h.closePublisherConnectionsLocked(currentRoom, "room_empty")
 			h.closeSubscriberConnectionsLocked(currentRoom)
 			delete(h.rooms, leavingPeer.roomID)
 		}

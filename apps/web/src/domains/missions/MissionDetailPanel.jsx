@@ -1,4 +1,5 @@
 import {
+  formatDateTimeFull,
   makeStatusLabel,
   missionTypeLabel
 } from "../../utils/formatters.js";
@@ -8,7 +9,12 @@ import DefinitionList from "../../components/ui/DefinitionList.jsx";
 import ListRow from "../../components/ui/ListRow.jsx";
 import StatusBadge from "../../components/ui/StatusBadge.jsx";
 import Surface from "../../components/ui/Surface.jsx";
-import { formatMissionRobotCount, isClosedMission } from "./missionHelpers.js";
+import {
+  formatMissionRobotCount,
+  isClosedMission,
+  makeLiveRecordingTimingLabel,
+  makeLiveStreamTimingLabel
+} from "./missionHelpers.js";
 
 export function MissionDetailPanel({
   mission,
@@ -23,6 +29,9 @@ export function MissionDetailPanel({
     { label: "시나리오", value: missionTypeLabel(mission.missionType) },
     { label: "상태", value: makeStatusLabel(mission.status) },
     { label: "배정 로봇", value: formatMissionRobotCount(robotDetails) },
+    { label: "생성 시간", value: formatDateTimeFull(mission.createdAt) },
+    { label: "시작 시간", value: mission.startedAt ? formatDateTimeFull(mission.startedAt) : "시작 전" },
+    { label: "종료 시간", value: mission.endedAt ? formatDateTimeFull(mission.endedAt) : "-" },
     { className: "min-[981px]:col-span-3", label: "현장 메모", value: mission.siteNote || "-", wrap: true }
   ];
 
@@ -99,8 +108,8 @@ export function MissionDetailPanel({
               {robotDetails.map((robot) => (
                 <ListRow
                   as="div"
-                  description={robot.robotCode}
                   key={robot.robotCode}
+                  meta={robot.robotCode}
                   right={(
                     <StatusBadge size="xs" tone={robot.isStreaming ? "success" : isClosed ? "neutral" : "warning"}>
                       {robot.liveLabel}
@@ -108,6 +117,12 @@ export function MissionDetailPanel({
                   )}
                   title={robot.displayName}
                 >
+                  <span className="truncate text-xs font-semibold text-slate-500">
+                    {makeLiveStreamTimingLabel(robot.liveStatus?.stream)}
+                  </span>
+                  <span className="truncate text-xs font-semibold text-slate-600">
+                    {makeLiveRecordingTimingLabel(robot.liveStatus?.recording)}
+                  </span>
                 </ListRow>
               ))}
             </div>

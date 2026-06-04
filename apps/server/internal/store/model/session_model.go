@@ -49,3 +49,20 @@ type RecorderSessionModel struct {
 func (RecorderSessionModel) TableName() string {
 	return "recorder_sessions"
 }
+
+type RobotStreamSessionModel struct {
+	BaseModel
+	MissionID       string          `gorm:"column:mission_id;type:uuid;not null;index"`
+	RobotID         string          `gorm:"column:robot_id;type:uuid;not null;index"`
+	PublisherPeerID string          `gorm:"column:publisher_peer_id;not null;uniqueIndex"`
+	State           string          `gorm:"column:state;not null;default:active;index"`
+	StartedAt       time.Time       `gorm:"column:started_at;not null;index"`
+	LastMediaAt     *time.Time      `gorm:"column:last_media_at;index"`
+	EndedAt         *time.Time      `gorm:"column:ended_at;index"`
+	EndReason       *string         `gorm:"column:end_reason"`
+	Metadata        json.RawMessage `gorm:"column:metadata;type:jsonb;not null;default:'{}'::jsonb"`
+}
+
+func (RobotStreamSessionModel) TableName() string {
+	return "robot_stream_sessions"
+}

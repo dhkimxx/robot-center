@@ -66,6 +66,7 @@ func TestLiveStatusRecordingIdleWhenChunkRecordingWithoutRecorderRuntime(t *test
 
 func TestLiveStatusRecordingActiveWithFreshRecorderRuntime(t *testing.T) {
 	now := time.Date(2026, 5, 26, 8, 50, 0, 0, time.UTC)
+	firstTrackAt := now.Add(-10 * time.Second)
 	lastTrackAt := now.Add(-2 * time.Second)
 	service := LiveStatusService{}
 
@@ -78,11 +79,12 @@ func TestLiveStatusRecordingActiveWithFreshRecorderRuntime(t *testing.T) {
 		ObservedRooms: []sfu.ObservedRoomSummary{{
 			RoomID: "mission-007",
 			Publishers: []sfu.ObservedPublisherSummary{{
-				RobotCode:   "robot-001",
-				ICEState:    "connected",
-				TrackCount:  2,
-				LastTrackAt: &lastTrackAt,
-				UpdatedAt:   now,
+				RobotCode:    "robot-001",
+				ICEState:     "connected",
+				TrackCount:   2,
+				FirstTrackAt: &firstTrackAt,
+				LastTrackAt:  &lastTrackAt,
+				UpdatedAt:    now,
 			}},
 		}},
 		Recorder: RecorderRuntimeSnapshot{
@@ -102,6 +104,9 @@ func TestLiveStatusRecordingActiveWithFreshRecorderRuntime(t *testing.T) {
 
 	if got := status.Robots[0].Recording.State; got != "recording" {
 		t.Fatalf("recording state = %q, want recording", got)
+	}
+	if got := status.Robots[0].Stream.StartedAt; got == nil || !got.Equal(firstTrackAt) {
+		t.Fatalf("stream startedAt = %#v, want %s", got, firstTrackAt)
 	}
 }
 
@@ -135,6 +140,55 @@ func TestLiveStatusSeparatesRobotStreamState(t *testing.T) {
 	}
 	if got := status.Robots[1].Stream.State; got != "waiting" {
 		t.Fatalf("robot-002 stream = %q, want waiting", got)
+	}
+}
+
+func TestLiveStatusAppliesStreamSessionHistoryWithoutOverridingRuntimeState(t *testing.T) {
+	now := time.Date(2026, 6, 4, 4, 35, 20, 0, time.UTC)
+	lastMediaAt := now.Add(-time.Minute)
+	previousEndedAt := now.Add(-2 * time.Minute)
+	service := LiveStatusService{}
+
+	status := service.BuildMissionLiveStatus(LiveStatusInput{
+		Mission: domain.Mission{
+			MissionCode: "mission-007",
+			Status:      "active",
+			RobotCodes:  []string{"robot-001"},
+		},
+		StreamSessions: []domain.RobotStreamSession{
+			{
+				MissionCode: "mission-007",
+				RobotCode:   "robot-001",
+				State:       "ended",
+				StartedAt:   now.Add(-10 * time.Minute),
+				LastMediaAt: &lastMediaAt,
+				EndedAt:     &previousEndedAt,
+				CreatedAt:   now.Add(-10 * time.Minute),
+			},
+			{
+				MissionCode: "mission-007",
+				RobotCode:   "robot-001",
+				State:       "ended",
+				StartedAt:   now.Add(-20 * time.Minute),
+				CreatedAt:   now.Add(-20 * time.Minute),
+			},
+		},
+		Now:             now,
+		FreshnessWindow: 30 * time.Second,
+	})
+
+	stream := status.Robots[0].Stream
+	if stream.State != "waiting" {
+		t.Fatalf("stream state = %q, want waiting", stream.State)
+	}
+	if stream.LastMediaAt == nil || !stream.LastMediaAt.Equal(lastMediaAt) {
+		t.Fatalf("lastMediaAt = %#v, want %s", stream.LastMediaAt, lastMediaAt)
+	}
+	if stream.PreviousEndedAt == nil || !stream.PreviousEndedAt.Equal(previousEndedAt) {
+		t.Fatalf("previousEndedAt = %#v, want %s", stream.PreviousEndedAt, previousEndedAt)
+	}
+	if stream.ReconnectCount != 1 {
+		t.Fatalf("reconnectCount = %d, want 1", stream.ReconnectCount)
 	}
 }
 

@@ -36,10 +36,16 @@ func (s *Server) handleMissionLiveStatus(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	streamSessions, err := s.services.Streams.ListRobotStreamSessionsForMission(r.Context(), mission.MissionCode)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
 	liveStatus := s.services.Live.BuildMissionLiveStatus(service.LiveStatusInput{
 		Mission:         mission,
 		Robots:          robots,
 		RecordingChunks: recordings,
+		StreamSessions:  streamSessions,
 		ObservedRooms:   s.sfuHub.ObservedRooms(),
 		Recorder:        s.fetchRecorderRuntimeSnapshot(r.Context()),
 		Now:             time.Now().UTC(),

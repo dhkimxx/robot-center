@@ -11,6 +11,7 @@ type Services struct {
 	Missions  *MissionService
 	Sensors   *SensorService
 	Recording *RecordingService
+	Streams   *StreamSessionService
 	Live      *LiveStatusService
 	Storage   *ObjectStorageAdminService
 
@@ -24,6 +25,7 @@ func NewServices(repository store.Store) *Services {
 		Missions:          &MissionService{repository: repository, recordingRepository: repository, transactionRunner: transactionRunner},
 		Sensors:           &SensorService{repository: repository},
 		Recording:         &RecordingService{repository: repository, transactionRunner: transactionRunner},
+		Streams:           &StreamSessionService{repository: repository},
 		Live:              &LiveStatusService{},
 		transactionRunner: transactionRunner,
 	}

@@ -1,3 +1,5 @@
+import { formatDateTime, formatElapsedTime, makeStatusLabel } from "../../utils/formatters.js";
+
 export function createInitialMissionForm() {
   return {
     name: "P0 통합 시연",
@@ -88,6 +90,48 @@ export function makeMissionRobotLiveLabel(mission, isStreaming) {
     return "송출 대기";
   }
   return "배정 대기";
+}
+
+export function getLiveStreamLastReceivedAt(stream) {
+  return stream?.lastTrackAt ?? stream?.lastDataAt ?? stream?.lastMediaAt ?? "";
+}
+
+export function makeLiveStreamTimingLabel(stream, now = Date.now()) {
+  const lastReceivedAt = getLiveStreamLastReceivedAt(stream);
+  const reconnectLabel = stream?.reconnectCount > 0 ? `재접속 ${stream.reconnectCount}회` : "";
+  if (stream?.state === "streaming") {
+    const parts = [];
+    if (stream.startedAt) {
+      parts.push(`송출 시작 ${formatDateTime(stream.startedAt)}`);
+    }
+    if (lastReceivedAt) {
+      parts.push(`최근 수신 ${formatElapsedTime(lastReceivedAt, now)}`);
+    }
+    if (reconnectLabel) {
+      parts.push(reconnectLabel);
+    }
+    return parts.join(" · ") || "송출 중";
+  }
+  if (lastReceivedAt) {
+    return ["송출 끊김", `마지막 수신 ${formatDateTime(lastReceivedAt)}`, reconnectLabel].filter(Boolean).join(" · ");
+  }
+  if (stream?.previousEndedAt) {
+    return ["송출 대기", `이전 종료 ${formatDateTime(stream.previousEndedAt)}`, reconnectLabel].filter(Boolean).join(" · ");
+  }
+  if (stream?.state === "ended") {
+    return "임무 종료";
+  }
+  return "송출 대기";
+}
+
+export function makeLiveRecordingTimingLabel(recording) {
+  const chunk = recording?.latestChunk;
+  if (!chunk) {
+    return recording?.state === "recording" ? "녹화 중" : "녹화 대기";
+  }
+  const chunkLabel = chunk.chunkIndex || chunk.chunkIndex === 0 ? `chunk #${chunk.chunkIndex}` : "chunk";
+  const rangeLabel = `${formatDateTime(chunk.startedAt)} - ${formatDateTime(chunk.endedAt)}`;
+  return `녹화 ${chunkLabel} · ${rangeLabel} · ${makeStatusLabel(chunk.status ?? recording.latestChunkStatus ?? recording.state)}`;
 }
 
 function findMissionLiveStatusRobot(liveStatus, robotCode) {

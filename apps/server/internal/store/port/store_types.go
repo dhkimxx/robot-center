@@ -100,3 +100,23 @@ type RecordingUploadMetadata struct {
 	WorkerID  string
 	Attempt   int
 }
+
+type StartRobotStreamSessionInput struct {
+	MissionCode     string
+	RobotCode       string
+	PublisherPeerID string
+	StartedAt       time.Time
+}
+
+type TouchRobotStreamSessionInput struct {
+	PublisherPeerID string
+	ObservedAt      time.Time
+}
+
+type EndRobotStreamSessionInput struct {
+	MissionCode     string
+	RobotCode       string
+	PublisherPeerID string
+	Reason          string
+	EndedAt         time.Time
+}

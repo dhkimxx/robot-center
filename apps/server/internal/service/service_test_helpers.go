@@ -236,6 +236,22 @@ func (s *recordingStoreSpy) ClearSensorData(_ context.Context) (store.SensorData
 	return store.SensorDataClearResult{}, nil
 }
 
+func (s *recordingStoreSpy) StartRobotStreamSession(_ context.Context, _ store.StartRobotStreamSessionInput) (domain.RobotStreamSession, error) {
+	return domain.RobotStreamSession{}, nil
+}
+
+func (s *recordingStoreSpy) TouchRobotStreamSession(_ context.Context, _ store.TouchRobotStreamSessionInput) error {
+	return nil
+}
+
+func (s *recordingStoreSpy) EndRobotStreamSession(_ context.Context, _ store.EndRobotStreamSessionInput) error {
+	return nil
+}
+
+func (s *recordingStoreSpy) ListRobotStreamSessionsForMission(_ context.Context, _ string) ([]domain.RobotStreamSession, error) {
+	return nil, nil
+}
+
 func (s *recordingStoreSpy) ResetObjectStorageMetadata(_ context.Context) (store.StorageMetadataResetResult, error) {
 	return store.StorageMetadataResetResult{}, nil
 }

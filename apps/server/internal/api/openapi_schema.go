@@ -260,11 +260,47 @@ func openAPIMissionLiveStatusResponseSchema() map[string]any {
 			"items": openAPIObjectSchema("로봇 live status입니다.", map[string]any{
 				"robotCode":   openAPIStringProperty("robot code입니다.", "robot-001"),
 				"displayName": openAPIStringProperty("로봇 표시 이름입니다.", "Jetson 01"),
-				"connection":  openAPIGenericObjectProperty("연결 상태입니다."),
-				"stream":      openAPIGenericObjectProperty("스트림 상태입니다."),
-				"recording":   openAPIGenericObjectProperty("녹화 상태입니다."),
+				"connection":  openAPILiveConnectionStatusSchema(),
+				"stream":      openAPILiveStreamStatusSchema(),
+				"recording":   openAPILiveRecordingStatusSchema(),
 			}),
 		},
+	})
+}
+
+func openAPILiveConnectionStatusSchema() map[string]any {
+	return openAPIObjectSchema("로봇 heartbeat 기준 연결 상태입니다.", map[string]any{
+		"state":      openAPIStringProperty("연결 상태입니다.", "online"),
+		"source":     openAPIStringProperty("판정 근거입니다.", "heartbeat"),
+		"lastSeenAt": openAPINullableDateTimeProperty("마지막 heartbeat 시각입니다."),
+	})
+}
+
+func openAPILiveStreamStatusSchema() map[string]any {
+	return openAPIObjectSchema("app-server SFU runtime과 송출 세션 이력을 합성한 스트림 상태입니다.", map[string]any{
+		"state":            openAPIStringProperty("스트림 상태입니다.", "streaming"),
+		"source":           openAPIStringProperty("판정 근거입니다.", "sfu"),
+		"roomId":           openAPIStringProperty("SFU room ID입니다.", "mission-001"),
+		"trackCount":       map[string]any{"type": "integer", "example": 3},
+		"dataChannelCount": map[string]any{"type": "integer", "example": 1},
+		"startedAt":        openAPINullableDateTimeProperty("현재 publisher runtime에서 첫 media packet을 관측한 시각입니다."),
+		"lastTrackAt":      openAPINullableDateTimeProperty("현재 publisher runtime에서 마지막 media track packet을 관측한 시각입니다."),
+		"lastDataAt":       openAPINullableDateTimeProperty("현재 publisher runtime에서 마지막 DataChannel message를 관측한 시각입니다."),
+		"lastMediaAt":      openAPINullableDateTimeProperty("DB에 기록된 마지막 media packet 관측 시각입니다."),
+		"previousEndedAt":  openAPINullableDateTimeProperty("이전 publisher 세션 종료 시각입니다."),
+		"reconnectCount":   map[string]any{"type": "integer", "example": 1},
+		"reason":           openAPIStringProperty("대기 또는 종료 판정 사유입니다.", "no_publisher"),
+	})
+}
+
+func openAPILiveRecordingStatusSchema() map[string]any {
+	return openAPIObjectSchema("recorder-worker runtime과 recording chunk 상태를 합성한 녹화 상태입니다.", map[string]any{
+		"state":             openAPIStringProperty("녹화 상태입니다.", "recording"),
+		"source":            openAPIStringProperty("판정 근거입니다.", "recorder"),
+		"latestChunk":       openAPIGenericObjectProperty("최신 녹화 chunk 요약입니다."),
+		"latestChunkId":     openAPIStringProperty("최신 녹화 chunk ID입니다.", "uuid"),
+		"latestChunkStatus": openAPIStringProperty("최신 녹화 chunk 상태입니다.", "recording"),
+		"reason":            openAPIStringProperty("대기 또는 실패 판정 사유입니다.", "no_active_stream"),
 	})
 }
 

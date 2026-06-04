@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"robot-center/apps/server/internal/config"
 	"robot-center/apps/server/internal/service"
@@ -39,6 +40,13 @@ func NewServerWithStore(cfg config.AppServerConfig, repository store.Store) *Ser
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 			return services.Missions.ValidateActiveMissionRobot(ctx, roomID, robotCode)
+		},
+		OnPublisherEvent: func(event sfu.PublisherEvent) {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			if err := services.Streams.HandlePublisherEvent(ctx, event); err != nil {
+				log.Printf("stream session publisher event failed type=%s room=%s robot=%s peer=%s: %v", event.Type, event.RoomID, event.RobotCode, event.PublisherPeerID, err)
+			}
 		},
 	})
 	return server

@@ -1,6 +1,8 @@
 import Button from "../../../components/ui/Button.jsx";
 import EmptyState from "../../../components/ui/EmptyState.jsx";
 import Surface from "../../../components/ui/Surface.jsx";
+import { formatDateTimeFull } from "../../../utils/formatters.js";
+import { makeLiveRecordingTimingLabel, makeLiveStreamTimingLabel } from "../../missions/missionHelpers.js";
 import {
   connectedLiveConnectionStatuses,
   reconnectableLiveStatuses
@@ -39,6 +41,16 @@ export function MissionControlView({
     && Boolean(selectedTarget)
     && selectedSession.events.length > 0
     && reconnectableLiveStatuses.has(selectedSession.status);
+  const missionConnectionLabel = missionTargets.length > 0
+    ? `연결 ${connectedCount}/${missionTargets.length}대`
+    : "임무에 배정된 로봇이 없습니다.";
+  const missionStartLabel = mission.startedAt ? `시작 ${formatDateTimeFull(mission.startedAt)}` : "시작 전";
+  const selectedStreamTimingLabel = selectedTarget
+    ? makeLiveStreamTimingLabel(selectedTarget.liveStatus?.stream)
+    : "";
+  const selectedRecordingTimingLabel = selectedTarget
+    ? makeLiveRecordingTimingLabel(selectedTarget.liveStatus?.recording)
+    : "";
 
   return (
     <section className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)_336px] items-stretch gap-3.5 max-[1240px]:grid-cols-1">
@@ -48,24 +60,31 @@ export function MissionControlView({
             <div className="min-w-0">
               <strong className="block truncate text-sm font-extrabold text-slate-50">{mission.missionCode}</strong>
               <span className="mt-0.5 block truncate text-xs font-bold text-slate-500">
-                {missionTargets.length > 0 ? `연결 ${connectedCount}/${missionTargets.length}대` : "임무에 배정된 로봇이 없습니다."}
+                {missionTargets.length > 0 ? `${missionStartLabel} · ${missionConnectionLabel}` : missionConnectionLabel}
               </span>
             </div>
           </Surface>
-          <Surface className="flex min-h-[58px] min-w-0 items-center gap-3 px-3 py-2.5">
-            <span className="shrink-0 text-xs font-bold text-slate-500">관제 로봇</span>
-            <div className="min-w-0 flex-1">
-              <div className="w-full min-w-0">
-                <MissionRobotDropdown
-                  liveSessions={liveSessions}
-                  missionTargets={missionTargets}
-                  selectedMissionTargetKey={selectedMissionTargetKey}
-                  setSelectedMissionTargetKey={setSelectedMissionTargetKey}
-                />
+          <Surface className="grid min-h-[68px] min-w-0 gap-1 px-3 py-2.5">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="shrink-0 text-xs font-bold text-slate-500">관제 로봇</span>
+              <div className="min-w-0 flex-1">
+                <div className="w-full min-w-0">
+                  <MissionRobotDropdown
+                    liveSessions={liveSessions}
+                    missionTargets={missionTargets}
+                    selectedMissionTargetKey={selectedMissionTargetKey}
+                    setSelectedMissionTargetKey={setSelectedMissionTargetKey}
+                  />
+                </div>
               </div>
+              {canReconnectSelectedRobot ? (
+                <Button size="sm" onClick={onReconnectSelectedMissionTarget}>재연결</Button>
+              ) : null}
             </div>
-            {canReconnectSelectedRobot ? (
-              <Button size="sm" onClick={onReconnectSelectedMissionTarget}>재연결</Button>
+            {selectedStreamTimingLabel ? (
+              <span className="truncate pl-[70px] text-xs font-bold text-slate-500 max-[560px]:pl-0">
+                {selectedStreamTimingLabel} · {selectedRecordingTimingLabel}
+              </span>
             ) : null}
           </Surface>
         </div>

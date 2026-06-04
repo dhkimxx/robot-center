@@ -7,6 +7,8 @@ import (
 	"time"
 )
 
+const publisherMediaActivityEventInterval = 10 * time.Second
+
 func (h *Hub) handleRobotOffer(sender *peer, payload map[string]any) error {
 	offerSDP := payloadString(payload, "sdp")
 	if offerSDP == "" {
@@ -71,6 +73,9 @@ func (h *Hub) registerPublisherSession(roomID string, publisherSession *publishe
 
 	currentRoom := h.ensureRoomLocked(roomID)
 	if existingPublisher := currentRoom.publishers[publisherSession.robotCode]; existingPublisher != nil {
+		if event, ok := publisherEndedEvent(roomID, existingPublisher, "publisher_replaced", time.Now().UTC()); ok {
+			h.emitPublisherEvent(event)
+		}
 		closePublisherSession(existingPublisher)
 	}
 	if publisherSession.streamBundle != nil {
@@ -90,6 +95,9 @@ func (h *Hub) removePublisherConnection(roomID string, robotCode string, peerID 
 	publisher := currentRoom.publishers[robotCode]
 	if publisher == nil || publisher.peerID != peerID {
 		return
+	}
+	if event, ok := publisherEndedEvent(roomID, publisher, "peer_closed", time.Now().UTC()); ok {
+		h.emitPublisherEvent(event)
 	}
 	closePublisherSession(publisher)
 	delete(currentRoom.publishers, robotCode)
@@ -225,19 +233,48 @@ func (h *Hub) markPublisherICEState(roomID string, robotCode string, peerID stri
 
 func (h *Hub) markPublisherTrackActivity(roomID string, trackKey string, observedAt time.Time) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
-
 	currentRoom := h.rooms[roomID]
 	if currentRoom == nil {
+		h.mu.Unlock()
 		return
 	}
 	publisher, _ := currentRoom.findPublishedTrack(trackKey)
 	if publisher == nil {
+		h.mu.Unlock()
 		return
 	}
 	now := observedAt.UTC()
+	var event PublisherEvent
+	shouldEmitEvent := false
+	if publisher.firstTrackAt == nil {
+		publisher.firstTrackAt = &now
+		event = PublisherEvent{
+			Type:            PublisherEventMediaStarted,
+			RoomID:          roomID,
+			RobotCode:       publisher.robotCode,
+			PublisherPeerID: publisher.peerID,
+			ObservedAt:      now,
+		}
+		shouldEmitEvent = true
+		publisher.lastMediaEventAt = now
+	} else if publisher.lastMediaEventAt.IsZero() || now.Sub(publisher.lastMediaEventAt) >= publisherMediaActivityEventInterval {
+		event = PublisherEvent{
+			Type:            PublisherEventMediaActive,
+			RoomID:          roomID,
+			RobotCode:       publisher.robotCode,
+			PublisherPeerID: publisher.peerID,
+			ObservedAt:      now,
+		}
+		shouldEmitEvent = true
+		publisher.lastMediaEventAt = now
+	}
 	publisher.lastTrackAt = &now
 	publisher.updatedAt = now
+	h.mu.Unlock()
+
+	if shouldEmitEvent {
+		h.emitPublisherEvent(event)
+	}
 }
 
 func (h *Hub) markPublisherDataChannel(roomID string, robotCode string, peerID string, label string) {
@@ -330,18 +367,24 @@ func (h *Hub) markPublisherDataChannelError(roomID string, robotCode string, pee
 	publisher.updatedAt = now
 }
 
-func (h *Hub) closePublisherForPeerLocked(currentRoom *room, peerID string) {
+func (h *Hub) closePublisherForPeerLocked(currentRoom *room, peerID string, reason string) {
 	for robotCode, publisher := range currentRoom.publishers {
 		if publisher.peerID != peerID {
 			continue
+		}
+		if event, ok := publisherEndedEvent(currentRoom.id, publisher, reason, time.Now().UTC()); ok {
+			h.emitPublisherEvent(event)
 		}
 		closePublisherSession(publisher)
 		delete(currentRoom.publishers, robotCode)
 	}
 }
 
-func (h *Hub) closePublisherConnectionsLocked(currentRoom *room) {
+func (h *Hub) closePublisherConnectionsLocked(currentRoom *room, reason string) {
 	for robotCode, publisher := range currentRoom.publishers {
+		if event, ok := publisherEndedEvent(currentRoom.id, publisher, reason, time.Now().UTC()); ok {
+			h.emitPublisherEvent(event)
+		}
 		closePublisherSession(publisher)
 		delete(currentRoom.publishers, robotCode)
 	}

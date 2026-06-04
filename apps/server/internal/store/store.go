@@ -13,12 +13,14 @@ type RobotStore = port.RobotStore
 type MissionStore = port.MissionStore
 type SensorStore = port.SensorStore
 type RecordingStore = port.RecordingStore
+type StreamSessionStore = port.StreamSessionStore
 type StorageAdminStore = port.StorageAdminStore
 
 type RobotRepository = port.RobotStore
 type MissionRepository = port.MissionStore
 type SensorRepository = port.SensorStore
 type RecordingRepository = port.RecordingStore
+type StreamSessionRepository = port.StreamSessionStore
 type StorageAdminRepository = port.StorageAdminStore
 type TransactionRunner = port.TransactionRunner
 
@@ -35,6 +37,9 @@ type RecordingTarget = port.RecordingTarget
 type RecordingSession = port.RecordingSession
 type CreateRecordingChunkInput = port.CreateRecordingChunkInput
 type RecordingUploadMetadata = port.RecordingUploadMetadata
+type StartRobotStreamSessionInput = port.StartRobotStreamSessionInput
+type TouchRobotStreamSessionInput = port.TouchRobotStreamSessionInput
+type EndRobotStreamSessionInput = port.EndRobotStreamSessionInput
 type StorageMetadataResetResult = port.StorageMetadataResetResult
 type SensorDataClearResult = port.SensorDataClearResult
 

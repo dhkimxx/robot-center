@@ -13,6 +13,26 @@ type Config struct {
 	TURNUsername           string
 	TURNPassword           string
 	ValidateRobotPublisher func(roomID string, robotCode string) error
+	OnPublisherEvent       PublisherEventHandler
+}
+
+type PublisherEventHandler func(PublisherEvent)
+
+type PublisherEventType string
+
+const (
+	PublisherEventMediaStarted PublisherEventType = "media_started"
+	PublisherEventMediaActive  PublisherEventType = "media_active"
+	PublisherEventEnded        PublisherEventType = "ended"
+)
+
+type PublisherEvent struct {
+	Type            PublisherEventType
+	RoomID          string
+	RobotCode       string
+	PublisherPeerID string
+	Reason          string
+	ObservedAt      time.Time
 }
 
 type PeerJoinRequest struct {
@@ -57,6 +77,7 @@ type ObservedPublisherSummary struct {
 	DataChannels      []string                     `json:"dataChannels"`
 	DataChannelStates []ObservedDataChannelSummary `json:"dataChannelStates,omitempty"`
 	JoinedAt          time.Time                    `json:"joinedAt"`
+	FirstTrackAt      *time.Time                   `json:"firstTrackAt,omitempty"`
 	LastTrackAt       *time.Time                   `json:"lastTrackAt,omitempty"`
 	LastDataAt        *time.Time                   `json:"lastDataAt,omitempty"`
 	UpdatedAt         time.Time                    `json:"updatedAt"`
@@ -100,16 +121,18 @@ type peer struct {
 }
 
 type publisherSession struct {
-	peerID          string
-	robotCode       string
-	peerConnection  *webrtc.PeerConnection
-	streamBundle    *RobotStreamBundle
-	publishedTracks map[string]*publishedTrack
-	joinedAt        time.Time
-	iceState        string
-	lastTrackAt     *time.Time
-	lastDataAt      *time.Time
-	updatedAt       time.Time
+	peerID           string
+	robotCode        string
+	peerConnection   *webrtc.PeerConnection
+	streamBundle     *RobotStreamBundle
+	publishedTracks  map[string]*publishedTrack
+	joinedAt         time.Time
+	iceState         string
+	firstTrackAt     *time.Time
+	lastTrackAt      *time.Time
+	lastMediaEventAt time.Time
+	lastDataAt       *time.Time
+	updatedAt        time.Time
 }
 
 type publishedTrack struct {

@@ -17,7 +17,7 @@ func (h *Hub) CloseRoom(roomID string) {
 		})
 		peers = append(peers, roomPeer)
 	}
-	h.closePublisherConnectionsLocked(currentRoom)
+	h.closePublisherConnectionsLocked(currentRoom, "room_closed")
 	h.closeSubscriberConnectionsLocked(currentRoom)
 	h.mu.Unlock()
 
