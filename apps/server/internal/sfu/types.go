@@ -13,6 +13,7 @@ type Config struct {
 	TURNUsername           string
 	TURNPassword           string
 	ValidateRobotPublisher func(roomID string, robotCode string) error
+	ValidateRobotSelection func(roomID string, robotCode string) error
 	OnPublisherEvent       PublisherEventHandler
 }
 
@@ -149,7 +150,7 @@ type subscriberSession struct {
 	selectedRobotCode       string
 	peerConnection          *webrtc.PeerConnection
 	dataChannels            map[string]*webrtc.DataChannel
-	attachedTracks          map[string]struct{}
+	attachedTrackSources    map[string]*webrtc.TrackLocalStaticRTP
 	attachedTrackSenders    map[string]*webrtc.RTPSender
 	pendingRemoteCandidates []webrtc.ICECandidateInit
 	pendingOffer            bool

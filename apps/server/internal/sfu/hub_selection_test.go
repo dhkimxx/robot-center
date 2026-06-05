@@ -72,6 +72,63 @@ func TestHubRejectsSelectingRobotWithoutPublishedBundle(t *testing.T) {
 	}
 }
 
+func TestHubStoresValidatedSelectionBeforeRobotPublishes(t *testing.T) {
+	hub := NewHub(Config{
+		ValidateRobotSelection: func(roomID string, robotCode string) error {
+			if roomID != "mission-001" || robotCode != "robot-001" {
+				t.Fatalf("selection validator received room=%q robot=%q", roomID, robotCode)
+			}
+			return nil
+		},
+	})
+	roomID := "mission-001"
+	operatorPeer := testPeer("operator-peer", roomID, "operator", "")
+	robotCode := "robot-001"
+	trackKey := publishedTrackKey(robotCode, StreamRoleTrackVideo1)
+
+	hub.mu.Lock()
+	hub.rooms[roomID] = &room{
+		id: roomID,
+		peers: map[string]*peer{
+			operatorPeer.id: operatorPeer,
+		},
+		publishers:  map[string]*publisherSession{},
+		subscribers: map[string]*subscriberSession{},
+	}
+	hub.mu.Unlock()
+
+	if err := hub.handleSubscriberRobotSelection(operatorPeer, map[string]any{"robotCode": robotCode}); err != nil {
+		t.Fatalf("expected validated robot selection to be stored while publisher is absent: %v", err)
+	}
+	message := readPeerSignal(t, operatorPeer)
+	if message.Type != "select-robot-ack" || message.Payload["robotCode"] != robotCode || message.Payload["streamState"] != "waiting_for_publisher" {
+		t.Fatalf("expected waiting select-robot-ack, got %#v", message)
+	}
+	hub.mu.RLock()
+	selectedRobotCode := hub.rooms[roomID].peers[operatorPeer.id].selectedRobotCode
+	hub.mu.RUnlock()
+	if selectedRobotCode != robotCode {
+		t.Fatalf("selectedRobotCode = %q, want %q", selectedRobotCode, robotCode)
+	}
+
+	hub.mu.Lock()
+	currentRoom := hub.rooms[roomID]
+	currentRoom.publishers[robotCode] = &publisherSession{
+		robotCode: robotCode,
+		publishedTracks: map[string]*publishedTrack{
+			trackKey: {
+				key:       trackKey,
+				robotCode: robotCode,
+				label:     StreamRoleTrackVideo1,
+			},
+		},
+	}
+	hub.mu.Unlock()
+
+	hub.ensureSubscriberOffer(roomID, operatorPeer.id)
+	waitForSubscriberSelection(t, hub, roomID, operatorPeer.id, robotCode)
+}
+
 func TestHubAcknowledgesSelectingPublishedRobotBundle(t *testing.T) {
 	hub := NewHub()
 	roomID := "mission-001"

@@ -131,3 +131,74 @@ func TestSubscriberSessionDrainsPendingRemoteCandidates(t *testing.T) {
 		t.Fatalf("pending candidate queue should be empty after drain")
 	}
 }
+
+func TestSubscriberSessionReattachesTrackWhenPublisherReplacesSameKey(t *testing.T) {
+	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer peerConnection.Close()
+
+	roomID := "mission-001"
+	robotCode := "robot-001"
+	trackKey := publishedTrackKey(robotCode, StreamRoleTrackVideo1)
+	firstTrack := newTestTrackLocal(t, robotCode, StreamRoleTrackVideo1)
+	session := newSubscriberSession("recorder-peer", "recorder", "", peerConnection)
+	currentRoom := &room{
+		id: roomID,
+		publishers: map[string]*publisherSession{
+			robotCode: {
+				robotCode: robotCode,
+				publishedTracks: map[string]*publishedTrack{
+					trackKey: {
+						key:       trackKey,
+						robotCode: robotCode,
+						label:     StreamRoleTrackVideo1,
+						track:     firstTrack,
+					},
+				},
+			},
+		},
+	}
+
+	if !session.attachPublishedTracks(currentRoom, nil, nil) {
+		t.Fatal("expected first track attach to require an offer")
+	}
+	firstSender := session.attachedTrackSenders[trackKey]
+	if firstSender == nil || session.attachedTrackSources[trackKey] != firstTrack {
+		t.Fatalf("expected first track source to be attached, got sender=%v source=%v", firstSender, session.attachedTrackSources[trackKey])
+	}
+	if session.attachPublishedTracks(currentRoom, nil, nil) {
+		t.Fatal("same published track source should not require another offer")
+	}
+
+	replacementTrack := newTestTrackLocal(t, robotCode, StreamRoleTrackVideo1)
+	currentRoom.publishers[robotCode].publishedTracks[trackKey] = &publishedTrack{
+		key:       trackKey,
+		robotCode: robotCode,
+		label:     StreamRoleTrackVideo1,
+		track:     replacementTrack,
+	}
+	if !session.attachPublishedTracks(currentRoom, nil, nil) {
+		t.Fatal("replacement track with the same key should require a new offer")
+	}
+	if session.attachedTrackSources[trackKey] != replacementTrack {
+		t.Fatalf("attached source was not replaced")
+	}
+	if session.attachedTrackSenders[trackKey] == nil {
+		t.Fatal("replacement track sender was not attached")
+	}
+}
+
+func newTestTrackLocal(t *testing.T, robotCode string, label string) *webrtc.TrackLocalStaticRTP {
+	t.Helper()
+	track, err := webrtc.NewTrackLocalStaticRTP(
+		webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeH264},
+		localTrackID(robotCode, label),
+		localStreamID(robotCode),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return track
+}

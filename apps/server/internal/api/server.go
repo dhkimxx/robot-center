@@ -44,6 +44,11 @@ func NewServerWithStore(cfg config.AppServerConfig, repository store.Store) *Ser
 			defer cancel()
 			return services.Missions.ValidateActiveMissionRobot(ctx, roomID, robotCode)
 		},
+		ValidateRobotSelection: func(roomID string, robotCode string) error {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			return services.Missions.ValidateActiveMissionRobot(ctx, roomID, robotCode)
+		},
 		OnPublisherEvent: func(event sfu.PublisherEvent) {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
