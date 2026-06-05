@@ -229,11 +229,30 @@ func latestRecordingChunksByRobot(chunks []domain.RecordingChunk, missionCode st
 		}
 		current := output[chunk.RobotCode]
 		chunkCopy := chunk
-		if current == nil || chunk.UpdatedAt.After(current.UpdatedAt) || chunk.StartedAt.After(current.StartedAt) {
+		if shouldUseLiveStatusRecordingChunk(chunkCopy, current) {
 			output[chunk.RobotCode] = &chunkCopy
 		}
 	}
 	return output
+}
+
+func shouldUseLiveStatusRecordingChunk(candidate domain.RecordingChunk, current *domain.RecordingChunk) bool {
+	if current == nil {
+		return true
+	}
+	if candidate.Status == "recording" && current.Status != "recording" {
+		return true
+	}
+	if candidate.Status != "recording" && current.Status == "recording" {
+		return false
+	}
+	if candidate.ChunkIndex != current.ChunkIndex {
+		return candidate.ChunkIndex > current.ChunkIndex
+	}
+	if !candidate.StartedAt.Equal(current.StartedAt) {
+		return candidate.StartedAt.After(current.StartedAt)
+	}
+	return candidate.UpdatedAt.After(current.UpdatedAt)
 }
 
 func streamSessionsForMission(sessions []domain.RobotStreamSession, missionCode string) map[string][]domain.RobotStreamSession {

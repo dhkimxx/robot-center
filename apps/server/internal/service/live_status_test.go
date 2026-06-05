@@ -110,6 +110,76 @@ func TestLiveStatusRecordingActiveWithFreshRecorderRuntime(t *testing.T) {
 	}
 }
 
+func TestLiveStatusPrefersActiveRecordingChunkOverRecentlyUploadedChunk(t *testing.T) {
+	now := time.Date(2026, 6, 5, 0, 49, 0, 0, time.UTC)
+	lastTrackAt := now.Add(-2 * time.Second)
+	service := LiveStatusService{}
+
+	status := service.BuildMissionLiveStatus(LiveStatusInput{
+		Mission: domain.Mission{
+			MissionCode: "mission-054",
+			Status:      "active",
+			RobotCodes:  []string{"robot-001"},
+		},
+		ObservedRooms: []sfu.ObservedRoomSummary{{
+			RoomID: "mission-054",
+			Publishers: []sfu.ObservedPublisherSummary{{
+				RobotCode:   "robot-001",
+				ICEState:    "connected",
+				TrackCount:  3,
+				LastTrackAt: &lastTrackAt,
+				UpdatedAt:   now,
+			}},
+		}},
+		RecordingChunks: []domain.RecordingChunk{
+			{
+				ID:          "chunk-000",
+				MissionCode: "mission-054",
+				RobotCode:   "robot-001",
+				ChunkIndex:  0,
+				Status:      "uploaded",
+				StartedAt:   now.Add(-12 * time.Minute),
+				EndedAt:     now.Add(-2 * time.Minute),
+				UpdatedAt:   now.Add(-time.Second),
+			},
+			{
+				ID:          "chunk-001",
+				MissionCode: "mission-054",
+				RobotCode:   "robot-001",
+				ChunkIndex:  1,
+				Status:      "recording",
+				StartedAt:   now.Add(-2 * time.Minute),
+				EndedAt:     now.Add(8 * time.Minute),
+				UpdatedAt:   now.Add(-2 * time.Minute),
+			},
+		},
+		Recorder: RecorderRuntimeSnapshot{
+			Available: true,
+			Rooms: []RecorderRoomRuntime{{
+				RoomID: "mission-054",
+				Robots: []RecorderRobotRuntime{{
+					RobotCode:   "robot-001",
+					TrackCount:  3,
+					LastTrackAt: &lastTrackAt,
+				}},
+			}},
+		},
+		Now:             now,
+		FreshnessWindow: 30 * time.Second,
+	})
+
+	recording := status.Robots[0].Recording
+	if recording.LatestChunk == nil {
+		t.Fatal("expected latest recording chunk")
+	}
+	if got := recording.LatestChunk.ChunkIndex; got != 1 {
+		t.Fatalf("latest chunk index = %d, want active chunk 1", got)
+	}
+	if got := recording.LatestChunkStatus; got != "recording" {
+		t.Fatalf("latest chunk status = %q, want recording", got)
+	}
+}
+
 func TestLiveStatusSeparatesRobotStreamState(t *testing.T) {
 	now := time.Date(2026, 5, 26, 8, 50, 0, 0, time.UTC)
 	lastTrackAt := now.Add(-2 * time.Second)
