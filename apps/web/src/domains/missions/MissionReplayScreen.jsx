@@ -34,8 +34,10 @@ export function MissionReplayScreen({
   );
   const sessionGroups = useMemo(() => makeRecordingSessionGroups(missionRecordings), [missionRecordings]);
   const robotGroups = useMemo(() => makeRecordingRobotGroups(sessionGroups), [sessionGroups]);
+  const robotDisplayNamesByCode = useMemo(() => createRobotDisplayNamesByCode(robots), [robots]);
   const [selectedRobotCode, setSelectedRobotCode] = useState("");
   const selectedRobotGroup = robotGroups.find((group) => group.robotCode === selectedRobotCode) ?? robotGroups[0] ?? null;
+  const selectedRobotDisplayName = getRobotDisplayName(robotDisplayNamesByCode, selectedRobotGroup?.robotCode);
 
   useEffect(() => {
     if (robotGroups.length === 0) {
@@ -113,28 +115,33 @@ export function MissionReplayScreen({
       ) : (
         <div className="grid min-h-0 grid-cols-[280px_minmax(0,1fr)] gap-3 overflow-hidden max-[1180px]:grid-cols-1">
           <aside className="grid min-h-0 content-start gap-2 overflow-auto pr-1">
-            {robotGroups.map((group) => (
-              <button
-                className={cn(
-                  "grid min-h-16 w-full gap-1 rounded-lg border border-slate-500/20 bg-white/[0.045] px-3 py-2 text-left transition hover:border-sapphire-500/[0.45] hover:bg-sapphire-500/[0.12]",
-                  selectedRobotGroup?.robotCode === group.robotCode && "border-sapphire-500/55 bg-sapphire-500/[0.10] shadow-[inset_3px_0_0_var(--color-sapphire)]"
-                )}
-                key={group.robotCode}
-                type="button"
-                onClick={() => setSelectedRobotCode(group.robotCode)}
-              >
-                <strong className="truncate text-sm font-bold text-slate-50">{group.robotCode}</strong>
-                <span className="truncate text-xs font-semibold text-slate-400">{group.sessionCount}개 세션 / {group.chunkCount}개 청크</span>
-                <small className="truncate text-xs font-semibold text-slate-500">최근 {formatDateTime(group.latestAt)}</small>
-              </button>
-            ))}
+            {robotGroups.map((group) => {
+              const displayName = getRobotDisplayName(robotDisplayNamesByCode, group.robotCode);
+              return (
+                <button
+                  className={cn(
+                    "grid min-h-16 w-full gap-1 rounded-lg border border-slate-500/20 bg-white/[0.045] px-3 py-2 text-left transition hover:border-sapphire-500/[0.45] hover:bg-sapphire-500/[0.12]",
+                    selectedRobotGroup?.robotCode === group.robotCode && "border-sapphire-500/55 bg-sapphire-500/[0.10] shadow-[inset_3px_0_0_var(--color-sapphire)]"
+                  )}
+                  key={group.robotCode}
+                  type="button"
+                  onClick={() => setSelectedRobotCode(group.robotCode)}
+                >
+                  <strong className="truncate text-sm font-bold text-slate-50">{displayName}</strong>
+                  <span className="truncate text-xs font-semibold text-slate-400">{makeRobotReplayMeta(group, displayName)}</span>
+                  <small className="truncate text-xs font-semibold text-slate-500">최근 {formatDateTime(group.latestAt)}</small>
+                </button>
+              );
+            })}
           </aside>
 
           <section className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-2 overflow-hidden">
             <div className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-slate-500/20 bg-white/[0.035] px-3">
-              <div>
-                <strong className="block text-sm font-black text-slate-50">{selectedRobotGroup?.robotCode}</strong>
-                <span className="mt-0.5 block text-xs font-semibold text-slate-500">최근 저장순</span>
+              <div className="min-w-0">
+                <strong className="block truncate text-sm font-black text-slate-50">{selectedRobotDisplayName}</strong>
+                <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">
+                  {selectedRobotGroup?.robotCode ? `${selectedRobotGroup.robotCode} · 최근 저장순` : "최근 저장순"}
+                </span>
               </div>
               <small className="text-xs font-semibold text-slate-500">{selectedRobotGroup?.sessionCount ?? 0}개 세션</small>
             </div>
@@ -180,4 +187,26 @@ export function MissionReplayScreen({
       )}
     </Surface>
   );
+}
+
+function createRobotDisplayNamesByCode(robots) {
+  return new Map(
+    robots
+      .filter((robot) => robot.robotCode)
+      .map((robot) => [robot.robotCode, robot.displayName || robot.robotCode])
+  );
+}
+
+function getRobotDisplayName(robotDisplayNamesByCode, robotCode) {
+  if (!robotCode) {
+    return "";
+  }
+  return robotDisplayNamesByCode.get(robotCode) ?? robotCode;
+}
+
+function makeRobotReplayMeta(group, displayName) {
+  const countLabel = `${group.sessionCount}개 세션 / ${group.chunkCount}개 청크`;
+  return displayName && displayName !== group.robotCode
+    ? `${group.robotCode} · ${countLabel}`
+    : countLabel;
 }
