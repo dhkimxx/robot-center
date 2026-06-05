@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  filterRecordingsByMissionCode,
   getPlayableRecordingVideoEntries,
-  makeRecordingStateForTarget,
-  sortRecordingChunksLatestFirst
+  makeRecordingStateForTarget
 } from "./recordingHelpers.js";
 
 describe("recordingHelpers", () => {
@@ -69,34 +67,6 @@ describe("recordingHelpers", () => {
       label: "저장 마무리",
       tone: "recording"
     });
-  });
-
-  it("filters recordings by mission code", () => {
-    const recordings = [
-      { id: "recording-1", missionCode: "mission-001" },
-      { id: "recording-2", missionCode: "mission-002" },
-      { id: "recording-3", missionCode: "mission-001" }
-    ];
-
-    expect(filterRecordingsByMissionCode(recordings, "mission-001").map((recording) => recording.id)).toEqual([
-      "recording-1",
-      "recording-3"
-    ]);
-    expect(filterRecordingsByMissionCode(recordings, "")).toEqual([]);
-  });
-
-  it("sorts recording chunks latest first", () => {
-    const recordings = [
-      { id: "recording-1", chunkIndex: 1, updatedAt: "2026-05-01T00:00:00Z" },
-      { id: "recording-3", chunkIndex: 3, updatedAt: "2026-05-01T00:02:00Z" },
-      { id: "recording-2", chunkIndex: 2, updatedAt: "2026-05-01T00:01:00Z" }
-    ];
-
-    expect(sortRecordingChunksLatestFirst(recordings).map((recording) => recording.id)).toEqual([
-      "recording-3",
-      "recording-2",
-      "recording-1"
-    ]);
   });
 
   it("extracts playable video files only", () => {

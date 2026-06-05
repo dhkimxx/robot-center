@@ -3,7 +3,6 @@ import EmptyState from "../../../components/ui/EmptyState.jsx";
 import Surface from "../../../components/ui/Surface.jsx";
 import { formatDateTimeFull } from "../../../utils/formatters.js";
 import { makeLiveRecordingTimingLabel, makeLiveStreamTimingLabel } from "../../missions/missionHelpers.js";
-import { ActiveMissionRecordingsPanel } from "../../recordings/ActiveMissionRecordingsPanel.jsx";
 import {
   connectedLiveConnectionStatuses,
   reconnectableLiveStatuses
@@ -26,11 +25,10 @@ export function MissionControlView({
   liveSessions,
   mission,
   missionTargets,
-  onOpenPlaybackFile,
+  onOpenMissionReplay,
   onReconnectSelectedMissionTarget,
   onRefreshSensorSnapshot,
   operationStatuses,
-  recordings,
   selectedMissionTargetKey,
   setSelectedMissionTargetKey
 }) {
@@ -59,13 +57,16 @@ export function MissionControlView({
     <section className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)_336px] items-stretch gap-3.5 max-[1240px]:grid-cols-1">
       <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden">
         <div className="grid min-w-0 grid-cols-2 gap-3 max-[960px]:grid-cols-1">
-          <Surface className="flex min-h-[58px] items-center px-3 py-2.5">
+          <Surface className="flex min-h-[58px] items-center justify-between gap-3 px-3 py-2.5">
             <div className="min-w-0">
               <strong className="block truncate text-sm font-extrabold text-slate-50">{mission.missionCode}</strong>
               <span className="mt-0.5 block truncate text-xs font-bold text-slate-500">
                 {missionTargets.length > 0 ? `${missionStartLabel} · ${missionConnectionLabel}` : missionConnectionLabel}
               </span>
             </div>
+            <Button size="sm" onClick={() => onOpenMissionReplay?.(mission)}>
+              리플레이 보기
+            </Button>
           </Surface>
           <Surface className="grid min-h-[68px] min-w-0 gap-1 px-3 py-2.5">
             <div className="flex min-w-0 items-center gap-3">
@@ -115,13 +116,8 @@ export function MissionControlView({
         <AudioSink stream={selectedSession.videoStreams.audio} />
       </div>
 
-      <aside className="grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] gap-3 overflow-hidden">
+      <aside className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden">
         <ConnectionStatusPanel statuses={operationStatuses} />
-        <ActiveMissionRecordingsPanel
-          missionCode={mission.missionCode}
-          onOpenPlaybackFile={onOpenPlaybackFile}
-          recordings={recordings}
-        />
         <EventPanel liveEvents={liveEvents} />
       </aside>
     </section>

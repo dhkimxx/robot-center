@@ -40,8 +40,7 @@ export function useControlCenterController({
     statusError,
     dataLoadState,
     loadAll,
-    loadMissionLiveStatus,
-    loadRecordings
+    loadMissionLiveStatus
   } = useControlCenterData();
   const {
     notifications,
@@ -230,38 +229,6 @@ export function useControlCenterController({
       }
     };
   }, [loadMissionLiveStatus, missionControlCode]);
-
-  useEffect(() => {
-    if (!missionControlCode) {
-      return undefined;
-    }
-    let cancelled = false;
-    let timer = null;
-
-    async function loadMissionRecordings() {
-      try {
-        await loadRecordings({
-          missionCode: missionControlCode,
-          isCancelled: () => cancelled
-        });
-      } catch {
-        // Recording chunks are supplemental on the live screen. The global
-        // dashboard refresh and this poll will retry without blocking control.
-      }
-      if (!cancelled) {
-        timer = window.setTimeout(loadMissionRecordings, 10000);
-      }
-    }
-
-    loadMissionRecordings();
-    return () => {
-      cancelled = true;
-      if (timer) {
-        window.clearTimeout(timer);
-      }
-    };
-  }, [loadRecordings, missionControlCode]);
-
 
   const operationStatuses = useOperationStatuses({
     activeLiveStream,

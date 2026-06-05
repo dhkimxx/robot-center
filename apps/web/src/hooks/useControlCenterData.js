@@ -91,21 +91,6 @@ export function useControlCenterData() {
     return payload;
   }, []);
 
-  const loadRecordings = useCallback(async (options = {}) => {
-    const missionCode = String(options.missionCode ?? "").trim();
-    const payload = await fetchRecordings({ missionCode });
-    if (options.isCancelled?.()) {
-      return [];
-    }
-    const nextRecordings = payload.recordings ?? [];
-    setRecordings((currentRecordings) => (
-      missionCode
-        ? mergeMissionRecordings(currentRecordings, missionCode, nextRecordings)
-        : nextRecordings
-    ));
-    return nextRecordings;
-  }, []);
-
   useEffect(() => {
     let cancelled = false;
     let timer = null;
@@ -151,14 +136,6 @@ export function useControlCenterData() {
       isRefreshing: dataLoadState.isLoading && dataLoadState.hasLoaded
     },
     loadAll,
-    loadMissionLiveStatus,
-    loadRecordings
+    loadMissionLiveStatus
   };
-}
-
-function mergeMissionRecordings(currentRecordings, missionCode, nextMissionRecordings) {
-  return [
-    ...currentRecordings.filter((recording) => recording.missionCode !== missionCode),
-    ...nextMissionRecordings
-  ];
 }
