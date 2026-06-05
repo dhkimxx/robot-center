@@ -189,10 +189,11 @@ func (h *Hub) ensureRoomLocked(roomID string) *room {
 	currentRoom := h.rooms[roomID]
 	if currentRoom == nil {
 		currentRoom = &room{
-			id:          roomID,
-			peers:       map[string]*peer{},
-			publishers:  map[string]*publisherSession{},
-			subscribers: map[string]*subscriberSession{},
+			id:                    roomID,
+			peers:                 map[string]*peer{},
+			publishers:            map[string]*publisherSession{},
+			subscribers:           map[string]*subscriberSession{},
+			subscriberOfferTimers: map[string]*time.Timer{},
 		}
 		h.rooms[roomID] = currentRoom
 	}
@@ -287,12 +288,14 @@ func (h *Hub) unregisterPeer(leavingPeer *peer) {
 			h.closePublisherForPeerLocked(currentRoom, leavingPeer.id, "peer_left")
 		}
 		if session := currentRoom.subscribers[leavingPeer.id]; session != nil {
+			currentRoom.stopSubscriberOfferTimer(leavingPeer.id)
 			closeSubscriberSession(session)
 			delete(currentRoom.subscribers, leavingPeer.id)
 		}
 		if len(currentRoom.peers) == 0 {
 			h.closePublisherConnectionsLocked(currentRoom, "room_empty")
 			h.closeSubscriberConnectionsLocked(currentRoom)
+			currentRoom.stopSubscriberOfferTimers()
 			delete(h.rooms, leavingPeer.roomID)
 		}
 	}

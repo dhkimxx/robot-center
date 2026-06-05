@@ -136,11 +136,12 @@ func (h *Hub) publishRobotTrack(roomID string, robotCode string, remoteTrack *we
 		publisherPeerID = publisher.peerID
 	}
 	publishedTrack := &publishedTrack{
-		key:        trackKey,
-		robotCode:  robotCode,
-		label:      label,
-		remoteSSRC: uint32(remoteTrack.SSRC()),
-		track:      localTrack,
+		key:             trackKey,
+		robotCode:       robotCode,
+		label:           label,
+		publisherPeerID: publisherPeerID,
+		remoteSSRC:      uint32(remoteTrack.SSRC()),
+		track:           localTrack,
 	}
 	publisher.publishedTracks[trackKey] = publishedTrack
 	if publisher.streamBundle != nil {
@@ -168,7 +169,7 @@ func (h *Hub) publishRobotTrack(roomID string, robotCode string, remoteTrack *we
 		}
 	}
 	go h.forwardRTP(roomID, trackKey, remoteTrack, localTrack)
-	go h.ensureRoomSubscriberOffers(roomID)
+	h.scheduleRoomSubscriberOffers(roomID)
 }
 
 func (h *Hub) forwardRTP(roomID string, trackKey string, remoteTrack *webrtc.TrackRemote, localTrack *webrtc.TrackLocalStaticRTP) {

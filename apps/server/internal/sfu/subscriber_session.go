@@ -15,13 +15,12 @@ const maxPendingRemoteCandidates = 64
 
 func newSubscriberSession(peerID string, role string, selectedRobotCode string, peerConnection *webrtc.PeerConnection) *subscriberSession {
 	return &subscriberSession{
-		peerID:               peerID,
-		role:                 role,
-		selectedRobotCode:    strings.TrimSpace(selectedRobotCode),
-		peerConnection:       peerConnection,
-		dataChannels:         map[string]*webrtc.DataChannel{},
-		attachedTrackSources: map[string]*webrtc.TrackLocalStaticRTP{},
-		attachedTrackSenders: map[string]*webrtc.RTPSender{},
+		peerID:            peerID,
+		role:              role,
+		selectedRobotCode: strings.TrimSpace(selectedRobotCode),
+		peerConnection:    peerConnection,
+		dataChannels:      map[string]*webrtc.DataChannel{},
+		attachedTracks:    map[string]subscriberTrackAttachment{},
 	}
 }
 
@@ -112,11 +111,8 @@ func (s *subscriberSession) shouldReceiveRobot(robotCode string) bool {
 }
 
 func (s *subscriberSession) attachPublishedTracks(currentRoom *room, forwardRTCP func(roomID string, trackKey string, packets []rtcp.Packet), requestKeyFrames func(roomID string, trackKey string, count int, interval time.Duration)) bool {
-	if s.attachedTrackSources == nil {
-		s.attachedTrackSources = map[string]*webrtc.TrackLocalStaticRTP{}
-	}
-	if s.attachedTrackSenders == nil {
-		s.attachedTrackSenders = map[string]*webrtc.RTPSender{}
+	if s.attachedTracks == nil {
+		s.attachedTracks = map[string]subscriberTrackAttachment{}
 	}
 	changed := false
 	trackKeys := make([]string, 0)
@@ -136,18 +132,18 @@ func (s *subscriberSession) attachPublishedTracks(currentRoom *room, forwardRTCP
 		desiredTrackKeys[trackKey] = struct{}{}
 	}
 
-	for trackKey, sender := range s.attachedTrackSenders {
+	for trackKey, attachment := range s.attachedTracks {
 		publishedTrack := tracksByKey[trackKey]
-		if _, ok := desiredTrackKeys[trackKey]; ok && publishedTrack != nil && s.attachedTrackSources[trackKey] == publishedTrack.track {
+		if _, ok := desiredTrackKeys[trackKey]; ok && publishedTrack != nil && attachment.matchesPublishedTrack(publishedTrack) {
 			continue
 		}
-		if sender != nil {
-			if err := s.peerConnection.RemoveTrack(sender); err != nil {
+		if attachment.sender != nil {
+			if err := s.peerConnection.RemoveTrack(attachment.sender); err != nil {
 				log.Printf("sfu subscriber remove track failed room=%s peer=%s track=%s: %v", currentRoom.id, s.peerID, trackKey, err)
 			}
 		}
-		delete(s.attachedTrackSenders, trackKey)
-		delete(s.attachedTrackSources, trackKey)
+		log.Printf("sfu subscriber track detached room=%s peer=%s role=%s robot=%s track=%s reason=%s", currentRoom.id, s.peerID, s.role, attachment.robotCode, trackKey, subscriberTrackDetachReason(trackKey, desiredTrackKeys, publishedTrack))
+		delete(s.attachedTracks, trackKey)
 		changed = true
 	}
 
@@ -156,7 +152,7 @@ func (s *subscriberSession) attachPublishedTracks(currentRoom *room, forwardRTCP
 		if publishedTrack == nil || publishedTrack.track == nil {
 			continue
 		}
-		if s.attachedTrackSources[trackKey] == publishedTrack.track && s.attachedTrackSenders[trackKey] != nil {
+		if attachment, ok := s.attachedTracks[trackKey]; ok && attachment.matchesPublishedTrack(publishedTrack) {
 			continue
 		}
 		sender, err := s.peerConnection.AddTrack(publishedTrack.track)
@@ -164,9 +160,14 @@ func (s *subscriberSession) attachPublishedTracks(currentRoom *room, forwardRTCP
 			log.Printf("sfu subscriber add track failed room=%s peer=%s track=%s: %v", currentRoom.id, s.peerID, trackKey, err)
 			continue
 		}
-		s.attachedTrackSources[trackKey] = publishedTrack.track
-		s.attachedTrackSenders[trackKey] = sender
+		s.attachedTracks[trackKey] = subscriberTrackAttachment{
+			sourceTrack:     publishedTrack.track,
+			sender:          sender,
+			publisherPeerID: publishedTrack.publisherPeerID,
+			robotCode:       publishedTrack.robotCode,
+		}
 		changed = true
+		log.Printf("sfu subscriber track attached room=%s peer=%s role=%s robot=%s publisher=%s track=%s", currentRoom.id, s.peerID, s.role, publishedTrack.robotCode, publishedTrack.publisherPeerID, trackKey)
 		if forwardRTCP != nil {
 			go s.forwardRTCP(currentRoom.id, trackKey, sender, forwardRTCP)
 		}
@@ -178,24 +179,37 @@ func (s *subscriberSession) attachPublishedTracks(currentRoom *room, forwardRTCP
 }
 
 func (s *subscriberSession) detachPublishedTracks(currentRoom *room) bool {
-	if s.attachedTrackSources == nil {
-		s.attachedTrackSources = map[string]*webrtc.TrackLocalStaticRTP{}
-	}
-	if s.attachedTrackSenders == nil {
-		s.attachedTrackSenders = map[string]*webrtc.RTPSender{}
+	if s.attachedTracks == nil {
+		s.attachedTracks = map[string]subscriberTrackAttachment{}
 	}
 	changed := false
-	for trackKey, sender := range s.attachedTrackSenders {
-		if sender != nil {
-			if err := s.peerConnection.RemoveTrack(sender); err != nil {
+	for trackKey, attachment := range s.attachedTracks {
+		if attachment.sender != nil {
+			if err := s.peerConnection.RemoveTrack(attachment.sender); err != nil {
 				log.Printf("sfu subscriber remove track failed room=%s peer=%s track=%s: %v", currentRoom.id, s.peerID, trackKey, err)
 			}
 		}
-		delete(s.attachedTrackSenders, trackKey)
-		delete(s.attachedTrackSources, trackKey)
+		log.Printf("sfu subscriber track detached room=%s peer=%s role=%s robot=%s track=%s reason=subscriber_not_ready", currentRoom.id, s.peerID, s.role, attachment.robotCode, trackKey)
+		delete(s.attachedTracks, trackKey)
 		changed = true
 	}
 	return changed
+}
+
+func (a subscriberTrackAttachment) matchesPublishedTrack(track *publishedTrack) bool {
+	return track != nil &&
+		a.sourceTrack == track.track &&
+		a.publisherPeerID == track.publisherPeerID
+}
+
+func subscriberTrackDetachReason(trackKey string, desiredTrackKeys map[string]struct{}, publishedTrack *publishedTrack) string {
+	if _, ok := desiredTrackKeys[trackKey]; !ok {
+		return "not_desired"
+	}
+	if publishedTrack == nil || publishedTrack.track == nil {
+		return "source_missing"
+	}
+	return "source_replaced"
 }
 
 func (s *subscriberSession) ensureDataChannels() bool {

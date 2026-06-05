@@ -104,10 +104,11 @@ type PeerSummary struct {
 }
 
 type room struct {
-	id          string
-	peers       map[string]*peer
-	publishers  map[string]*publisherSession
-	subscribers map[string]*subscriberSession
+	id                    string
+	peers                 map[string]*peer
+	publishers            map[string]*publisherSession
+	subscribers           map[string]*subscriberSession
+	subscriberOfferTimers map[string]*time.Timer
 }
 
 type peer struct {
@@ -137,11 +138,19 @@ type publisherSession struct {
 }
 
 type publishedTrack struct {
-	key        string
-	robotCode  string
-	label      string
-	remoteSSRC uint32
-	track      *webrtc.TrackLocalStaticRTP
+	key             string
+	robotCode       string
+	label           string
+	publisherPeerID string
+	remoteSSRC      uint32
+	track           *webrtc.TrackLocalStaticRTP
+}
+
+type subscriberTrackAttachment struct {
+	sourceTrack     *webrtc.TrackLocalStaticRTP
+	sender          *webrtc.RTPSender
+	publisherPeerID string
+	robotCode       string
 }
 
 type subscriberSession struct {
@@ -150,8 +159,7 @@ type subscriberSession struct {
 	selectedRobotCode       string
 	peerConnection          *webrtc.PeerConnection
 	dataChannels            map[string]*webrtc.DataChannel
-	attachedTrackSources    map[string]*webrtc.TrackLocalStaticRTP
-	attachedTrackSenders    map[string]*webrtc.RTPSender
+	attachedTracks          map[string]subscriberTrackAttachment
 	pendingRemoteCandidates []webrtc.ICECandidateInit
 	pendingOffer            bool
 	needsOffer              bool

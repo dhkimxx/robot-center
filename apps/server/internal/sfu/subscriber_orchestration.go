@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+const subscriberOfferCoalesceDelay = 150 * time.Millisecond
+
 func (h *Hub) ensureRoomSubscriberOffers(roomID string) {
 	h.mu.RLock()
 	currentRoom := h.rooms[roomID]
@@ -27,6 +29,56 @@ func (h *Hub) ensureRoomSubscriberOffers(roomID string) {
 	for _, peerID := range peerIDs {
 		h.ensureSubscriberOffer(roomID, peerID)
 	}
+}
+
+func (h *Hub) scheduleRoomSubscriberOffers(roomID string) {
+	h.mu.RLock()
+	currentRoom := h.rooms[roomID]
+	if currentRoom == nil {
+		h.mu.RUnlock()
+		return
+	}
+	peerIDs := make([]string, 0, len(currentRoom.peers))
+	for _, peer := range currentRoom.peers {
+		if isSubscriberRole(peer.role) {
+			peerIDs = append(peerIDs, peer.id)
+		}
+	}
+	h.mu.RUnlock()
+
+	for _, peerID := range peerIDs {
+		h.scheduleSubscriberOffer(roomID, peerID)
+	}
+}
+
+func (h *Hub) scheduleSubscriberOffer(roomID string, peerID string) {
+	h.mu.Lock()
+	currentRoom := h.rooms[roomID]
+	if currentRoom == nil {
+		h.mu.Unlock()
+		return
+	}
+	if targetPeer := currentRoom.peers[peerID]; targetPeer == nil || !isSubscriberRole(targetPeer.role) {
+		h.mu.Unlock()
+		return
+	}
+	if currentRoom.subscriberOfferTimers == nil {
+		currentRoom.subscriberOfferTimers = map[string]*time.Timer{}
+	}
+	if timer := currentRoom.subscriberOfferTimers[peerID]; timer != nil {
+		timer.Reset(subscriberOfferCoalesceDelay)
+		h.mu.Unlock()
+		return
+	}
+	currentRoom.subscriberOfferTimers[peerID] = time.AfterFunc(subscriberOfferCoalesceDelay, func() {
+		h.mu.Lock()
+		if currentRoom := h.rooms[roomID]; currentRoom != nil {
+			currentRoom.stopSubscriberOfferTimer(peerID)
+		}
+		h.mu.Unlock()
+		h.ensureSubscriberOffer(roomID, peerID)
+	})
+	h.mu.Unlock()
 }
 
 func (h *Hub) ensureSubscriberOffer(roomID string, peerID string) {
@@ -301,6 +353,7 @@ func (h *Hub) sendSelectRobotError(targetPeer *peer, robotCode string, reason st
 }
 
 func (h *Hub) closeSubscriberConnectionsLocked(currentRoom *room) {
+	currentRoom.stopSubscriberOfferTimers()
 	for _, session := range currentRoom.subscribers {
 		closeSubscriberSession(session)
 	}
@@ -316,9 +369,28 @@ func closeSubscriberSession(session *subscriberSession) {
 	}
 	session.peerConnection = nil
 	session.dataChannels = map[string]*webrtc.DataChannel{}
-	session.attachedTrackSources = map[string]*webrtc.TrackLocalStaticRTP{}
-	session.attachedTrackSenders = map[string]*webrtc.RTPSender{}
+	session.attachedTracks = map[string]subscriberTrackAttachment{}
 	session.pendingRemoteCandidates = nil
 	session.pendingOffer = false
 	session.needsOffer = false
+}
+
+func (r *room) stopSubscriberOfferTimer(peerID string) {
+	if r == nil || r.subscriberOfferTimers == nil {
+		return
+	}
+	timer := r.subscriberOfferTimers[peerID]
+	if timer != nil {
+		timer.Stop()
+	}
+	delete(r.subscriberOfferTimers, peerID)
+}
+
+func (r *room) stopSubscriberOfferTimers() {
+	if r == nil {
+		return
+	}
+	for peerID := range r.subscriberOfferTimers {
+		r.stopSubscriberOfferTimer(peerID)
+	}
 }

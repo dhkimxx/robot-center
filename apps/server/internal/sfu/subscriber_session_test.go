@@ -164,9 +164,9 @@ func TestSubscriberSessionReattachesTrackWhenPublisherReplacesSameKey(t *testing
 	if !session.attachPublishedTracks(currentRoom, nil, nil) {
 		t.Fatal("expected first track attach to require an offer")
 	}
-	firstSender := session.attachedTrackSenders[trackKey]
-	if firstSender == nil || session.attachedTrackSources[trackKey] != firstTrack {
-		t.Fatalf("expected first track source to be attached, got sender=%v source=%v", firstSender, session.attachedTrackSources[trackKey])
+	firstAttachment := session.attachedTracks[trackKey]
+	if firstAttachment.sender == nil || firstAttachment.sourceTrack != firstTrack {
+		t.Fatalf("expected first track source to be attached, got %#v", firstAttachment)
 	}
 	if session.attachPublishedTracks(currentRoom, nil, nil) {
 		t.Fatal("same published track source should not require another offer")
@@ -182,10 +182,11 @@ func TestSubscriberSessionReattachesTrackWhenPublisherReplacesSameKey(t *testing
 	if !session.attachPublishedTracks(currentRoom, nil, nil) {
 		t.Fatal("replacement track with the same key should require a new offer")
 	}
-	if session.attachedTrackSources[trackKey] != replacementTrack {
+	replacementAttachment := session.attachedTracks[trackKey]
+	if replacementAttachment.sourceTrack != replacementTrack {
 		t.Fatalf("attached source was not replaced")
 	}
-	if session.attachedTrackSenders[trackKey] == nil {
+	if replacementAttachment.sender == nil {
 		t.Fatal("replacement track sender was not attached")
 	}
 }
