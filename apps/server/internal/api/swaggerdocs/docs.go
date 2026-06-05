@@ -210,7 +210,7 @@ const docTemplate = `{
         },
         "/api/v1/operator/recordings": {
             "get": {
-                "description": "관제 UI가 조회하는 recording chunk와 파일 상태 목록을 반환합니다.",
+                "description": "관제 UI가 조회하는 recording chunk와 파일 상태 목록을 반환합니다. missionCode를 지정하면 해당 임무의 chunk만 반환합니다.",
                 "produces": [
                     "application/json"
                 ],
@@ -218,6 +218,14 @@ const docTemplate = `{
                     "Operator API"
                 ],
                 "summary": "녹화 chunk 조회",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "조회할 임무 코드",
+                        "name": "missionCode",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",

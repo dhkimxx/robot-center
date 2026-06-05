@@ -61,7 +61,7 @@ func (u *recordingMediaUploader) muxAndUploadH264Snapshot(ctx context.Context, r
 		}
 	}
 	outputPath := filepath.Join(recordingChunkDirectory(chunk.ID), label+".mp4")
-	if err := muxH264ToMP4(ctx, snapshot.path, audioSnapshotPath, outputPath, snapshot.fps); err != nil {
+	if err := muxH264ToMP4(ctx, snapshot.path, audioSnapshotPath, outputPath, snapshot.fps, snapshot.durationSeconds); err != nil {
 		return false, fmt.Errorf("%s mp4 mux failed: %w", label, err)
 	}
 	sizeBytes, err := u.objectStorage.UploadFile(ctx, objectKey, outputPath, "video/mp4")

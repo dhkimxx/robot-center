@@ -3,6 +3,8 @@ package recording
 import (
 	"context"
 	"errors"
+	"time"
+
 	"github.com/pion/webrtc/v4/pkg/media/oggwriter"
 	"robot-center/apps/server/internal/domain"
 )
@@ -10,6 +12,7 @@ import (
 const minH264SnapshotBytes int64 = 64 * 1024
 const minOggSnapshotBytes int64 = 4 * 1024
 const minDataChannelSnapshotBytes int64 = 1
+const maxContinuousH264RTPDelta uint32 = 5 * 90000
 
 var errNoRecordingMedia = errors.New("no recording media available")
 
@@ -25,15 +28,18 @@ type h264ParameterSets struct {
 }
 
 type h264TrackTiming struct {
-	haveTimestamp  bool
-	firstTimestamp uint32
-	lastTimestamp  uint32
-	frameCount     int
+	haveTimestamp             bool
+	lastTimestamp             uint32
+	accumulatedTimestampDelta uint64
+	frameCount                int
+	firstObservedAt           time.Time
+	lastObservedAt            time.Time
 }
 
 type h264Snapshot struct {
-	path string
-	fps  float64
+	path            string
+	fps             float64
+	durationSeconds float64
 }
 
 type recordingChunkFinalization struct {

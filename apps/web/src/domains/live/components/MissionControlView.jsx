@@ -3,6 +3,7 @@ import EmptyState from "../../../components/ui/EmptyState.jsx";
 import Surface from "../../../components/ui/Surface.jsx";
 import { formatDateTimeFull } from "../../../utils/formatters.js";
 import { makeLiveRecordingTimingLabel, makeLiveStreamTimingLabel } from "../../missions/missionHelpers.js";
+import { ActiveMissionRecordingsPanel } from "../../recordings/ActiveMissionRecordingsPanel.jsx";
 import {
   connectedLiveConnectionStatuses,
   reconnectableLiveStatuses
@@ -25,9 +26,11 @@ export function MissionControlView({
   liveSessions,
   mission,
   missionTargets,
+  onOpenPlaybackFile,
   onReconnectSelectedMissionTarget,
   onRefreshSensorSnapshot,
   operationStatuses,
+  recordings,
   selectedMissionTargetKey,
   setSelectedMissionTargetKey
 }) {
@@ -112,8 +115,13 @@ export function MissionControlView({
         <AudioSink stream={selectedSession.videoStreams.audio} />
       </div>
 
-      <aside className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden">
+      <aside className="grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] gap-3 overflow-hidden">
         <ConnectionStatusPanel statuses={operationStatuses} />
+        <ActiveMissionRecordingsPanel
+          missionCode={mission.missionCode}
+          onOpenPlaybackFile={onOpenPlaybackFile}
+          recordings={recordings}
+        />
         <EventPanel liveEvents={liveEvents} />
       </aside>
     </section>

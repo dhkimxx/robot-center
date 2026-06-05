@@ -12,42 +12,9 @@ public final class SensorPayloadFactory {
     private SensorPayloadFactory() {
     }
 
-    public static String createSensorPayload(int sequence, long startedAtMs, String robotCode) {
-        long nowMs = System.currentTimeMillis();
-        double elapsedSeconds = (nowMs - startedAtMs) / 1000.0;
-        try {
-            JSONObject pose = new JSONObject()
-                .put("frameId", "odom")
-                .put("x", round(1.2 + elapsedSeconds * 0.08, 2))
-                .put("y", round(0.7 * Math.sin(elapsedSeconds / 5.0), 2))
-                .put("yawDeg", round((elapsedSeconds * 7.5) % 360.0, 1));
-
-            return new JSONObject()
-                .put("messageId", robotCode + "-sensor-" + sequence)
-                .put("schemaVersion", "1.0")
-                .put("messageType", "spatial")
-                .put("descriptors", new JSONArray()
-                    .put(new JSONObject()
-                        .put("sensorId", "spatial.odometry_1")
-                        .put("label", "Odometry")
-                        .put("sensorType", "odometry")
-                        .put("unit", "m")
-                        .put("enabled", true)))
-                .put("samples", new JSONArray()
-                    .put(new JSONObject()
-                        .put("sensorId", "spatial.odometry_1")
-                        .put("timestamp", Instant.ofEpochMilli(nowMs).toString())
-                        .put("values", pose)))
-                .toString();
-        } catch (JSONException exception) {
-            throw new IllegalStateException("failed to create sensor payload", exception);
-        }
-    }
-
     public static String createTelemetryPayload(
         int sequence,
         long startedAtMs,
-        String robotCode,
         Location location
     ) {
         long nowMs = System.currentTimeMillis();
@@ -65,7 +32,7 @@ public final class SensorPayloadFactory {
             double humChannelValue = round(61.0 + 5.0 * Math.cos(elapsedSeconds / 17.0), 1);
 
             return new JSONObject()
-                .put("messageId", robotCode + "-telemetry-" + sequence)
+                .put("messageId", "telemetry-" + startedAtMs + "-" + sequence)
                 .put("schemaVersion", "1.0")
                 .put("messageType", "telemetry")
                 .put("descriptors", new JSONArray()

@@ -75,9 +75,11 @@ export default function MissionsScreen({
         liveSessions={liveSessions}
         mission={controlMission}
         missionTargets={missionTargets}
+        onOpenPlaybackFile={onOpenPlaybackFile}
         onReconnectSelectedMissionTarget={onReconnectSelectedMissionTarget}
         onRefreshSensorSnapshot={onRefreshSensorSnapshot}
         operationStatuses={operationStatuses}
+        recordings={recordings}
         isSensorSnapshotRefreshing={isSensorSnapshotRefreshing}
         selectedMissionTargetKey={selectedMissionTargetKey}
         setSelectedMissionTargetKey={setSelectedMissionTargetKey}

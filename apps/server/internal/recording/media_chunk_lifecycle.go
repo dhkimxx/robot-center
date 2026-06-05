@@ -20,16 +20,30 @@ func (w *Worker) setActiveRecordingChunk(roomID string, chunk domain.RecordingCh
 }
 
 func (w *Worker) currentRecordingChunk(mediaKey string, observedAt time.Time) (domain.RecordingChunk, bool) {
+	return w.currentRecordingChunkForWrite(mediaKey, observedAt, true)
+}
+
+func (w *Worker) currentRecordingChunkForWrite(mediaKey string, observedAt time.Time, allowRollover bool) (domain.RecordingChunk, bool) {
 	w.mediaMu.Lock()
 	defer w.mediaMu.Unlock()
 	chunk, ok := w.activeChunks[mediaKey]
 	if !ok || strings.TrimSpace(chunk.ID) == "" {
 		return domain.RecordingChunk{}, false
 	}
-	if chunk.EndedAt.IsZero() || observedAt.Before(chunk.EndedAt) {
+	if chunk.EndedAt.IsZero() || observedAt.Before(chunk.EndedAt) || !allowRollover {
 		return chunk, true
 	}
 	return domain.RecordingChunk{}, false
+}
+
+func (w *Worker) expiredActiveRecordingChunk(mediaKey string, observedAt time.Time) (domain.RecordingChunk, bool) {
+	w.mediaMu.Lock()
+	defer w.mediaMu.Unlock()
+	chunk, ok := w.activeChunks[mediaKey]
+	if !ok || strings.TrimSpace(chunk.ID) == "" || chunk.EndedAt.IsZero() {
+		return domain.RecordingChunk{}, false
+	}
+	return chunk, !observedAt.Before(chunk.EndedAt)
 }
 
 func (w *Worker) recordingTarget(mediaKey string) (domain.Mission, bool) {
@@ -40,16 +54,20 @@ func (w *Worker) recordingTarget(mediaKey string) (domain.Mission, bool) {
 }
 
 func (w *Worker) ensureActiveRecordingChunk(ctx context.Context, mediaKey string, observedAt time.Time) (domain.RecordingChunk, bool, error) {
+	return w.ensureActiveRecordingChunkForWrite(ctx, mediaKey, observedAt, true)
+}
+
+func (w *Worker) ensureActiveRecordingChunkForWrite(ctx context.Context, mediaKey string, observedAt time.Time, allowRollover bool) (domain.RecordingChunk, bool, error) {
 	if observedAt.IsZero() {
 		observedAt = time.Now().UTC()
 	}
-	if chunk, ok := w.currentRecordingChunk(mediaKey, observedAt); ok {
+	if chunk, ok := w.currentRecordingChunkForWrite(mediaKey, observedAt, allowRollover); ok {
 		return chunk, true, nil
 	}
 
 	w.chunkMu.Lock()
 	defer w.chunkMu.Unlock()
-	if chunk, ok := w.currentRecordingChunk(mediaKey, observedAt); ok {
+	if chunk, ok := w.currentRecordingChunkForWrite(mediaKey, observedAt, allowRollover); ok {
 		return chunk, true, nil
 	}
 

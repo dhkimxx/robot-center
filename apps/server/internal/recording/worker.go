@@ -14,27 +14,29 @@ import (
 )
 
 type Worker struct {
-	config               config.RecorderWorkerConfig
-	appServerClient      AppServerClient
-	objectStorage        ObjectStorage
-	mediaUploader        MediaUploader
-	workerID             string
-	dataQueueStartOnce   sync.Once
-	dataAppendQueue      chan recorderDataAppendJob
-	dataPostQueue        chan recorderDataPostJob
-	dataQueueMu          sync.RWMutex
-	dataQueueRuntime     recorderDataQueueRuntime
-	subscriberMu         sync.RWMutex
-	subscriberCancels    map[string]context.CancelFunc
-	subscriberStatuses   map[string]recorderSessionStatus
-	chunkMu              sync.Mutex
-	mediaMu              sync.Mutex
-	activeTargets        map[string]domain.Mission
-	activeChunks         map[string]domain.RecordingChunk
-	pendingFinalizations map[string]recordingChunkFinalization
-	audioWriters         map[string]*activeAudioWriter
-	h264ParameterSets    map[string]h264ParameterSets
-	h264Timings          map[string]h264TrackTiming
+	config                 config.RecorderWorkerConfig
+	appServerClient        AppServerClient
+	objectStorage          ObjectStorage
+	mediaUploader          MediaUploader
+	workerID               string
+	dataQueueStartOnce     sync.Once
+	dataAppendQueue        chan recorderDataAppendJob
+	dataPostQueue          chan recorderDataPostJob
+	dataQueueMu            sync.RWMutex
+	dataQueueRuntime       recorderDataQueueRuntime
+	subscriberMu           sync.RWMutex
+	subscriberCancels      map[string]context.CancelFunc
+	subscriberStatuses     map[string]recorderSessionStatus
+	chunkMu                sync.Mutex
+	mediaMu                sync.Mutex
+	activeTargets          map[string]domain.Mission
+	activeChunks           map[string]domain.RecordingChunk
+	pendingFinalizations   map[string]recordingChunkFinalization
+	audioWriters           map[string]*activeAudioWriter
+	h264ParameterSets      map[string]h264ParameterSets
+	h264ChunkKeyframeWaits map[string]bool
+	h264KeyframeRequests   map[string]time.Time
+	h264Timings            map[string]h264TrackTiming
 }
 
 func NewWorker(cfg config.RecorderWorkerConfig) *Worker {
@@ -57,20 +59,22 @@ func newWorkerWithCollaborators(cfg config.RecorderWorkerConfig, appServerClient
 		hostname = "local"
 	}
 	worker := &Worker{
-		config:               cfg,
-		appServerClient:      appServerClient,
-		objectStorage:        objectStorage,
-		workerID:             "recorder-" + hostname,
-		dataAppendQueue:      make(chan recorderDataAppendJob, recorderDataAppendQueueCapacity),
-		dataPostQueue:        make(chan recorderDataPostJob, recorderDataPostQueueCapacity),
-		subscriberCancels:    map[string]context.CancelFunc{},
-		subscriberStatuses:   map[string]recorderSessionStatus{},
-		activeTargets:        map[string]domain.Mission{},
-		activeChunks:         map[string]domain.RecordingChunk{},
-		pendingFinalizations: map[string]recordingChunkFinalization{},
-		audioWriters:         map[string]*activeAudioWriter{},
-		h264ParameterSets:    map[string]h264ParameterSets{},
-		h264Timings:          map[string]h264TrackTiming{},
+		config:                 cfg,
+		appServerClient:        appServerClient,
+		objectStorage:          objectStorage,
+		workerID:               "recorder-" + hostname,
+		dataAppendQueue:        make(chan recorderDataAppendJob, recorderDataAppendQueueCapacity),
+		dataPostQueue:          make(chan recorderDataPostJob, recorderDataPostQueueCapacity),
+		subscriberCancels:      map[string]context.CancelFunc{},
+		subscriberStatuses:     map[string]recorderSessionStatus{},
+		activeTargets:          map[string]domain.Mission{},
+		activeChunks:           map[string]domain.RecordingChunk{},
+		pendingFinalizations:   map[string]recordingChunkFinalization{},
+		audioWriters:           map[string]*activeAudioWriter{},
+		h264ParameterSets:      map[string]h264ParameterSets{},
+		h264ChunkKeyframeWaits: map[string]bool{},
+		h264KeyframeRequests:   map[string]time.Time{},
+		h264Timings:            map[string]h264TrackTiming{},
 	}
 	worker.mediaUploader = NewMediaUploader(appServerClient, objectStorage, worker)
 	return worker

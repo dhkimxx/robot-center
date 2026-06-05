@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -191,5 +192,13 @@ func TestRecorderAPIFlow(t *testing.T) {
 	}
 	if !fileHasAvailableURL(recording.Files, "rgb_audio_mp4") {
 		t.Fatalf("expected rgb mp4 file with available URL, got %#v", recording.Files)
+	}
+	filteredRecordingsPayload := requestJSON[dto.OperatorRecordingsResponse](t, server.baseURL, http.MethodGet, "/api/v1/operator/recordings?missionCode="+url.QueryEscape(mission.code), "", nil)
+	if len(filteredRecordingsPayload.Recordings) != 1 || filteredRecordingsPayload.Recordings[0].MissionCode != mission.code {
+		t.Fatalf("expected one recording for mission filter, got %#v", filteredRecordingsPayload)
+	}
+	missingMissionRecordingsPayload := requestJSON[dto.OperatorRecordingsResponse](t, server.baseURL, http.MethodGet, "/api/v1/operator/recordings?missionCode=missing-mission", "", nil)
+	if len(missingMissionRecordingsPayload.Recordings) != 0 {
+		t.Fatalf("expected no recordings for missing mission filter, got %#v", missingMissionRecordingsPayload)
 	}
 }

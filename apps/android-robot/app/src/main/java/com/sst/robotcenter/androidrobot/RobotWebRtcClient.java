@@ -62,11 +62,8 @@ public final class RobotWebRtcClient {
     private final Map<String, PeerSession> peerSessions = new ConcurrentHashMap<>();
     private String localPeerId;
     private LocationProvider locationProvider;
-    private ScheduledExecutorService sensorExecutor;
     private ScheduledExecutorService telemetryExecutor;
-    private int sensorSequence;
     private int telemetrySequence;
-    private long sensorStartedAtMs;
     private long telemetryStartedAtMs;
 
     private SurfaceTextureHelper cameraSurfaceTextureHelper;
@@ -623,20 +620,12 @@ public final class RobotWebRtcClient {
                 }
                 log(label + " DataChannel " + peerLabel(session, session.peerId) + ": " + channel.state());
                 if (channel.state() == DataChannel.State.OPEN) {
-                    if (RobotStreamRoles.CHANNEL_SPATIAL.equals(label)) {
-                        startSensorStreaming();
-                        return;
-                    }
                     if (RobotStreamRoles.CHANNEL_TELEMETRY.equals(label)) {
                         startTelemetryStreaming();
                     }
                     return;
                 }
                 if (channel.state() == DataChannel.State.CLOSED) {
-                    if (RobotStreamRoles.CHANNEL_SPATIAL.equals(label)
-                        && !hasOpenDataChannel(RobotStreamRoles.CHANNEL_SPATIAL)) {
-                        stopSensorStreaming();
-                    }
                     if (RobotStreamRoles.CHANNEL_TELEMETRY.equals(label)
                         && !hasOpenDataChannel(RobotStreamRoles.CHANNEL_TELEMETRY)) {
                         stopTelemetryStreaming();
@@ -650,38 +639,6 @@ public final class RobotWebRtcClient {
         };
     }
 
-    private void startSensorStreaming() {
-        if (sensorExecutor != null) {
-            return;
-        }
-        sensorSequence = 0;
-        sensorStartedAtMs = System.currentTimeMillis();
-        sensorExecutor = Executors.newSingleThreadScheduledExecutor();
-        sensorExecutor.scheduleAtFixedRate(() -> {
-            String payload = SensorPayloadFactory.createSensorPayload(
-                sensorSequence++,
-                sensorStartedAtMs,
-                config.robotCode
-            );
-            byte[] bytes = payload.getBytes(StandardCharsets.UTF_8);
-            for (PeerSession session : peerSessions.values()) {
-                DataChannel channel = session.spatialDataChannel;
-                if (channel == null || channel.state() != DataChannel.State.OPEN) {
-                    continue;
-                }
-                ByteBuffer buffer = ByteBuffer.wrap(bytes);
-                channel.send(new DataChannel.Buffer(buffer, false));
-            }
-        }, 0, 1, TimeUnit.SECONDS);
-    }
-
-    private void stopSensorStreaming() {
-        if (sensorExecutor != null) {
-            sensorExecutor.shutdownNow();
-            sensorExecutor = null;
-        }
-    }
-
     private void startTelemetryStreaming() {
         if (telemetryExecutor != null) {
             return;
@@ -693,7 +650,6 @@ public final class RobotWebRtcClient {
             String payload = SensorPayloadFactory.createTelemetryPayload(
                 telemetrySequence++,
                 telemetryStartedAtMs,
-                config.robotCode,
                 locationProvider == null ? null : locationProvider.getLatestLocation()
             );
             byte[] bytes = payload.getBytes(StandardCharsets.UTF_8);
@@ -951,7 +907,6 @@ public final class RobotWebRtcClient {
         for (String peerId : new ArrayList<>(peerSessions.keySet())) {
             closePeerSession(peerId);
         }
-        stopSensorStreaming();
         stopTelemetryStreaming();
     }
 
@@ -986,9 +941,6 @@ public final class RobotWebRtcClient {
         }
         session.peerConnection.close();
         session.peerConnection.dispose();
-        if (!hasOpenDataChannel(RobotStreamRoles.CHANNEL_SPATIAL)) {
-            stopSensorStreaming();
-        }
         if (!hasOpenDataChannel(RobotStreamRoles.CHANNEL_TELEMETRY)) {
             stopTelemetryStreaming();
         }

@@ -487,7 +487,7 @@ func (w *Worker) createRecorderPeerConnection(ctx context.Context, roomID string
 		mediaKey := recorderMediaKey(roomID, robotCode)
 		log.Printf("recorder-worker track room=%s robot=%s label=%s kind=%s codec=%s stream=%s id=%s", roomID, robotCode, label, track.Kind().String(), track.Codec().MimeType, track.StreamID(), track.ID())
 		if track.Kind() == webrtc.RTPCodecTypeVideo && strings.EqualFold(track.Codec().MimeType, webrtc.MimeTypeH264) {
-			w.recordH264Track(ctx, mediaKey, label, track)
+			w.recordH264Track(ctx, mediaKey, label, track, peerConnection)
 			return
 		}
 		if track.Kind() == webrtc.RTPCodecTypeAudio && strings.EqualFold(track.Codec().MimeType, webrtc.MimeTypeOpus) {

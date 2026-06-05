@@ -31,9 +31,10 @@ func (s *Server) handleRecordingTargets(w http.ResponseWriter, r *http.Request) 
 }
 
 // @Summary 녹화 chunk 조회
-// @Description 관제 UI가 조회하는 recording chunk와 파일 상태 목록을 반환합니다.
+// @Description 관제 UI가 조회하는 recording chunk와 파일 상태 목록을 반환합니다. missionCode를 지정하면 해당 임무의 chunk만 반환합니다.
 // @Tags Operator API
 // @Produce json
+// @Param missionCode query string false "조회할 임무 코드"
 // @Success 200 {object} dto.OperatorRecordingsResponse
 // @Failure 500 {object} dto.ErrorResponse
 // @Router /api/v1/operator/recordings [get]
@@ -43,8 +44,12 @@ func (s *Server) handleListRecordings(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	missionCode := strings.TrimSpace(r.URL.Query().Get("missionCode"))
 	response := make([]dto.OperatorRecordingChunkResponse, 0, len(recordings))
 	for _, recording := range recordings {
+		if missionCode != "" && recording.MissionCode != missionCode {
+			continue
+		}
 		response = append(response, s.createOperatorRecordingResponse(recording))
 	}
 	writeJSON(w, http.StatusOK, dto.OperatorRecordingsPayload(response))

@@ -93,11 +93,15 @@ export function isPlayableRecordingFile(entry) {
   return Boolean(entry?.url) && entry?.status === "available" && String(entry?.contentType ?? "").startsWith("video/");
 }
 
+export function getPlayableRecordingVideoEntries(recording) {
+  return getRecordingObjectEntries(recording).filter(isPlayableRecordingFile);
+}
+
 export function createRecordingPlaybackFile(recording, entry) {
   if (!recording) {
     return null;
   }
-  const playableEntry = entry ?? getRecordingObjectEntries(recording).find(isPlayableRecordingFile);
+  const playableEntry = entry ?? getPlayableRecordingVideoEntries(recording)[0];
   if (!isPlayableRecordingFile(playableEntry)) {
     return null;
   }
@@ -109,6 +113,26 @@ export function createRecordingPlaybackFile(recording, entry) {
     robotCode: recording.robotCode,
     startedAt: recording.startedAt
   };
+}
+
+export function filterRecordingsByMissionCode(recordings, missionCode) {
+  const normalizedMissionCode = String(missionCode ?? "").trim();
+  if (!normalizedMissionCode) {
+    return [];
+  }
+  return recordings.filter((recording) => recording.missionCode === normalizedMissionCode);
+}
+
+export function sortRecordingChunksLatestFirst(recordings) {
+  return [...recordings].sort((left, right) => {
+    const rightChunkIndex = Number(right.chunkIndex);
+    const leftChunkIndex = Number(left.chunkIndex);
+    if (Number.isFinite(rightChunkIndex) && Number.isFinite(leftChunkIndex) && rightChunkIndex !== leftChunkIndex) {
+      return rightChunkIndex - leftChunkIndex;
+    }
+    return new Date(right.updatedAt ?? right.endedAt ?? right.startedAt ?? 0).getTime()
+      - new Date(left.updatedAt ?? left.endedAt ?? left.startedAt ?? 0).getTime();
+  });
 }
 
 export function findLatestRecordingForTarget(recordings, missionCode, robotCode, predicate = () => true) {

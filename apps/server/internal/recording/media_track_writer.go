@@ -2,46 +2,63 @@ package recording
 
 import (
 	"context"
-	"github.com/pion/rtp"
-	"github.com/pion/rtp/codecs"
-	"github.com/pion/webrtc/v4"
-	"github.com/pion/webrtc/v4/pkg/media/oggwriter"
 	"log"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/pion/rtcp"
+	"github.com/pion/rtp"
+	"github.com/pion/rtp/codecs"
+	"github.com/pion/webrtc/v4"
+	"github.com/pion/webrtc/v4/pkg/media/oggwriter"
+	"github.com/pion/webrtc/v4/pkg/media/samplebuilder"
 )
 
-func (w *Worker) recordH264Track(ctx context.Context, roomID string, label string, track *webrtc.TrackRemote) {
-	depacketizer := &codecs.H264Packet{}
+func (w *Worker) recordH264Track(ctx context.Context, roomID string, label string, track *webrtc.TrackRemote, peerConnection *webrtc.PeerConnection) {
+	builder := samplebuilder.New(200, &codecs.H264Packet{}, track.Codec().ClockRate, samplebuilder.WithMaxTimeDelay(2*time.Second))
+	flushSamples := func() {
+		for sample := builder.Pop(); sample != nil; sample = builder.Pop() {
+			if len(sample.Data) == 0 {
+				continue
+			}
+			if err := w.appendH264AccessUnit(ctx, roomID, label, sample.Data, sample.PacketTimestamp, time.Now().UTC(), track, peerConnection); err != nil {
+				w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
+					status.lastError = err.Error()
+				})
+				log.Printf("recorder-worker h264 append failed room=%s label=%s: %v", roomID, label, err)
+			}
+		}
+	}
+	flushRemainingSamples := func() {
+		for sample := builder.Pop(); sample != nil; sample = builder.Pop() {
+			if len(sample.Data) == 0 {
+				continue
+			}
+			if err := w.appendH264AccessUnit(ctx, roomID, label, sample.Data, sample.PacketTimestamp, time.Now().UTC(), track, peerConnection); err != nil {
+				w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
+					status.lastError = err.Error()
+				})
+				log.Printf("recorder-worker h264 append failed room=%s label=%s: %v", roomID, label, err)
+			}
+		}
+	}
 	for {
 		select {
 		case <-ctx.Done():
+			flushRemainingSamples()
 			return
 		default:
 		}
 
 		packet, _, err := track.ReadRTP()
 		if err != nil {
+			flushRemainingSamples()
 			return
 		}
 		w.markRecorderRobotTrackActivity(roomID, label, time.Now().UTC())
-		payload, err := depacketizer.Unmarshal(packet.Payload)
-		if err != nil {
-			w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
-				status.lastError = err.Error()
-			})
-			continue
-		}
-		if len(payload) == 0 {
-			continue
-		}
-		if err := w.appendH264Payload(ctx, roomID, label, payload, packet.Timestamp); err != nil {
-			w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
-				status.lastError = err.Error()
-			})
-			log.Printf("recorder-worker h264 append failed room=%s label=%s: %v", roomID, label, err)
-		}
+		builder.Push(packet.Clone())
+		flushSamples()
 	}
 }
 
@@ -67,13 +84,29 @@ func (w *Worker) recordOpusTrack(ctx context.Context, roomID string, label strin
 	}
 }
 
-func (w *Worker) appendH264Payload(ctx context.Context, roomID string, label string, payload []byte, rtpTimestamp uint32) error {
+func (w *Worker) appendH264AccessUnit(ctx context.Context, roomID string, label string, payload []byte, rtpTimestamp uint32, observedAt time.Time, track *webrtc.TrackRemote, peerConnection *webrtc.PeerConnection) error {
 	storageLabel := recordingStorageMediaLabel(label)
 	if storageLabel != "rgb" && storageLabel != "thermal" {
 		return nil
 	}
 
-	chunk, ok, err := w.ensureActiveRecordingChunk(ctx, roomID, time.Now().UTC())
+	payload = removeH264AccessUnitDelimiters(payload)
+	if len(payload) == 0 {
+		return nil
+	}
+	payloadContainsVCL := h264PayloadContainsVCL(payload)
+	payloadContainsIDR := h264PayloadContainsIDR(payload)
+	if !payloadContainsVCL {
+		w.mediaMu.Lock()
+		w.updateH264ParameterSetsLocked(roomID, storageLabel, payload)
+		w.mediaMu.Unlock()
+		return nil
+	}
+	expiredChunk, isExpired := w.expiredActiveRecordingChunk(roomID, observedAt)
+	if isExpired && !payloadContainsIDR {
+		w.requestRecorderKeyFrame(roomID, storageLabel, expiredChunk.ID, track, peerConnection, observedAt)
+	}
+	chunk, ok, err := w.ensureActiveRecordingChunkForWrite(ctx, roomID, observedAt, payloadContainsIDR)
 	if err != nil {
 		return err
 	}
@@ -82,25 +115,74 @@ func (w *Worker) appendH264Payload(ctx context.Context, roomID string, label str
 	}
 
 	w.mediaMu.Lock()
-	defer w.mediaMu.Unlock()
 
 	activeChunk, ok := w.activeChunks[roomID]
 	if !ok || activeChunk.ID != chunk.ID {
+		w.mediaMu.Unlock()
 		return nil
 	}
+
+	rolledOverOnKeyframe := isExpired && payloadContainsIDR && chunk.ID != expiredChunk.ID
+	if rolledOverOnKeyframe {
+		w.markH264ChunkTracksWaitingForKeyframeLocked(roomID, chunk.ID)
+	}
+	keyframeWaitKey := h264ChunkKeyframeWaitKey(roomID, chunk.ID, storageLabel)
+	trackHasStarted := w.h264Timings[h264TrackTimingKey(chunk.ID, storageLabel)].haveTimestamp
+	if !trackHasStarted || w.h264ChunkKeyframeWaits[keyframeWaitKey] {
+		if !payloadContainsIDR {
+			w.updateH264ParameterSetsLocked(roomID, storageLabel, payload)
+			w.mediaMu.Unlock()
+			w.requestRecorderKeyFrame(roomID, storageLabel, chunk.ID, track, peerConnection, observedAt)
+			return nil
+		}
+		payload = trimH264PayloadToRandomAccessPoint(payload)
+		delete(w.h264ChunkKeyframeWaits, keyframeWaitKey)
+	}
 	w.updateH264ParameterSetsLocked(roomID, storageLabel, payload)
-	w.updateH264TrackTimingLocked(chunk.ID, storageLabel, rtpTimestamp)
+	w.updateH264TrackTimingLocked(chunk.ID, storageLabel, rtpTimestamp, observedAt)
 	directory := recordingChunkDirectory(chunk.ID)
 	if err := os.MkdirAll(directory, 0o755); err != nil {
+		w.mediaMu.Unlock()
 		return err
 	}
 	file, err := os.OpenFile(h264TrackPath(chunk.ID, storageLabel), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
+		w.mediaMu.Unlock()
 		return err
 	}
 	defer file.Close()
 	_, err = file.Write(payload)
+	w.mediaMu.Unlock()
 	return err
+}
+
+func (w *Worker) markH264ChunkTracksWaitingForKeyframeLocked(roomID string, chunkID string) {
+	for _, label := range []string{"rgb", "thermal"} {
+		w.h264ChunkKeyframeWaits[h264ChunkKeyframeWaitKey(roomID, chunkID, label)] = true
+	}
+}
+
+func (w *Worker) requestRecorderKeyFrame(roomID string, label string, chunkID string, track *webrtc.TrackRemote, peerConnection *webrtc.PeerConnection, requestedAt time.Time) {
+	if track == nil || peerConnection == nil || track.SSRC() == 0 {
+		return
+	}
+	requestKey := h264KeyframeRequestKey(roomID, label)
+	w.mediaMu.Lock()
+	previousRequestAt := w.h264KeyframeRequests[requestKey]
+	if !previousRequestAt.IsZero() && requestedAt.Sub(previousRequestAt) < time.Second {
+		w.mediaMu.Unlock()
+		return
+	}
+	w.h264KeyframeRequests[requestKey] = requestedAt
+	w.mediaMu.Unlock()
+
+	if err := peerConnection.WriteRTCP([]rtcp.Packet{
+		&rtcp.PictureLossIndication{MediaSSRC: uint32(track.SSRC())},
+	}); err != nil {
+		log.Printf("recorder-worker keyframe request failed room=%s label=%s chunk=%s: %v", roomID, label, chunkID, err)
+		return
+	}
+	log.Printf("recorder-worker keyframe requested room=%s label=%s chunk=%s", roomID, label, chunkID)
 }
 
 func recordingStorageMediaLabel(label string) string {
@@ -119,7 +201,7 @@ func (w *Worker) appendOpusPacket(ctx context.Context, roomID string, label stri
 		return nil
 	}
 
-	chunk, ok, err := w.ensureActiveRecordingChunk(ctx, roomID, time.Now().UTC())
+	chunk, ok, err := w.ensureActiveRecordingChunkForWrite(ctx, roomID, time.Now().UTC(), false)
 	if err != nil {
 		return err
 	}
