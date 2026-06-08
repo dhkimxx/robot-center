@@ -1,7 +1,7 @@
 ---
 title: "I-COM-02 영상 스트리밍 최적화"
 created: 2026-06-04
-updated: '2026-06-04'
+updated: '2026-06-08'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>"]
 type: "feature"
@@ -12,6 +12,7 @@ history:
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: organize features as flat feature-code documents'
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: move implemented feature documentation to done catalog'
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: classify feature document by implementation status'
+- '2026-06-08 danya.kim <danya.kim@thundersoft.com>: update in-progress feature evidence from recent implementation'
 ---
 
 # I-COM-02 영상 스트리밍 최적화
@@ -40,6 +41,22 @@ WebRTC/SFU 기반 RGB/Thermal/Audio/DataChannel 수신, selected robot subscribe
 
 WebRTC 기반 초저지연 영상 전송, SVC(Scalable Video Coding) - 채널 상태 적응, Simulcast(멀티비트레이트 동시 송출), FEC(Forward Error Correction) 패킷 손실 복구, 지터 버퍼 최적화.
 
+## 최근 진행 반영
+
+2026-06-08 기준으로 SFU subscriber offer 처리와 live video 표시 보강이 반영되었다.
+
+반영된 범위:
+
+- SFU subscriber offer 생성/정리 흐름 개선
+- robot reconnect 이후 subscriber track 재협상 흐름 보강
+- live video panel에 영상 해상도/프레임 등 metrics overlay 추가
+- canonical media track 기반 수신 흐름 유지
+
+아직 완료가 아닌 이유:
+
+- 원 기능 범위의 SVC, Simulcast, FEC, 지터 버퍼 최적화는 아직 구현되지 않았다.
+- 현재 구현은 PoC 관제 송출 안정화와 관측성 보강 중심이다.
+- 실제 로봇/네트워크 환경에서 bitrate adaptation 정책 검증이 필요하다.
 
 ## 진행 중 분류 기준
 

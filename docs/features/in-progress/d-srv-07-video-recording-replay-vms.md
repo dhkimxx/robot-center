@@ -1,7 +1,7 @@
 ---
 title: "D-SRV-07 영상 저장 및 조회(VMS)"
 created: 2026-06-04
-updated: '2026-06-04'
+updated: '2026-06-08'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>"]
 type: "feature"
@@ -12,6 +12,7 @@ history:
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: organize features as flat feature-code documents'
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: move implemented feature documentation to done catalog'
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: classify feature document by implementation status'
+- '2026-06-08 danya.kim <danya.kim@thundersoft.com>: update in-progress feature evidence from recent implementation'
 ---
 
 # D-SRV-07 영상 저장 및 조회(VMS)
@@ -40,6 +41,23 @@ recorder-worker, MP4 muxing, MinIO 저장, recording session/chunk metadata, 종
 
 전체 영상 스트림 녹화(NAS 저장 연동), 타임라인 기반 영상 검색/재생, 이벤트 연동 북마크(탐지 시점 이동), 영상 내보내기(클립 추출), 멀티채널 동기 재생.
 
+## 최근 진행 반영
+
+2026-06-08 기준으로 recording replay 안정화 작업이 추가 반영되었다.
+
+반영된 범위:
+
+- active recording chunk를 live status에서 우선 반영하도록 개선
+- recording replay API와 DTO 정리
+- mission replay 화면의 robot 목록/robot 이름 표시 개선
+- replay chunk panel, replay helper, recording API 테스트 보강
+- recorder-worker chunk lifecycle, media upload, media track writer 안정화
+
+아직 완료가 아닌 이유:
+
+- 임무 종료 시 마지막 chunk 마감과 업로드 재처리 정책은 계속 검증이 필요하다.
+- 이벤트 bookmark, clip export, 멀티채널 동기 재생은 아직 구현 범위가 열려 있다.
+- 운영 환경에서 recorder-worker scale-out 시 중복 처리 방지와 장애 복구 정책을 더 다듬어야 한다.
 
 ## 진행 중 분류 기준
 
