@@ -4,6 +4,8 @@ import (
 	"log"
 
 	"github.com/pion/webrtc/v4"
+
+	"robot-center/apps/server/internal/monitorlog"
 )
 
 func (h *Hub) handleRemoteCandidate(sender *peer, payload map[string]any) error {
@@ -48,6 +50,7 @@ func (h *Hub) handleRemoteCandidate(sender *peer, payload map[string]any) error 
 	}
 	h.mu.Unlock()
 	if peerConnection == nil {
+		monitorlog.Event("sfu", "remote_candidate_ignored", "room", sender.roomID, "peer", sender.id, "role", sender.role, "reason", "peer_connection_missing", "sdpMid", dereferenceString(remoteCandidate.SDPMid), "sdpMLineIndex", dereferenceUint16(remoteCandidate.SDPMLineIndex))
 		return nil
 	}
 	return peerConnection.AddICECandidate(remoteCandidate)

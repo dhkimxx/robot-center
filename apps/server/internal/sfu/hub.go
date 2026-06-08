@@ -1,11 +1,13 @@
 package sfu
 
 import (
-	"github.com/gorilla/websocket"
-	"log"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/gorilla/websocket"
+
+	"robot-center/apps/server/internal/monitorlog"
 )
 
 const serverPeerID = "sfu"
@@ -104,28 +106,28 @@ func (h *Hub) handleSignal(sender *peer, message signalMessage) {
 	case "offer":
 		if sender.role == "robot" && isTargetingServer(message.Payload) {
 			if err := h.handleRobotOffer(sender, message.Payload); err != nil {
-				log.Printf("sfu robot offer failed room=%s peer=%s: %v", sender.roomID, sender.id, err)
+				monitorlog.Event("sfu", "robot_offer_failed", "room", sender.roomID, "robot", sender.robotCode, "peer", sender.id, "error", err)
 			}
 			return
 		}
 	case "answer":
 		if isSubscriberRole(sender.role) && isTargetingServer(message.Payload) {
 			if err := h.handleSubscriberAnswer(sender, message.Payload); err != nil {
-				log.Printf("sfu subscriber answer failed room=%s peer=%s: %v", sender.roomID, sender.id, err)
+				monitorlog.Event("sfu", "subscriber_answer_failed", "room", sender.roomID, "peer", sender.id, "role", sender.role, "error", err)
 			}
 			return
 		}
 	case "candidate":
 		if isTargetingServer(message.Payload) {
 			if err := h.handleRemoteCandidate(sender, message.Payload); err != nil {
-				log.Printf("sfu candidate ignored room=%s peer=%s: %v", sender.roomID, sender.id, err)
+				monitorlog.Event("sfu", "remote_candidate_ignored", "room", sender.roomID, "peer", sender.id, "role", sender.role, "reason", "add_ice_candidate_failed", "error", err)
 			}
 			return
 		}
 	case "select-robot":
 		if isSubscriberRole(sender.role) {
 			if err := h.handleSubscriberRobotSelection(sender, message.Payload); err != nil {
-				log.Printf("sfu subscriber selection failed room=%s peer=%s: %v", sender.roomID, sender.id, err)
+				monitorlog.Event("sfu", "subscriber_selection_failed", "room", sender.roomID, "peer", sender.id, "role", sender.role, "error", err)
 			}
 			return
 		}

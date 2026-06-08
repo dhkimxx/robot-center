@@ -2,9 +2,12 @@ package sfu
 
 import (
 	"fmt"
-	"github.com/pion/webrtc/v4"
 	"log"
 	"time"
+
+	"github.com/pion/webrtc/v4"
+
+	"robot-center/apps/server/internal/monitorlog"
 )
 
 const publisherMediaActivityEventInterval = 10 * time.Second
@@ -25,8 +28,11 @@ func (h *Hub) handleRobotOffer(sender *peer, payload map[string]any) error {
 		})
 		return err
 	}
+	offerFields := []any{"room", sender.roomID, "robot", robotCode, "peer", sender.id}
+	offerFields = append(offerFields, sdpMonitorFields(offerSDP)...)
+	monitorlog.Event("sfu", "robot_offer_received", offerFields...)
 	if normalizedOfferSDP, normalized := normalizeBundledApplicationDataChannelSDP(offerSDP); normalized {
-		log.Printf("sfu robot offer sdp normalized room=%s robot=%s reason=bundled datachannel application m-line zero port", sender.roomID, robotCode)
+		monitorlog.Event("sfu", "robot_offer_normalized", "room", sender.roomID, "robot", robotCode, "peer", sender.id, "reason", "bundled_datachannel_application_zero_port")
 		offerSDP = normalizedOfferSDP
 	}
 
@@ -57,6 +63,7 @@ func (h *Hub) handleRobotOffer(sender *peer, payload map[string]any) error {
 		"sdp":       localDescription.SDP,
 		"robotCode": robotCode,
 	})
+	monitorlog.Event("sfu", "robot_offer_answered", "room", sender.roomID, "robot", robotCode, "peer", sender.id)
 	return nil
 }
 
@@ -309,25 +316,28 @@ func (h *Hub) markPublisherDataChannelOpen(roomID string, robotCode string, peer
 	publisher.updatedAt = now
 }
 
-func (h *Hub) markPublisherDataActivity(roomID string, robotCode string, peerID string, label string) {
+func (h *Hub) markPublisherDataActivity(roomID string, robotCode string, peerID string, label string) (int, bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	publisher := h.findPublisherLocked(roomID, robotCode, peerID)
 	if publisher == nil {
-		return
+		return 0, false
 	}
 	now := time.Now().UTC()
 	channel := ensurePublishedDataChannel(publisher, label, now)
+	messageCount := 0
 	if channel != nil {
 		if channel.State != "closed" && channel.State != "error" {
 			channel.State = "open"
 		}
 		channel.LastMessageAt = cloneTimePointer(&now)
 		channel.MessageCount++
+		messageCount = channel.MessageCount
 	}
 	publisher.lastDataAt = &now
 	publisher.updatedAt = now
+	return messageCount, messageCount == 1
 }
 
 func (h *Hub) markPublisherDataChannelClosed(roomID string, robotCode string, peerID string, label string) {

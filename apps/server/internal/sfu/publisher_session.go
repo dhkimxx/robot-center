@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/pion/webrtc/v4"
+
+	"robot-center/apps/server/internal/monitorlog"
 )
 
 func newPublisherSession(peerID string, robotCode string, peerConnection *webrtc.PeerConnection) *publisherSession {
@@ -62,7 +64,10 @@ func (s *publisherSession) prepareConnection(roomID string, hub *Hub) {
 			log.Printf("sfu robot datachannel error room=%s robot=%s label=%s: %v", roomID, s.robotCode, label, err)
 		})
 		dataChannel.OnMessage(func(message webrtc.DataChannelMessage) {
-			hub.markPublisherDataActivity(roomID, s.robotCode, s.peerID, label)
+			messageCount, firstMessage := hub.markPublisherDataActivity(roomID, s.robotCode, s.peerID, label)
+			if firstMessage {
+				monitorlog.Event("sfu", "robot_datachannel_first_message", "room", roomID, "robot", s.robotCode, "peer", s.peerID, "label", label, "bytes", len(message.Data), "messageCount", messageCount)
+			}
 			hub.forwardDataChannelMessage(roomID, s.robotCode, label, message.Data)
 		})
 	})

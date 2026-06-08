@@ -12,6 +12,7 @@ import (
 	"github.com/pion/webrtc/v4"
 
 	"robot-center/apps/server/internal/domain"
+	"robot-center/apps/server/internal/monitorlog"
 )
 
 type SubscriberStatus struct {
@@ -406,8 +407,9 @@ func (w *Worker) runRecorderSession(ctx context.Context, target domain.Mission) 
 			if fromPeerID != "" {
 				targetPeerID = fromPeerID
 			}
+			monitorlog.Event("recorder-worker", "offer_received", "room", roomID, "peer", selfPeerID, "fromPeer", fromPeerID)
 			w.resetRecorderTrackRuntime(roomID, payloadString(message.Payload, "robotCode"))
-			if err := w.answerRecorderOffer(ctx, peerConnection, connection, message.Payload, targetPeerID); err != nil {
+			if err := w.answerRecorderOffer(ctx, roomID, peerConnection, connection, message.Payload, targetPeerID); err != nil {
 				w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
 					status.lastError = err.Error()
 				})
@@ -532,7 +534,7 @@ func (w *Worker) createRecorderPeerConnection(ctx context.Context, roomID string
 	return peerConnection, nil
 }
 
-func (w *Worker) answerRecorderOffer(ctx context.Context, peerConnection *webrtc.PeerConnection, connection *websocket.Conn, payload map[string]any, targetPeerID string) error {
+func (w *Worker) answerRecorderOffer(ctx context.Context, roomID string, peerConnection *webrtc.PeerConnection, connection *websocket.Conn, payload map[string]any, targetPeerID string) error {
 	offerSDP := payloadString(payload, "sdp")
 	if offerSDP == "" {
 		return fmt.Errorf("offer sdp is empty")
@@ -571,5 +573,9 @@ func (w *Worker) answerRecorderOffer(ctx context.Context, peerConnection *webrtc
 	if targetPeerID != "" {
 		answerPayload["targetPeerId"] = targetPeerID
 	}
-	return connection.WriteJSON(recorderSignalMessage{Type: "answer", Payload: answerPayload})
+	if err := connection.WriteJSON(recorderSignalMessage{Type: "answer", Payload: answerPayload}); err != nil {
+		return err
+	}
+	monitorlog.Event("recorder-worker", "answer_sent", "room", roomID, "targetPeer", targetPeerID)
+	return nil
 }

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"time"
+
+	"robot-center/apps/server/internal/monitorlog"
 )
 
 const (
@@ -117,7 +119,9 @@ func (w *Worker) enqueueRecorderDataChannelMessage(ctx context.Context, roomID s
 		}
 	}
 
-	w.markRecorderDataObserved(message.roomID, message.robotCode, message.storageLabel)
+	if w.markRecorderDataObserved(message.roomID, message.robotCode, message.storageLabel) {
+		monitorlog.Event("recorder-worker", "datachannel_first_message", "room", message.roomID, "robot", message.robotCode, "label", message.storageLabel, "bytes", len(message.payload))
+	}
 }
 
 func (w *Worker) normalizeRecorderDataChannelMessage(roomID string, label string, payload []byte) (recorderDataChannelMessage, bool) {
@@ -231,22 +235,27 @@ func (w *Worker) postRecorderDataChannelPayloadWithRetry(ctx context.Context, jo
 	return lastErr
 }
 
-func (w *Worker) markRecorderDataObserved(roomID string, robotCode string, storageLabel string) {
+func (w *Worker) markRecorderDataObserved(roomID string, robotCode string, storageLabel string) bool {
 	if robotCode == "" {
-		return
+		return false
 	}
 	observedAt := time.Now().UTC()
+	firstMessage := false
 	w.updateSubscriberStatus(roomID, func(status *recorderSessionStatus) {
 		status.robotCodes[robotCode] = struct{}{}
 		if status.robotCode == "" {
 			status.robotCode = robotCode
 		}
 		robotStatus := ensureRecorderRobotRuntime(status, robotCode)
+		if _, ok := robotStatus.dataChannelLabels[storageLabel]; !ok {
+			firstMessage = true
+		}
 		robotStatus.dataChannelLabels[storageLabel] = struct{}{}
 		robotStatus.lastDataAt = observedAt
 		robotStatus.updatedAt = observedAt
 		status.robotStatuses[robotCode] = robotStatus
 	})
+	return firstMessage
 }
 
 func (w *Worker) markRecorderDataPersisted(roomID string, robotCode string, storageLabel string) {

@@ -2,11 +2,14 @@ package sfu
 
 import (
 	"fmt"
-	"github.com/pion/rtcp"
-	"github.com/pion/webrtc/v4"
 	"log"
 	"strings"
 	"time"
+
+	"github.com/pion/rtcp"
+	"github.com/pion/webrtc/v4"
+
+	"robot-center/apps/server/internal/monitorlog"
 )
 
 const subscriberOfferCoalesceDelay = 150 * time.Millisecond
@@ -121,6 +124,10 @@ func (h *Hub) ensureSubscriberOffer(roomID string, peerID string) {
 		h.mu.Unlock()
 		return
 	}
+	role := session.role
+	selectedRobotCode := session.selectedRobotCode
+	trackCount := len(session.attachedTracks)
+	dataChannelCount := len(session.dataChannels)
 	h.mu.Unlock()
 
 	localDescription, err := session.createLocalOffer()
@@ -132,6 +139,7 @@ func (h *Hub) ensureSubscriberOffer(roomID string, peerID string) {
 		"type": localDescription.Type.String(),
 		"sdp":  localDescription.SDP,
 	})
+	monitorlog.Event("sfu", "subscriber_offer_sent", "room", roomID, "peer", peerID, "role", role, "selectedRobot", selectedRobotCode, "tracks", trackCount, "dataChannels", dataChannelCount)
 }
 
 func (h *Hub) requestKeyFrame(roomID string, trackKey string) {
@@ -215,6 +223,7 @@ func (h *Hub) handleSubscriberAnswer(sender *peer, payload map[string]any) error
 	}); err != nil {
 		return err
 	}
+	monitorlog.Event("sfu", "subscriber_answer_applied", "room", sender.roomID, "peer", sender.id, "role", sender.role, "selectedRobot", sender.selectedRobotCode)
 
 	h.mu.Lock()
 	needsOffer := false
@@ -314,6 +323,7 @@ func (h *Hub) handleSubscriberRobotSelection(sender *peer, payload map[string]an
 		"robotCode":   robotCode,
 		"streamState": streamState,
 	})
+	monitorlog.Event("sfu", "subscriber_robot_selected", "room", sender.roomID, "peer", sender.id, "role", sender.role, "robot", robotCode, "streamState", streamState)
 	go h.ensureSubscriberOffer(sender.roomID, sender.id)
 	return nil
 }
