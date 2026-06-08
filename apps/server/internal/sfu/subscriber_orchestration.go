@@ -130,7 +130,7 @@ func (h *Hub) ensureSubscriberOffer(roomID string, peerID string) {
 	dataChannelCount := len(session.dataChannels)
 	h.mu.Unlock()
 
-	localDescription, err := session.createLocalOffer()
+	localDescription, localCandidates, err := session.createLocalOffer()
 	if err != nil {
 		h.markSubscriberOfferFailed(roomID, peerID, err)
 		return
@@ -139,6 +139,7 @@ func (h *Hub) ensureSubscriberOffer(roomID string, peerID string) {
 		"type": localDescription.Type.String(),
 		"sdp":  localDescription.SDP,
 	})
+	h.sendServerCandidateSignals(roomID, peerID, localCandidates)
 	monitorlog.Event("sfu", "subscriber_offer_sent", "room", roomID, "peer", peerID, "role", role, "selectedRobot", selectedRobotCode, "tracks", trackCount, "dataChannels", dataChannelCount)
 }
 

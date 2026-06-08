@@ -89,12 +89,68 @@ stop_pid_session() {
   rm -f "$pid_file"
 }
 
+session_process_pids() {
+  local session_name="$1"
+  local log_file="$ROOT_DIR/.runtime/$session_name.log"
+  ps -axo pid=,command= | awk -v session="$session_name" -v log_file="$log_file" '
+    $0 ~ log_file || $0 ~ ("SCREEN -dmS " session) {
+      print $1
+    }
+  '
+}
+
+child_pids_of() {
+  local parent_pid="$1"
+  ps -axo pid=,ppid= | awk -v parent_pid="$parent_pid" '$2 == parent_pid { print $1 }'
+}
+
+kill_process_tree() {
+  local pid="$1"
+  local child_pid
+  while IFS= read -r child_pid; do
+    [[ -z "$child_pid" ]] && continue
+    kill_process_tree "$child_pid"
+  done < <(child_pids_of "$pid")
+  kill "$pid" >/dev/null 2>&1 || true
+}
+
+kill_process_tree_force() {
+  local pid="$1"
+  local child_pid
+  while IFS= read -r child_pid; do
+    [[ -z "$child_pid" ]] && continue
+    kill_process_tree_force "$child_pid"
+  done < <(child_pids_of "$pid")
+  kill -9 "$pid" >/dev/null 2>&1 || true
+}
+
+stop_orphaned_session_processes() {
+  local session_name="$1"
+  local pids
+  pids="$(session_process_pids "$session_name" | sort -u)"
+  [[ -n "$pids" ]] || return 0
+
+  while IFS= read -r pid; do
+    [[ -z "$pid" ]] && continue
+    kill_process_tree "$pid"
+  done <<<"$pids"
+  sleep 1
+
+  pids="$(session_process_pids "$session_name" | sort -u)"
+  [[ -n "$pids" ]] || return 0
+  while IFS= read -r pid; do
+    [[ -z "$pid" ]] && continue
+    kill_process_tree_force "$pid"
+  done <<<"$pids"
+}
+
 stop_screen_session() {
   local session_name="$1"
   if command -v screen >/dev/null 2>&1 && screen_exists "$session_name"; then
     screen -S "$session_name" -X quit || true
   fi
   stop_pid_session "$session_name"
+  stop_orphaned_session_processes "$session_name"
 }
 
 kill_listeners_on_port() {
@@ -128,16 +184,19 @@ stop_local_processes() {
 
 list_python_mock_sessions() {
   {
-    if command -v screen >/dev/null 2>&1; then
-      screen -ls 2>/dev/null || true
-    fi
-  } | awk -v prefix="$PYTHON_MOCK_SESSION_PREFIX" '
-    $1 ~ "[.]" prefix {
-      split($1, parts, ".")
-      print parts[2]
-    }
-  '
-  list_pid_sessions "$PYTHON_MOCK_SESSION_PREFIX"
+    {
+      if command -v screen >/dev/null 2>&1; then
+        screen -ls 2>/dev/null || true
+      fi
+    } | awk -v prefix="$PYTHON_MOCK_SESSION_PREFIX" '
+        $1 ~ "[.]" prefix {
+          split($1, parts, ".")
+          print parts[2]
+        }
+      '
+    list_pid_sessions "$PYTHON_MOCK_SESSION_PREFIX"
+    list_process_sessions "$PYTHON_MOCK_SESSION_PREFIX"
+  } | sort -u
 }
 
 stop_python_mock_sessions() {
@@ -150,16 +209,19 @@ stop_python_mock_sessions() {
 
 list_gstreamer_mock_sessions() {
   {
-    if command -v screen >/dev/null 2>&1; then
-      screen -ls 2>/dev/null || true
-    fi
-  } | awk -v prefix="$GSTREAMER_MOCK_SESSION_PREFIX" '
-    $1 ~ "[.]" prefix {
-      split($1, parts, ".")
-      print parts[2]
-    }
-  '
-  list_pid_sessions "$GSTREAMER_MOCK_SESSION_PREFIX"
+    {
+      if command -v screen >/dev/null 2>&1; then
+        screen -ls 2>/dev/null || true
+      fi
+    } | awk -v prefix="$GSTREAMER_MOCK_SESSION_PREFIX" '
+        $1 ~ "[.]" prefix {
+          split($1, parts, ".")
+          print parts[2]
+        }
+      '
+    list_pid_sessions "$GSTREAMER_MOCK_SESSION_PREFIX"
+    list_process_sessions "$GSTREAMER_MOCK_SESSION_PREFIX"
+  } | sort -u
 }
 
 stop_gstreamer_mock_sessions() {
@@ -193,6 +255,11 @@ list_pid_sessions() {
   local runtime_dir="$ROOT_DIR/.runtime"
   [[ -d "$runtime_dir" ]] || return
   find "$runtime_dir" -maxdepth 1 -type f -name "$prefix*.pid" -exec basename {} .pid \; 2>/dev/null
+}
+
+list_process_sessions() {
+  local prefix="$1"
+  ps -axo command= | sed -n "s#.*\\.runtime/\\($prefix-[^ .'/]*\\)\\.log.*#\\1#p" | sort -u
 }
 
 wait_for_http() {

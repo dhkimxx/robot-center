@@ -26,7 +26,7 @@ func newSubscriberSession(peerID string, role string, selectedRobotCode string, 
 
 func (s *subscriberSession) configureConnection(roomID string, targetPeer *peer) {
 	s.peerConnection.OnICECandidate(func(candidate *webrtc.ICECandidate) {
-		_ = candidate
+		s.localCandidates.append(candidate)
 	})
 	s.peerConnection.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
 		log.Printf("sfu subscriber ICE room=%s peer=%s role=%s state=%s", roomID, targetPeer.id, targetPeer.role, state.String())
@@ -37,14 +37,14 @@ func (s *subscriberSession) deferOffer() {
 	s.needsOffer = true
 }
 
-func (s *subscriberSession) createLocalOffer() (*webrtc.SessionDescription, error) {
+func (s *subscriberSession) createLocalOffer() (*webrtc.SessionDescription, []webrtc.ICECandidateInit, error) {
 	offer, err := s.peerConnection.CreateOffer(nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	gatherComplete := webrtc.GatheringCompletePromise(s.peerConnection)
 	if err := s.peerConnection.SetLocalDescription(offer); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	select {
 	case <-gatherComplete:
@@ -53,9 +53,9 @@ func (s *subscriberSession) createLocalOffer() (*webrtc.SessionDescription, erro
 
 	localDescription := s.peerConnection.LocalDescription()
 	if localDescription == nil {
-		return nil, fmt.Errorf("local offer is missing")
+		return nil, nil, fmt.Errorf("local offer is missing")
 	}
-	return localDescription, nil
+	return localDescription, s.localCandidates.drain(), nil
 }
 
 func (s *subscriberSession) queueRemoteCandidate(candidate webrtc.ICECandidateInit) int {

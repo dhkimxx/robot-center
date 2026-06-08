@@ -35,10 +35,7 @@ func publisherRobotCode(sender *peer) (string, error) {
 
 func (s *publisherSession) prepareConnection(roomID string, hub *Hub) {
 	s.peerConnection.OnICECandidate(func(candidate *webrtc.ICECandidate) {
-		// Offers and answers are sent after ICE gathering completes, so relay
-		// candidates are already embedded in SDP. Avoid trickle ordering issues
-		// with Android/browser clients in the PoC.
-		_ = candidate
+		s.localCandidates.append(candidate)
 	})
 	s.peerConnection.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
 		log.Printf("sfu robot ICE room=%s robot=%s peer=%s state=%s", roomID, s.robotCode, s.peerID, state.String())
@@ -73,20 +70,20 @@ func (s *publisherSession) prepareConnection(roomID string, hub *Hub) {
 	})
 }
 
-func (s *publisherSession) answerOffer(offerSDP string) (*webrtc.SessionDescription, error) {
+func (s *publisherSession) answerOffer(offerSDP string) (*webrtc.SessionDescription, []webrtc.ICECandidateInit, error) {
 	if err := s.peerConnection.SetRemoteDescription(webrtc.SessionDescription{
 		Type: webrtc.SDPTypeOffer,
 		SDP:  offerSDP,
 	}); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	answer, err := s.peerConnection.CreateAnswer(nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	gatherComplete := webrtc.GatheringCompletePromise(s.peerConnection)
 	if err := s.peerConnection.SetLocalDescription(answer); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	select {
@@ -96,7 +93,7 @@ func (s *publisherSession) answerOffer(offerSDP string) (*webrtc.SessionDescript
 
 	localDescription := s.peerConnection.LocalDescription()
 	if localDescription == nil {
-		return nil, fmt.Errorf("local answer is missing")
+		return nil, nil, fmt.Errorf("local answer is missing")
 	}
-	return localDescription, nil
+	return localDescription, s.localCandidates.drain(), nil
 }

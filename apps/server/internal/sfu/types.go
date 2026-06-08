@@ -126,6 +126,7 @@ type publisherSession struct {
 	peerID           string
 	robotCode        string
 	peerConnection   *webrtc.PeerConnection
+	localCandidates  localCandidateBuffer
 	streamBundle     *RobotStreamBundle
 	publishedTracks  map[string]*publishedTrack
 	joinedAt         time.Time
@@ -158,6 +159,7 @@ type subscriberSession struct {
 	role                    string
 	selectedRobotCode       string
 	peerConnection          *webrtc.PeerConnection
+	localCandidates         localCandidateBuffer
 	dataChannels            map[string]*webrtc.DataChannel
 	attachedTracks          map[string]subscriberTrackAttachment
 	pendingRemoteCandidates []webrtc.ICECandidateInit

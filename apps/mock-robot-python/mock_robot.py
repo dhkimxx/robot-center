@@ -21,6 +21,7 @@ from aiortc import (
     RTCRtpSender,
     VideoStreamTrack,
 )
+from aiortc.sdp import candidate_from_sdp
 
 INITIAL_RECONNECT_DELAY_SECONDS = 1
 MAX_RECONNECT_DELAY_SECONDS = 30
@@ -66,6 +67,30 @@ def strip_non_relay_candidates(sdp: str) -> str:
             continue
         lines.append(line)
     return "\r\n".join(lines) + "\r\n"
+
+
+def is_relay_candidate(candidate_line: str) -> bool:
+    return " typ relay " in f" {candidate_line} " or candidate_line.endswith(" typ relay")
+
+
+def summarize_ice_candidates(sdp: str) -> str:
+    counts = {"relay": 0, "host": 0, "srflx": 0, "prflx": 0, "unknown": 0}
+    total = 0
+    for line in sdp.splitlines():
+        if not line.startswith("a=candidate:"):
+            continue
+        total += 1
+        candidate_type = "unknown"
+        parts = line.split()
+        if "typ" in parts:
+            type_index = parts.index("typ") + 1
+            if type_index < len(parts):
+                candidate_type = parts[type_index]
+        counts[candidate_type if candidate_type in counts else "unknown"] += 1
+    return (
+        f"total={total} relay={counts['relay']} host={counts['host']} "
+        f"srflx={counts['srflx']} prflx={counts['prflx']} unknown={counts['unknown']}"
+    )
 
 
 def codec_preferences(kind: str, preferred_mime_type: str) -> list[Any]:
@@ -335,6 +360,7 @@ class MockRobot:
         self.stop_event = asyncio.Event()
         self.publish_stop_event = asyncio.Event()
         self.publish_tasks: list[asyncio.Task[Any]] = []
+        self.pending_remote_candidates: list[dict[str, Any]] = []
         self.sequence = 0
         self.offer_sent = False
 
@@ -528,6 +554,10 @@ class MockRobot:
             await self.handle_answer(payload)
             return
 
+        if message_type == "candidate":
+            await self.handle_remote_candidate(payload)
+            return
+
         if message_type == "peer-left":
             self.log(f"peer left: {payload.get('role')} {payload.get('peerId')}")
             return
@@ -574,6 +604,7 @@ class MockRobot:
             raise RuntimeError("local offer is missing")
 
         offer_sdp = strip_non_relay_candidates(local_description.sdp)
+        self.log(f"offer candidates: {summarize_ice_candidates(offer_sdp)}")
         await self.send_signal(
             "offer",
             {
@@ -654,10 +685,44 @@ class MockRobot:
         answer_sdp = payload.get("sdp", "")
         if not answer_sdp:
             return
+        self.log(f"answer candidates: {summarize_ice_candidates(answer_sdp)}")
         await self.peer_connection.setRemoteDescription(
             RTCSessionDescription(sdp=answer_sdp, type=payload.get("type", "answer"))
         )
         self.log("answer applied")
+        await self.apply_pending_remote_candidates()
+
+    async def handle_remote_candidate(self, payload: dict[str, Any]) -> None:
+        candidate_line = payload.get("candidate", "")
+        if not candidate_line:
+            return
+        if not is_relay_candidate(candidate_line):
+            self.log("remote non-relay candidate ignored")
+            return
+        if self.peer_connection is None:
+            return
+        if self.peer_connection.remoteDescription is None:
+            self.pending_remote_candidates.append(payload)
+            return
+        await self.apply_remote_candidate(payload)
+
+    async def apply_pending_remote_candidates(self) -> None:
+        pending_candidates = self.pending_remote_candidates
+        self.pending_remote_candidates = []
+        for payload in pending_candidates:
+            await self.apply_remote_candidate(payload)
+
+    async def apply_remote_candidate(self, payload: dict[str, Any]) -> None:
+        if self.peer_connection is None:
+            return
+        candidate_line = payload.get("candidate", "")
+        if not candidate_line:
+            return
+        candidate = candidate_from_sdp(candidate_line)
+        candidate.sdpMid = payload.get("sdpMid")
+        candidate.sdpMLineIndex = payload.get("sdpMLineIndex")
+        await self.peer_connection.addIceCandidate(candidate)
+        self.log("remote relay candidate added")
 
     async def wait_for_ice_gathering_complete(self) -> None:
         assert self.peer_connection is not None

@@ -52,7 +52,7 @@ func (h *Hub) handleRobotOffer(sender *peer, payload map[string]any) error {
 		}
 	}()
 
-	localDescription, err := publisherSession.answerOffer(offerSDP)
+	localDescription, localCandidates, err := publisherSession.answerOffer(offerSDP)
 	if err != nil {
 		_ = peerConnection.Close()
 		return err
@@ -63,6 +63,7 @@ func (h *Hub) handleRobotOffer(sender *peer, payload map[string]any) error {
 		"sdp":       localDescription.SDP,
 		"robotCode": robotCode,
 	})
+	h.sendServerCandidateSignals(sender.roomID, sender.id, localCandidates)
 	monitorlog.Event("sfu", "robot_offer_answered", "room", sender.roomID, "robot", robotCode, "peer", sender.id)
 	return nil
 }
