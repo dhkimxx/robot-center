@@ -591,8 +591,10 @@ class MockRobot:
         self.attach_data_channel_logging("channel.control", self.control_channel)
 
         self.publish_tasks.extend(
-            (
-                asyncio.create_task(self.data_channel_loop("channel.telemetry", self.telemetry_channel)),
+            asyncio.create_task(self.data_channel_loop(label, channel))
+            for label, channel in (
+                ("channel.telemetry", self.telemetry_channel),
+                ("channel.event", self.event_channel),
             )
         )
 
