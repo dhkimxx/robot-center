@@ -119,7 +119,6 @@ function MissionReplaySessionGroup({ onOpenPlaybackFile, session }) {
         </div>
         <div className="grid justify-items-end gap-1 max-[900px]:justify-items-start">
           <StatusBadge tone={makeRecordingStatusTone(session.status)}>{makeStatusLabel(session.status)}</StatusBadge>
-          <small className="text-xs font-semibold text-slate-500">{session.availableFileCount}/{session.fileCount} 파일 저장</small>
         </div>
       </div>
       <div className="grid gap-2">

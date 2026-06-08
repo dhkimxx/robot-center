@@ -360,21 +360,21 @@ func (s *Store) findMissionRobotForRecording(ctx context.Context, runner sqlCont
 func (s *Store) findOrCreateRecordingSession(ctx context.Context, runner sqlContextRunner, missionID string, robotID string, chunkDurationSeconds int, startedAt time.Time) (repo.RecordingSession, error) {
 	var recordingSession repo.RecordingSession
 	err := runner.QueryRowContext(ctx, `
-		SELECT id::text, started_at
-		FROM recording_sessions
-		WHERE mission_id = $1::uuid AND robot_id = $2::uuid
-			AND (
-				ended_at IS NULL
-				OR EXISTS (
-					SELECT 1
-					FROM recording_chunks rc
-					WHERE rc.recording_session_id = recording_sessions.id
-						AND rc.status IN ('recording', 'pending')
-				)
+		SELECT rs.id::text, rs.started_at
+		FROM recording_sessions rs
+		WHERE rs.mission_id = $1::uuid
+			AND rs.robot_id = $2::uuid
+			AND EXISTS (
+				SELECT 1
+				FROM recording_chunks rc
+				WHERE rc.recording_session_id = rs.id
+					AND rc.status IN ('recording', 'pending')
+					AND $3 >= rc.started_at
+					AND $3 < rc.ended_at
 			)
-		ORDER BY (ended_at IS NULL) DESC, started_at DESC
+		ORDER BY rs.started_at DESC
 		LIMIT 1
-	`, missionID, robotID).Scan(&recordingSession.ID, &recordingSession.StartedAt)
+	`, missionID, robotID, startedAt).Scan(&recordingSession.ID, &recordingSession.StartedAt)
 	if err == nil {
 		_, updateErr := runner.ExecContext(ctx, `
 			UPDATE recording_sessions
@@ -386,12 +386,73 @@ func (s *Store) findOrCreateRecordingSession(ctx context.Context, runner sqlCont
 	if !errors.Is(err, sql.ErrNoRows) {
 		return repo.RecordingSession{}, err
 	}
+	if err := s.queueSupersededOpenRecordingChunks(ctx, runner, missionID, robotID, startedAt); err != nil {
+		return repo.RecordingSession{}, err
+	}
 	err = runner.QueryRowContext(ctx, `
 		INSERT INTO recording_sessions (mission_id, robot_id, status, chunk_duration_seconds, started_at)
 		VALUES ($1::uuid, $2::uuid, 'recording', $3, $4)
 		RETURNING id::text, started_at
 	`, missionID, robotID, chunkDurationSeconds, startedAt).Scan(&recordingSession.ID, &recordingSession.StartedAt)
 	return recordingSession, err
+}
+
+func (s *Store) queueSupersededOpenRecordingChunks(ctx context.Context, runner sqlContextRunner, missionID string, robotID string, cutoff time.Time) error {
+	if cutoff.IsZero() {
+		cutoff = time.Now().UTC()
+	}
+	_, err := runner.ExecContext(ctx, `
+		WITH candidates AS (
+			SELECT
+				rc.id,
+				rc.recording_session_id,
+				rc.mission_id,
+				rc.robot_id
+			FROM recording_chunks rc
+			WHERE rc.mission_id = $1::uuid
+				AND rc.robot_id = $2::uuid
+				AND rc.status IN ('recording', 'pending', 'stopped')
+				AND rc.ended_at <= $3
+		),
+		inserted AS (
+			INSERT INTO recording_finalization_jobs (
+				recording_chunk_id,
+				recording_session_id,
+				mission_id,
+				robot_id,
+				status,
+				reason,
+				metadata,
+				created_at,
+				updated_at
+			)
+			SELECT
+				id,
+				recording_session_id,
+				mission_id,
+				robot_id,
+				'queued',
+				'recording_session_superseded',
+				'{}'::jsonb,
+				now(),
+				now()
+			FROM candidates
+			ON CONFLICT (recording_chunk_id) DO NOTHING
+			RETURNING recording_chunk_id
+		),
+		updated_chunks AS (
+			UPDATE recording_chunks rc
+			SET status = 'finalizing', updated_at = now()
+			WHERE rc.id IN (SELECT id FROM candidates)
+				AND rc.status IN ('recording', 'pending', 'stopped')
+			RETURNING rc.recording_session_id
+		)
+		UPDATE recording_sessions rs
+		SET status = 'finalizing', ended_at = COALESCE(rs.ended_at, now())
+		WHERE rs.id IN (SELECT recording_session_id FROM updated_chunks)
+			AND rs.status IN ('recording', 'pending')
+	`, missionID, robotID, cutoff)
+	return err
 }
 
 func (s *Store) findRecordingChunk(ctx context.Context, runner sqlContextRunner, recordingSessionID string, chunkIndex int) (domain.RecordingChunk, bool, error) {

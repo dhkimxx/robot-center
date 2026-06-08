@@ -13,6 +13,7 @@ history:
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: move implemented feature documentation to done catalog'
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: classify feature document by implementation status'
 - '2026-06-08 danya.kim <danya.kim@thundersoft.com>: update in-progress feature evidence from recent implementation'
+- '2026-06-08 danya.kim <danya.kim@thundersoft.com>: record PoC recording stability validation'
 ---
 
 # D-SRV-07 영상 저장 및 조회(VMS)
@@ -53,10 +54,32 @@ recorder-worker, MP4 muxing, MinIO 저장, recording session/chunk metadata, 종
 - replay chunk panel, replay helper, recording API 테스트 보강
 - recorder-worker chunk lifecycle, media upload, media track writer 안정화
 
+## 2026-06-08 PoC 안정성 검증 결과
+
+오늘 기준으로 PoC 녹화 안정성 완료 조건은 다음 범위에서 검증되었다.
+
+- Python Mock Robot 2대가 같은 mission room에 WebRTC publish
+- recorder-worker가 mission room 전체 robot track/data 수신
+- active mission의 recording chunk가 `recording` 상태로 생성
+- 임무 종료 시 마지막 chunk가 `uploaded` 상태로 마감
+- RGB MP4, Thermal MP4, Telemetry JSONL, manifest object가 MinIO에 저장
+- replay API에서 robot별 최신 chunk와 재생 가능한 MP4 URL 반환
+- 오래 열린 recording session을 재사용하지 않고 새 송출은 새 recording session의 `chunkIndex = 0`부터 시작
+
+검증에 사용한 임무:
+
+- `mission-017`
+- `robot-001`, `robot-002`
+
+검증 결과:
+
+- `recordingChunkCount = 0`
+- `uploadedChunkCount = 1` per robot
+- RGB MP4 MinIO URL `200 OK`
+
 아직 완료가 아닌 이유:
 
-- 임무 종료 시 마지막 chunk 마감과 업로드 재처리 정책은 계속 검증이 필요하다.
-- 이벤트 bookmark, clip export, 멀티채널 동기 재생은 아직 구현 범위가 열려 있다.
+- 전체 VMS 기능 기준으로 이벤트 bookmark, clip export, 멀티채널 동기 재생은 아직 구현 범위가 열려 있다.
 - 운영 환경에서 recorder-worker scale-out 시 중복 처리 방지와 장애 복구 정책을 더 다듬어야 한다.
 
 ## 진행 중 분류 기준

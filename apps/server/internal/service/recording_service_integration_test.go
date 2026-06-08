@@ -155,6 +155,110 @@ func TestRecordingServiceIntegrationRejectsUploadFromWrongFinalizationClaim(t *t
 	}
 }
 
+func TestRecordingServiceIntegrationEndMissionQueuesFinalizationForReplay(t *testing.T) {
+	services, _ := newRecordingServiceIntegrationFixture(t)
+	fixture := createRecordingServiceMissionFixture(t, services)
+	ctx := context.Background()
+	tickAt := time.Date(2026, 6, 8, 3, 0, 0, 0, time.UTC)
+
+	result, err := services.Recording.ApplyRecordingTick(ctx, store.RecordingTickInput{
+		MissionCode:          fixture.Mission.MissionCode,
+		RobotCode:            fixture.Robot.RobotCode,
+		ChunkDurationSeconds: 600,
+		TickAt:               tickAt,
+	})
+	if err != nil {
+		t.Fatalf("apply recording tick: %v", err)
+	}
+	if result.Chunk.Status != "recording" {
+		t.Fatalf("new chunk status = %q, want recording", result.Chunk.Status)
+	}
+
+	if _, err := services.Missions.EndMission(ctx, fixture.Mission.MissionCode); err != nil {
+		t.Fatalf("end mission: %v", err)
+	}
+
+	page, err := services.Recording.ListMissionRecordingChunks(ctx, store.MissionRecordingChunkQuery{
+		MissionCode: fixture.Mission.MissionCode,
+		RobotCode:   fixture.Robot.RobotCode,
+		Limit:       10,
+	})
+	if err != nil {
+		t.Fatalf("list mission recording chunks: %v", err)
+	}
+	if len(page.Chunks) != 1 {
+		t.Fatalf("recording chunk count = %d, want 1: %#v", len(page.Chunks), page.Chunks)
+	}
+	if page.Chunks[0].ID != result.Chunk.ID || page.Chunks[0].Status != "finalizing" {
+		t.Fatalf("ended mission replay chunk = %#v, want original chunk with finalizing status", page.Chunks[0])
+	}
+
+	summary, err := services.Recording.SummarizeMissionRecordings(ctx, fixture.Mission.MissionCode)
+	if err != nil {
+		t.Fatalf("summarize mission recordings: %v", err)
+	}
+	if summary.TotalChunks != 1 || len(summary.Robots) != 1 {
+		t.Fatalf("unexpected recording summary: %#v", summary)
+	}
+	robotSummary := summary.Robots[0]
+	if robotSummary.RecordingChunkCount != 0 || robotSummary.FinalizingChunkCount != 1 {
+		t.Fatalf("ended mission summary should not report active recording chunks: %#v", robotSummary)
+	}
+}
+
+func TestRecordingServiceIntegrationStartsNewSessionAfterStaleOpenChunk(t *testing.T) {
+	services, _ := newRecordingServiceIntegrationFixture(t)
+	fixture := createRecordingServiceMissionFixture(t, services)
+	ctx := context.Background()
+	firstTickAt := time.Date(2026, 6, 8, 3, 0, 0, 0, time.UTC)
+	laterTickAt := firstTickAt.Add(35 * time.Minute)
+
+	firstResult, err := services.Recording.ApplyRecordingTick(ctx, store.RecordingTickInput{
+		MissionCode:          fixture.Mission.MissionCode,
+		RobotCode:            fixture.Robot.RobotCode,
+		ChunkDurationSeconds: 600,
+		TickAt:               firstTickAt,
+	})
+	if err != nil {
+		t.Fatalf("apply first recording tick: %v", err)
+	}
+	secondResult, err := services.Recording.ApplyRecordingTick(ctx, store.RecordingTickInput{
+		MissionCode:          fixture.Mission.MissionCode,
+		RobotCode:            fixture.Robot.RobotCode,
+		ChunkDurationSeconds: 600,
+		TickAt:               laterTickAt,
+	})
+	if err != nil {
+		t.Fatalf("apply later recording tick: %v", err)
+	}
+
+	if secondResult.Chunk.RecordingSessionID == firstResult.Chunk.RecordingSessionID {
+		t.Fatalf("stale open chunk reused old session: first=%#v second=%#v", firstResult.Chunk, secondResult.Chunk)
+	}
+	if secondResult.Chunk.ChunkIndex != 0 {
+		t.Fatalf("new recording session chunk index = %d, want 0", secondResult.Chunk.ChunkIndex)
+	}
+
+	page, err := services.Recording.ListMissionRecordingChunks(ctx, store.MissionRecordingChunkQuery{
+		MissionCode: fixture.Mission.MissionCode,
+		RobotCode:   fixture.Robot.RobotCode,
+		Limit:       10,
+	})
+	if err != nil {
+		t.Fatalf("list mission recording chunks: %v", err)
+	}
+	statusByChunkID := map[string]string{}
+	for _, chunk := range page.Chunks {
+		statusByChunkID[chunk.ID] = chunk.Status
+	}
+	if statusByChunkID[firstResult.Chunk.ID] != "finalizing" {
+		t.Fatalf("stale chunk status = %q, want finalizing; chunks=%#v", statusByChunkID[firstResult.Chunk.ID], page.Chunks)
+	}
+	if statusByChunkID[secondResult.Chunk.ID] != "recording" {
+		t.Fatalf("current chunk status = %q, want recording; chunks=%#v", statusByChunkID[secondResult.Chunk.ID], page.Chunks)
+	}
+}
+
 type recordingServiceIntegrationFixture struct {
 	Robot   domain.Robot
 	Mission domain.Mission

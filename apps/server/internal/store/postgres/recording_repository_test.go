@@ -183,11 +183,11 @@ func TestRecordingRepositoryListsMissionChunksWithPagination(t *testing.T) {
 	if len(page.Chunks) != 2 {
 		t.Fatalf("page chunk count = %d, want 2", len(page.Chunks))
 	}
-	if page.Chunks[0].MissionCode != fixture.Mission.MissionCode || page.Chunks[0].ChunkIndex != 303 {
-		t.Fatalf("first paged chunk = %#v, want mission chunk index 303", page.Chunks[0])
+	if page.Chunks[0].MissionCode != fixture.Mission.MissionCode || !page.Chunks[0].StartedAt.Equal(base.Add(303*10*time.Minute)) {
+		t.Fatalf("first paged chunk = %#v, want mission chunk at %s", page.Chunks[0], base.Add(303*10*time.Minute))
 	}
-	if page.Chunks[1].ChunkIndex != 302 {
-		t.Fatalf("second paged chunk = %#v, want chunk index 302", page.Chunks[1])
+	if !page.Chunks[1].StartedAt.Equal(base.Add(302 * 10 * time.Minute)) {
+		t.Fatalf("second paged chunk = %#v, want chunk at %s", page.Chunks[1], base.Add(302*10*time.Minute))
 	}
 }
 
