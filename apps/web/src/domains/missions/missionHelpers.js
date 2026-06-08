@@ -79,12 +79,15 @@ export function groupMissionsByLifecycle(missions) {
   };
 }
 
-export function makeMissionRobotLiveLabel(mission, isStreaming) {
+export function makeMissionRobotLiveLabel(mission, isStreaming, hasLiveStatus = true) {
   if (isStreaming) {
     return "송출 중";
   }
   if (isClosedMission(mission)) {
     return "임무 종료";
+  }
+  if (mission?.status === "active" && !hasLiveStatus) {
+    return "상태 확인 중";
   }
   if (mission?.status === "active") {
     return "송출 대기";
@@ -98,7 +101,6 @@ export function getLiveStreamLastReceivedAt(stream) {
 
 export function makeLiveStreamTimingLabel(stream, now = Date.now()) {
   const lastReceivedAt = getLiveStreamLastReceivedAt(stream);
-  const reconnectLabel = stream?.reconnectCount > 0 ? `재접속 ${stream.reconnectCount}회` : "";
   if (stream?.state === "streaming") {
     const parts = [];
     if (stream.startedAt) {
@@ -107,16 +109,10 @@ export function makeLiveStreamTimingLabel(stream, now = Date.now()) {
     if (lastReceivedAt) {
       parts.push(`최근 수신 ${formatElapsedTime(lastReceivedAt, now)}`);
     }
-    if (reconnectLabel) {
-      parts.push(reconnectLabel);
-    }
     return parts.join(" · ") || "송출 중";
   }
-  if (lastReceivedAt) {
-    return ["송출 끊김", `마지막 수신 ${formatDateTime(lastReceivedAt)}`, reconnectLabel].filter(Boolean).join(" · ");
-  }
-  if (stream?.previousEndedAt) {
-    return ["송출 대기", `이전 종료 ${formatDateTime(stream.previousEndedAt)}`, reconnectLabel].filter(Boolean).join(" · ");
+  if (!stream) {
+    return "상태 확인 중";
   }
   if (stream?.state === "ended") {
     return "임무 종료";
@@ -165,11 +161,12 @@ export function createMissionRobotTargets(mission, robots, liveStatus = null) {
 
   return Array.from(robotCodes).map((robotCode) => {
     const liveStatusRobot = findMissionLiveStatusRobot(liveStatus, robotCode);
+    const hasLiveStatus = Boolean(liveStatusRobot);
     const isStreaming = isStreamingFromLiveStatus(liveStatusRobot);
     return {
       isStreaming,
       key: makeMissionRobotKey(mission.missionCode, robotCode),
-      liveLabel: makeMissionRobotLiveLabel(mission, isStreaming),
+      liveLabel: makeMissionRobotLiveLabel(mission, isStreaming, hasLiveStatus),
       mission,
       missionRoomId: makeMissionRoomId(mission),
       robot: robots.find((robot) => robot.robotCode === robotCode) ?? null,
@@ -184,12 +181,13 @@ export function getMissionRobotDetails(mission, robots, liveStatus = null) {
   return getMissionRobotCodes(mission).map((robotCode) => {
     const robot = robots.find((candidate) => candidate.robotCode === robotCode) ?? null;
     const liveStatusRobot = findMissionLiveStatusRobot(liveStatus, robotCode);
+    const hasLiveStatus = Boolean(liveStatusRobot);
     const isStreaming = isStreamingFromLiveStatus(liveStatusRobot);
     return {
       deviceStatus: robot?.status ?? "offline",
       displayName: robot?.displayName ?? robotCode,
       isStreaming,
-      liveLabel: makeMissionRobotLiveLabel(mission, isStreaming),
+      liveLabel: makeMissionRobotLiveLabel(mission, isStreaming, hasLiveStatus),
       liveStatus: liveStatusRobot,
       robotCode
     };

@@ -251,14 +251,20 @@ func TestLiveStatusAppliesStreamSessionHistoryWithoutOverridingRuntimeState(t *t
 	if stream.State != "waiting" {
 		t.Fatalf("stream state = %q, want waiting", stream.State)
 	}
-	if stream.LastMediaAt == nil || !stream.LastMediaAt.Equal(lastMediaAt) {
-		t.Fatalf("lastMediaAt = %#v, want %s", stream.LastMediaAt, lastMediaAt)
+	if stream.LastMediaAt != nil {
+		t.Fatalf("lastMediaAt = %#v, want current stream media only", stream.LastMediaAt)
 	}
-	if stream.PreviousEndedAt == nil || !stream.PreviousEndedAt.Equal(previousEndedAt) {
-		t.Fatalf("previousEndedAt = %#v, want %s", stream.PreviousEndedAt, previousEndedAt)
+	if stream.Diagnostics == nil {
+		t.Fatal("expected stream diagnostics")
 	}
-	if stream.ReconnectCount != 1 {
-		t.Fatalf("reconnectCount = %d, want 1", stream.ReconnectCount)
+	if stream.Diagnostics.LastSessionMediaAt == nil || !stream.Diagnostics.LastSessionMediaAt.Equal(lastMediaAt) {
+		t.Fatalf("diagnostic lastSessionMediaAt = %#v, want %s", stream.Diagnostics.LastSessionMediaAt, lastMediaAt)
+	}
+	if stream.Diagnostics.PreviousEndedAt == nil || !stream.Diagnostics.PreviousEndedAt.Equal(previousEndedAt) {
+		t.Fatalf("diagnostic previousEndedAt = %#v, want %s", stream.Diagnostics.PreviousEndedAt, previousEndedAt)
+	}
+	if stream.Diagnostics.ReconnectCount != 1 {
+		t.Fatalf("diagnostic reconnectCount = %d, want 1", stream.Diagnostics.ReconnectCount)
 	}
 }
 

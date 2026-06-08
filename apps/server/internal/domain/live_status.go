@@ -24,18 +24,23 @@ type LiveConnectionStatus struct {
 }
 
 type LiveStreamStatus struct {
-	State            string     `json:"state"`
-	Source           string     `json:"source"`
-	RoomID           string     `json:"roomId"`
-	TrackCount       int        `json:"trackCount"`
-	DataChannelCount int        `json:"dataChannelCount"`
-	StartedAt        *time.Time `json:"startedAt,omitempty"`
-	LastTrackAt      *time.Time `json:"lastTrackAt,omitempty"`
-	LastDataAt       *time.Time `json:"lastDataAt,omitempty"`
-	LastMediaAt      *time.Time `json:"lastMediaAt,omitempty"`
-	PreviousEndedAt  *time.Time `json:"previousEndedAt,omitempty"`
-	ReconnectCount   int        `json:"reconnectCount"`
-	Reason           string     `json:"reason,omitempty"`
+	State            string                 `json:"state"`
+	Source           string                 `json:"source"`
+	RoomID           string                 `json:"roomId"`
+	TrackCount       int                    `json:"trackCount"`
+	DataChannelCount int                    `json:"dataChannelCount"`
+	StartedAt        *time.Time             `json:"startedAt,omitempty"`
+	LastTrackAt      *time.Time             `json:"lastTrackAt,omitempty"`
+	LastDataAt       *time.Time             `json:"lastDataAt,omitempty"`
+	LastMediaAt      *time.Time             `json:"lastMediaAt,omitempty"`
+	Diagnostics      *LiveStreamDiagnostics `json:"diagnostics,omitempty"`
+	Reason           string                 `json:"reason,omitempty"`
+}
+
+type LiveStreamDiagnostics struct {
+	LastSessionMediaAt *time.Time `json:"lastSessionMediaAt,omitempty"`
+	PreviousEndedAt    *time.Time `json:"previousEndedAt,omitempty"`
+	ReconnectCount     int        `json:"reconnectCount"`
 }
 
 type LiveRecordingStatus struct {

@@ -121,23 +121,25 @@ describe("missionHelpers", () => {
   it("summarizes live stream timing for current and interrupted publishers", () => {
     const now = new Date("2026-06-04T04:35:20Z").getTime();
 
-    expect(makeLiveStreamTimingLabel({
+    const streamingLabel = makeLiveStreamTimingLabel({
       state: "streaming",
       startedAt: "2026-06-04T04:35:00Z",
       lastTrackAt: "2026-06-04T04:35:15Z",
-      reconnectCount: 1
-    }, now)).toContain("최근 수신 5초 전");
-    expect(makeLiveStreamTimingLabel({
-      state: "streaming",
-      startedAt: "2026-06-04T04:35:00Z",
-      lastTrackAt: "2026-06-04T04:35:15Z",
-      reconnectCount: 1
-    }, now)).toContain("재접속 1회");
+      diagnostics: { reconnectCount: 1 }
+    }, now);
+
+    expect(streamingLabel).toContain("최근 수신 5초 전");
+    expect(streamingLabel).not.toContain("재접속");
 
     expect(makeLiveStreamTimingLabel({
       state: "waiting",
-      lastMediaAt: "2026-06-04T04:34:00Z"
-    }, now)).toContain("송출 끊김");
+      diagnostics: {
+        lastSessionMediaAt: "2026-06-04T04:34:00Z",
+        previousEndedAt: "2026-06-04T04:34:30Z"
+      }
+    }, now)).toBe("송출 대기");
+
+    expect(makeLiveStreamTimingLabel(null, now)).toBe("상태 확인 중");
   });
 
   it("summarizes the active recording chunk window", () => {

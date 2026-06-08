@@ -1594,11 +1594,28 @@ const docTemplate = `{
                 }
             }
         },
+        "robot-center_apps_server_internal_api_dto.LiveStreamDiagnosticsResponse": {
+            "type": "object",
+            "properties": {
+                "lastSessionMediaAt": {
+                    "type": "string"
+                },
+                "previousEndedAt": {
+                    "type": "string"
+                },
+                "reconnectCount": {
+                    "type": "integer"
+                }
+            }
+        },
         "robot-center_apps_server_internal_api_dto.LiveStreamStatusResponse": {
             "type": "object",
             "properties": {
                 "dataChannelCount": {
                     "type": "integer"
+                },
+                "diagnostics": {
+                    "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.LiveStreamDiagnosticsResponse"
                 },
                 "lastDataAt": {
                     "type": "string"
@@ -1609,14 +1626,8 @@ const docTemplate = `{
                 "lastTrackAt": {
                     "type": "string"
                 },
-                "previousEndedAt": {
-                    "type": "string"
-                },
                 "reason": {
                     "type": "string"
-                },
-                "reconnectCount": {
-                    "type": "integer"
                 },
                 "roomId": {
                     "type": "string"

@@ -102,22 +102,29 @@ definitions:
       state:
         type: string
     type: object
+  robot-center_apps_server_internal_api_dto.LiveStreamDiagnosticsResponse:
+    properties:
+      lastSessionMediaAt:
+        type: string
+      previousEndedAt:
+        type: string
+      reconnectCount:
+        type: integer
+    type: object
   robot-center_apps_server_internal_api_dto.LiveStreamStatusResponse:
     properties:
       dataChannelCount:
         type: integer
+      diagnostics:
+        $ref: '#/definitions/robot-center_apps_server_internal_api_dto.LiveStreamDiagnosticsResponse'
       lastDataAt:
         type: string
       lastMediaAt:
         type: string
       lastTrackAt:
         type: string
-      previousEndedAt:
-        type: string
       reason:
         type: string
-      reconnectCount:
-        type: integer
       roomId:
         type: string
       source:

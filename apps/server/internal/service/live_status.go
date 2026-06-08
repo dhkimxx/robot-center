@@ -156,6 +156,7 @@ func buildLiveStreamStatus(mission domain.Mission, publisher *sfu.ObservedPublis
 	status.StartedAt = cloneDomainTimePointer(publisher.FirstTrackAt)
 	status.LastTrackAt = cloneDomainTimePointer(publisher.LastTrackAt)
 	status.LastDataAt = cloneDomainTimePointer(publisher.LastDataAt)
+	status.LastMediaAt = latestTimePointer(publisher.LastTrackAt, publisher.LastDataAt)
 	if isInactiveObservedICEState(publisher.ICEState) {
 		status.State = "waiting"
 		status.Reason = "publisher_" + publisher.ICEState
@@ -308,17 +309,20 @@ func applyLiveStreamSessionHistory(status domain.LiveStreamStatus, sessions []do
 	if len(sessions) == 0 {
 		return status
 	}
-	status.ReconnectCount = len(sessions) - 1
+	diagnostics := domain.LiveStreamDiagnostics{}
 	for _, session := range sessions {
-		if status.LastMediaAt == nil && session.LastMediaAt != nil {
-			status.LastMediaAt = cloneDomainTimePointer(session.LastMediaAt)
+		if session.EndedAt != nil {
+			diagnostics.ReconnectCount++
 		}
-		if status.PreviousEndedAt == nil && session.EndedAt != nil {
-			status.PreviousEndedAt = cloneDomainTimePointer(session.EndedAt)
+		if diagnostics.LastSessionMediaAt == nil && session.LastMediaAt != nil {
+			diagnostics.LastSessionMediaAt = cloneDomainTimePointer(session.LastMediaAt)
 		}
-		if status.LastMediaAt != nil && status.PreviousEndedAt != nil {
-			break
+		if diagnostics.PreviousEndedAt == nil && session.EndedAt != nil {
+			diagnostics.PreviousEndedAt = cloneDomainTimePointer(session.EndedAt)
 		}
+	}
+	if diagnostics.ReconnectCount > 0 || diagnostics.LastSessionMediaAt != nil || diagnostics.PreviousEndedAt != nil {
+		status.Diagnostics = &diagnostics
 	}
 	return status
 }
@@ -353,4 +357,17 @@ func cloneDomainTimePointer(value *time.Time) *time.Time {
 	}
 	cloned := value.UTC()
 	return &cloned
+}
+
+func latestTimePointer(values ...*time.Time) *time.Time {
+	var latest *time.Time
+	for _, value := range values {
+		if value == nil || value.IsZero() {
+			continue
+		}
+		if latest == nil || value.After(*latest) {
+			latest = value
+		}
+	}
+	return cloneDomainTimePointer(latest)
 }
