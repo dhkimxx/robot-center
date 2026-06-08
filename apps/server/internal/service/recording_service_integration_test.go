@@ -59,6 +59,49 @@ func TestRecordingServiceIntegrationUploadsFilesAndManifestTransactionally(t *te
 	}
 }
 
+func TestRecordingServiceIntegrationStartsNewSessionAfterUploadedChunk(t *testing.T) {
+	services, _ := newRecordingServiceIntegrationFixture(t)
+	fixture := createRecordingServiceMissionFixture(t, services)
+	ctx := context.Background()
+	tickAt := time.Date(2026, 6, 8, 1, 0, 0, 0, time.UTC)
+
+	firstResult, err := services.Recording.ApplyRecordingTick(ctx, store.RecordingTickInput{
+		MissionCode:          fixture.Mission.MissionCode,
+		RobotCode:            fixture.Robot.RobotCode,
+		ChunkDurationSeconds: 600,
+		TickAt:               tickAt,
+	})
+	if err != nil {
+		t.Fatalf("apply first recording tick: %v", err)
+	}
+	sizeBytes := int64(1024)
+	if _, err := services.Recording.MarkRecordingFileUploaded(ctx, firstResult.Chunk.ID, "rgb_audio_mp4", store.RecordingUploadMetadata{SizeBytes: &sizeBytes}); err != nil {
+		t.Fatalf("mark first recording file uploaded: %v", err)
+	}
+	if _, err := services.Recording.MarkRecordingChunkUploaded(ctx, firstResult.Chunk.ID, store.RecordingUploadMetadata{SizeBytes: &sizeBytes}); err != nil {
+		t.Fatalf("mark first recording chunk uploaded: %v", err)
+	}
+
+	secondResult, err := services.Recording.ApplyRecordingTick(ctx, store.RecordingTickInput{
+		MissionCode:          fixture.Mission.MissionCode,
+		RobotCode:            fixture.Robot.RobotCode,
+		ChunkDurationSeconds: 600,
+		TickAt:               tickAt.Add(3 * time.Minute),
+	})
+	if err != nil {
+		t.Fatalf("apply second recording tick: %v", err)
+	}
+	if secondResult.Chunk.ID == firstResult.Chunk.ID {
+		t.Fatalf("uploaded chunk was reused within the same window: %#v", secondResult.Chunk)
+	}
+	if secondResult.Chunk.RecordingSessionID == firstResult.Chunk.RecordingSessionID {
+		t.Fatalf("new recording after uploaded chunk should use a new session, got %q", secondResult.Chunk.RecordingSessionID)
+	}
+	if secondResult.Chunk.ChunkIndex != 0 {
+		t.Fatalf("new session first chunk index = %d, want 0", secondResult.Chunk.ChunkIndex)
+	}
+}
+
 func TestRecordingServiceIntegrationRejectsUploadFromWrongFinalizationClaim(t *testing.T) {
 	services, dsn := newRecordingServiceIntegrationFixture(t)
 	fixture := createRecordingServiceMissionFixture(t, services)

@@ -31,6 +31,7 @@ type Worker struct {
 	mediaMu                sync.Mutex
 	activeTargets          map[string]domain.Mission
 	activeChunks           map[string]domain.RecordingChunk
+	activeChunkMediaAt     map[string]time.Time
 	pendingFinalizations   map[string]recordingChunkFinalization
 	audioWriters           map[string]*activeAudioWriter
 	h264ParameterSets      map[string]h264ParameterSets
@@ -69,6 +70,7 @@ func newWorkerWithCollaborators(cfg config.RecorderWorkerConfig, appServerClient
 		subscriberStatuses:     map[string]recorderSessionStatus{},
 		activeTargets:          map[string]domain.Mission{},
 		activeChunks:           map[string]domain.RecordingChunk{},
+		activeChunkMediaAt:     map[string]time.Time{},
 		pendingFinalizations:   map[string]recordingChunkFinalization{},
 		audioWriters:           map[string]*activeAudioWriter{},
 		h264ParameterSets:      map[string]h264ParameterSets{},
@@ -117,6 +119,7 @@ func (w *Worker) tick(ctx context.Context) {
 
 	activeTargetKeys = w.updateActiveRecordingTargets(targets)
 	w.finalizeInactiveRecordingChunks(activeTargetKeys)
+	w.finalizeIdleRecordingChunks(time.Now().UTC())
 	w.processPendingRecordingChunkFinalizations(ctx)
 	w.processClaimedRecordingFinalizationJobs(ctx)
 }

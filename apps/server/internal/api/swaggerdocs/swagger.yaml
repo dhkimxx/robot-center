@@ -217,6 +217,53 @@ definitions:
       usedPercent:
         type: number
     type: object
+  robot-center_apps_server_internal_api_dto.OperatorMissionRecordingChunksResponse:
+    properties:
+      page:
+        $ref: '#/definitions/robot-center_apps_server_internal_api_dto.OperatorRecordingPageResponse'
+      recordings:
+        items:
+          $ref: '#/definitions/robot-center_apps_server_internal_api_dto.OperatorRecordingChunkResponse'
+        type: array
+    type: object
+  robot-center_apps_server_internal_api_dto.OperatorMissionRecordingRobotSummaryResponse:
+    properties:
+      availableFileCounts:
+        additionalProperties:
+          type: integer
+        type: object
+      chunkCount:
+        type: integer
+      finalizingChunkCount:
+        type: integer
+      firstStartedAt:
+        type: string
+      lastEndedAt:
+        type: string
+      missingFileCounts:
+        additionalProperties:
+          type: integer
+        type: object
+      partialChunkCount:
+        type: integer
+      recordingChunkCount:
+        type: integer
+      robotCode:
+        type: string
+      uploadedChunkCount:
+        type: integer
+    type: object
+  robot-center_apps_server_internal_api_dto.OperatorMissionRecordingSummaryResponse:
+    properties:
+      missionCode:
+        type: string
+      robots:
+        items:
+          $ref: '#/definitions/robot-center_apps_server_internal_api_dto.OperatorMissionRecordingRobotSummaryResponse'
+        type: array
+      totalChunks:
+        type: integer
+    type: object
   robot-center_apps_server_internal_api_dto.OperatorRecordingChunkResponse:
     properties:
       availableFileTypes:
@@ -272,6 +319,19 @@ definitions:
         type: string
       url:
         type: string
+    type: object
+  robot-center_apps_server_internal_api_dto.OperatorRecordingPageResponse:
+    properties:
+      hasMore:
+        type: boolean
+      limit:
+        type: integer
+      nextOffset:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
     type: object
   robot-center_apps_server_internal_api_dto.OperatorRecordingsResponse:
     properties:
@@ -1067,6 +1127,73 @@ paths:
       summary: 임무 live status 조회
       tags:
       - Operator API
+  /api/v1/operator/missions/{missionCode}/recordings/chunks:
+    get:
+      description: 관제 UI 리플레이 화면이 특정 임무의 녹화 chunk를 최신순으로 페이지 조회합니다. robotCode를 지정하면
+        해당 로봇의 chunk만 반환합니다.
+      parameters:
+      - description: 조회할 임무 코드
+        in: path
+        name: missionCode
+        required: true
+        type: string
+      - description: 조회할 로봇 코드
+        in: query
+        name: robotCode
+        type: string
+      - description: 페이지 크기. 기본 100, 최대 200
+        in: query
+        name: limit
+        type: integer
+      - description: 조회 시작 위치. 기본 0
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/robot-center_apps_server_internal_api_dto.OperatorMissionRecordingChunksResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse'
+      summary: 임무 녹화 chunk 페이지 조회
+      tags:
+      - Operator API
+  /api/v1/operator/missions/{missionCode}/recordings/summary:
+    get:
+      description: 관제 UI 리플레이 화면이 특정 임무의 로봇별 녹화 청크 수와 파일 저장 상태를 요약 조회합니다.
+      parameters:
+      - description: 조회할 임무 코드
+        in: path
+        name: missionCode
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/robot-center_apps_server_internal_api_dto.OperatorMissionRecordingSummaryResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse'
+      summary: 임무 녹화 요약 조회
+      tags:
+      - Operator API
   /api/v1/operator/missions/{missionCode}/start:
     post:
       description: ready 상태 임무를 active 상태로 전환합니다.
@@ -1096,8 +1223,8 @@ paths:
       - Operator API
   /api/v1/operator/recordings:
     get:
-      description: 관제 UI가 조회하는 recording chunk와 파일 상태 목록을 반환합니다. missionCode를 지정하면
-        해당 임무의 chunk만 반환합니다.
+      description: 관제 UI가 조회하는 recording chunk와 파일 상태 목록을 최신순으로 최대 300개 반환합니다. missionCode를
+        지정하면 해당 임무 안에서 최신 300개를 반환합니다.
       parameters:
       - description: 조회할 임무 코드
         in: query

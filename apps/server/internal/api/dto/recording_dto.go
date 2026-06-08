@@ -39,6 +39,38 @@ type OperatorRecordingsResponse struct {
 	Recordings []OperatorRecordingChunkResponse `json:"recordings"`
 }
 
+type OperatorMissionRecordingSummaryResponse struct {
+	MissionCode string                                         `json:"missionCode"`
+	TotalChunks int                                            `json:"totalChunks"`
+	Robots      []OperatorMissionRecordingRobotSummaryResponse `json:"robots"`
+}
+
+type OperatorMissionRecordingRobotSummaryResponse struct {
+	RobotCode            string         `json:"robotCode"`
+	ChunkCount           int            `json:"chunkCount"`
+	UploadedChunkCount   int            `json:"uploadedChunkCount"`
+	RecordingChunkCount  int            `json:"recordingChunkCount"`
+	FinalizingChunkCount int            `json:"finalizingChunkCount"`
+	PartialChunkCount    int            `json:"partialChunkCount"`
+	FirstStartedAt       *time.Time     `json:"firstStartedAt,omitempty"`
+	LastEndedAt          *time.Time     `json:"lastEndedAt,omitempty"`
+	AvailableFileCounts  map[string]int `json:"availableFileCounts"`
+	MissingFileCounts    map[string]int `json:"missingFileCounts"`
+}
+
+type OperatorMissionRecordingChunksResponse struct {
+	Recordings []OperatorRecordingChunkResponse `json:"recordings"`
+	Page       OperatorRecordingPageResponse    `json:"page"`
+}
+
+type OperatorRecordingPageResponse struct {
+	Limit      int  `json:"limit"`
+	Offset     int  `json:"offset"`
+	Total      int  `json:"total"`
+	HasMore    bool `json:"hasMore"`
+	NextOffset int  `json:"nextOffset"`
+}
+
 type RecorderRecordingTargetResponse struct {
 	ID          string     `json:"id"`
 	MissionCode string     `json:"missionCode"`

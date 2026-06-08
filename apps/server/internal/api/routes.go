@@ -38,6 +38,8 @@ func (s *Server) registerOperatorRoutes(group *gin.RouterGroup) {
 	group.GET("/missions", ginHTTPHandler(s.handleListMissions))
 	group.POST("/missions", ginHTTPHandler(s.handleCreateMission))
 	group.GET("/missions/:missionCode/live-status", ginHTTPHandler(s.handleMissionLiveStatus, "missionCode"))
+	group.GET("/missions/:missionCode/recordings/summary", ginHTTPHandler(s.handleMissionRecordingSummary, "missionCode"))
+	group.GET("/missions/:missionCode/recordings/chunks", ginHTTPHandler(s.handleMissionRecordingChunks, "missionCode"))
 	group.POST("/missions/:missionCode/start", ginHTTPHandler(s.handleStartMission, "missionCode"))
 	group.POST("/missions/:missionCode/end", ginHTTPHandler(s.handleEndMission, "missionCode"))
 

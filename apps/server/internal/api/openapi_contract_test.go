@@ -98,6 +98,8 @@ func expectedRoleBasedAPIPaths() []string {
 		"/api/v1/operator/robots/{robotCode}/connection-token",
 		"/api/v1/operator/missions",
 		"/api/v1/operator/missions/{missionCode}/live-status",
+		"/api/v1/operator/missions/{missionCode}/recordings/summary",
+		"/api/v1/operator/missions/{missionCode}/recordings/chunks",
 		"/api/v1/operator/missions/{missionCode}/start",
 		"/api/v1/operator/missions/{missionCode}/end",
 		"/api/v1/operator/sfu/ws",

@@ -292,32 +292,6 @@ func recordingStorageObjectForFileType(chunk domain.RecordingChunk, fileType str
 	}
 }
 
-func (s *Store) ListRecordingChunks(ctx context.Context) ([]domain.RecordingChunk, error) {
-	rows, err := s.sqlDB.QueryContext(ctx, recordingChunkSelectSQL()+`
-		JOIN recording_sessions rs ON rs.id = rc.recording_session_id
-		WHERE NOT (
-			rs.ended_at IS NOT NULL
-			AND rc.status IN ('recording', 'pending')
-		)
-		ORDER BY rc.started_at DESC
-		LIMIT 300
-	`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	chunks := make([]domain.RecordingChunk, 0)
-	for rows.Next() {
-		chunk, err := scanRecordingChunk(rows)
-		if err != nil {
-			return nil, err
-		}
-		chunks = append(chunks, chunk)
-	}
-	return chunks, rows.Err()
-}
-
 func (s *Store) RecordingTargets(ctx context.Context) ([]domain.Mission, error) {
 	rows, err := s.sqlDB.QueryContext(ctx, `
 		SELECT

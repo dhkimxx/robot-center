@@ -25,3 +25,21 @@ func intQueryValue(r *http.Request, key string, fallback int) int {
 	}
 	return value
 }
+
+func nonNegativeIntQueryValue(r *http.Request, key string, fallback int) int {
+	value, err := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get(key)))
+	if err != nil || value < 0 {
+		return fallback
+	}
+	return value
+}
+
+func clampIntValue(value int, minimum int, maximum int) int {
+	if value < minimum {
+		return minimum
+	}
+	if value > maximum {
+		return maximum
+	}
+	return value
+}

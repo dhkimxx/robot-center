@@ -398,3 +398,80 @@ func TestWorkerTickFinalizesActiveChunkWhenTargetDisappears(t *testing.T) {
 		t.Fatal("active chunk remained after target disappeared")
 	}
 }
+
+func TestWorkerFinalizesIdleChunkWhileTargetStaysActive(t *testing.T) {
+	target := domain.Mission{
+		MissionCode: "mission-001",
+		RobotCode:   "robot-001",
+	}
+	observedAt := time.Date(2026, 5, 26, 1, 0, 0, 0, time.UTC)
+	chunk1 := domain.RecordingChunk{
+		ID:                "chunk-001",
+		MissionCode:       "mission-001",
+		RobotCode:         "robot-001",
+		ManifestObjectKey: "missions/mission-001/robots/robot-001/chunk-001_manifest.json",
+		MediaObjectKeys:   map[string]string{},
+		StartedAt:         observedAt,
+		EndedAt:           observedAt.Add(10 * time.Minute),
+	}
+	chunk2 := domain.RecordingChunk{
+		ID:                "chunk-002",
+		MissionCode:       "mission-001",
+		RobotCode:         "robot-001",
+		ManifestObjectKey: "missions/mission-001/robots/robot-001/chunk-002_manifest.json",
+		MediaObjectKeys:   map[string]string{},
+		StartedAt:         observedAt.Add(3 * time.Minute),
+		EndedAt:           observedAt.Add(13 * time.Minute),
+	}
+	appServerClient := &fakeAppServerClient{
+		targets: []domain.Mission{target},
+		tickResults: []domain.RecordingTickResult{
+			{Chunk: chunk1},
+			{Chunk: chunk2},
+		},
+	}
+	mediaUploader := &fakeMediaUploader{}
+	worker := newWorkerWithCollaborators(
+		config.RecorderWorkerConfig{
+			RecordingChunkDuration:    10 * time.Minute,
+			RecordingMediaIdleTimeout: 2 * time.Minute,
+		},
+		appServerClient,
+		&fakeObjectStorage{manifestSize: 42},
+	)
+	worker.mediaUploader = mediaUploader
+	mediaKey := recorderMediaKey(target.MissionCode, target.RobotCode)
+
+	worker.tick(context.Background())
+	if _, _, err := worker.ensureActiveRecordingChunk(context.Background(), mediaKey, observedAt); err != nil {
+		t.Fatalf("chunk open failed: %v", err)
+	}
+	worker.finalizeIdleRecordingChunks(observedAt.Add(119 * time.Second))
+	worker.processPendingRecordingChunkFinalizations(context.Background())
+	if len(mediaUploader.finalizedChunks) != 0 {
+		t.Fatalf("finalized chunks before timeout = %d, want 0", len(mediaUploader.finalizedChunks))
+	}
+
+	worker.finalizeIdleRecordingChunks(observedAt.Add(121 * time.Second))
+	worker.processPendingRecordingChunkFinalizations(context.Background())
+	if len(mediaUploader.finalizedChunks) != 1 {
+		t.Fatalf("finalized chunks after timeout = %d, want 1", len(mediaUploader.finalizedChunks))
+	}
+	if mediaUploader.finalizedChunks[0].ID != chunk1.ID {
+		t.Fatalf("finalized chunk = %q, want %q", mediaUploader.finalizedChunks[0].ID, chunk1.ID)
+	}
+	if _, ok := worker.activeTargets[mediaKey]; !ok {
+		t.Fatal("active target disappeared after idle chunk finalization")
+	}
+	if _, ok := worker.activeChunks[mediaKey]; ok {
+		t.Fatal("idle active chunk remained")
+	}
+
+	nextChunk, ok, err := worker.ensureActiveRecordingChunk(context.Background(), mediaKey, observedAt.Add(3*time.Minute))
+	if err != nil {
+		t.Fatalf("next chunk open failed: %v", err)
+	}
+	if !ok || nextChunk.ID != chunk2.ID {
+		t.Fatalf("next chunk = %#v/%t, want chunk-002", nextChunk, ok)
+	}
+}

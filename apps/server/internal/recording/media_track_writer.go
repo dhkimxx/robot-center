@@ -152,6 +152,9 @@ func (w *Worker) appendH264AccessUnit(ctx context.Context, roomID string, label 
 	}
 	defer file.Close()
 	_, err = file.Write(payload)
+	if err == nil {
+		w.markActiveRecordingChunkMediaAtLocked(roomID, chunk.ID, observedAt)
+	}
 	w.mediaMu.Unlock()
 	return err
 }
@@ -220,7 +223,11 @@ func (w *Worker) appendOpusPacket(ctx context.Context, roomID string, label stri
 	if err != nil {
 		return err
 	}
-	return writer.WriteRTP(packet)
+	if err := writer.WriteRTP(packet); err != nil {
+		return err
+	}
+	w.markActiveRecordingChunkMediaAtLocked(roomID, chunk.ID, time.Now().UTC())
+	return nil
 }
 
 func recordingStorageAudioLabel(label string) string {
@@ -260,6 +267,9 @@ func (w *Worker) appendDataChannelPayload(roomID string, label string, payload [
 	}
 	if len(payload) == 0 || payload[len(payload)-1] != '\n' {
 		_, err = file.Write([]byte("\n"))
+	}
+	if err == nil {
+		w.markActiveRecordingChunkMediaAtLocked(roomID, chunk.ID, time.Now().UTC())
 	}
 	return err
 }

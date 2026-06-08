@@ -29,7 +29,6 @@ export default function MissionsScreen({
   onSelectMission,
   onStartMission,
   operationStatuses,
-  recordings,
   replayMission,
   replayMissionCode,
   robots,
@@ -47,7 +46,6 @@ export default function MissionsScreen({
         mission={replayMission}
         onBackToMissionList={onBackToMissionList}
         onOpenPlaybackFile={onOpenPlaybackFile}
-        recordings={recordings}
         robots={robots}
       />
     );

@@ -34,6 +34,7 @@ type RecorderWorkerConfig struct {
 	TURNPassword                string
 	PollInterval                time.Duration
 	RecordingChunkDuration      time.Duration
+	RecordingMediaIdleTimeout   time.Duration
 	PostgresDSN                 string
 	MinIOInternalURL            string
 	MinIOBucket                 string
@@ -77,6 +78,7 @@ func LoadRecorderWorkerConfig() RecorderWorkerConfig {
 		TURNPassword:                getEnv("TURN_PASSWORD", "robot-pass"),
 		PollInterval:                getDurationEnv("RECORDER_WORKER_POLL_INTERVAL", 5*time.Second),
 		RecordingChunkDuration:      getDurationEnv("RECORDING_CHUNK_DURATION", 10*time.Minute),
+		RecordingMediaIdleTimeout:   getDurationEnv("RECORDING_MEDIA_IDLE_TIMEOUT", 2*time.Minute),
 		PostgresDSN:                 buildPostgresDSN(),
 		MinIOInternalURL:            getEnvWithFallback("MINIO_INTERNAL_URL", "MINIO_ENDPOINT", "http://localhost:9000"),
 		MinIOBucket:                 getEnv("MINIO_BUCKET", "robot-center"),

@@ -197,6 +197,23 @@ func TestRecorderAPIFlow(t *testing.T) {
 	if len(filteredRecordingsPayload.Recordings) != 1 || filteredRecordingsPayload.Recordings[0].MissionCode != mission.code {
 		t.Fatalf("expected one recording for mission filter, got %#v", filteredRecordingsPayload)
 	}
+	missionRecordingSummaryPayload := requestJSON[dto.OperatorMissionRecordingSummaryResponse](t, server.baseURL, http.MethodGet, "/api/v1/operator/missions/"+mission.code+"/recordings/summary", "", nil)
+	if missionRecordingSummaryPayload.TotalChunks != 1 || len(missionRecordingSummaryPayload.Robots) != 1 {
+		t.Fatalf("expected one mission recording summary row, got %#v", missionRecordingSummaryPayload)
+	}
+	if missionRecordingSummaryPayload.Robots[0].RobotCode != robot.code || missionRecordingSummaryPayload.Robots[0].AvailableFileCounts["rgb_audio_mp4"] != 1 {
+		t.Fatalf("expected robot recording file summary, got %#v", missionRecordingSummaryPayload)
+	}
+	missionRecordingChunksPayload := requestJSON[dto.OperatorMissionRecordingChunksResponse](t, server.baseURL, http.MethodGet, "/api/v1/operator/missions/"+mission.code+"/recordings/chunks?robotCode="+url.QueryEscape(robot.code)+"&limit=1", "", nil)
+	if missionRecordingChunksPayload.Page.Total != 1 || missionRecordingChunksPayload.Page.HasMore {
+		t.Fatalf("expected one paged mission recording chunk, got %#v", missionRecordingChunksPayload)
+	}
+	if len(missionRecordingChunksPayload.Recordings) != 1 || missionRecordingChunksPayload.Recordings[0].RobotCode != robot.code {
+		t.Fatalf("expected one robot recording chunk, got %#v", missionRecordingChunksPayload)
+	}
+	if !fileHasAvailableURL(missionRecordingChunksPayload.Recordings[0].Files, "rgb_audio_mp4") {
+		t.Fatalf("expected paged rgb mp4 file URL, got %#v", missionRecordingChunksPayload.Recordings[0].Files)
+	}
 	missingMissionRecordingsPayload := requestJSON[dto.OperatorRecordingsResponse](t, server.baseURL, http.MethodGet, "/api/v1/operator/recordings?missionCode=missing-mission", "", nil)
 	if len(missingMissionRecordingsPayload.Recordings) != 0 {
 		t.Fatalf("expected no recordings for missing mission filter, got %#v", missingMissionRecordingsPayload)

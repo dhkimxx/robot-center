@@ -20,4 +20,39 @@ type RecordingStore interface {
 	MarkRecordingFinalizationJobPartial(ctx context.Context, jobID string, workerID string, attempt int, reason string) error
 	MarkRecordingFinalizationJobFailed(ctx context.Context, jobID string, workerID string, attempt int, reason string) error
 	ListRecordingChunks(ctx context.Context) ([]domain.RecordingChunk, error)
+	SummarizeMissionRecordings(ctx context.Context, missionCode string) (MissionRecordingSummary, error)
+	ListMissionRecordingChunks(ctx context.Context, query MissionRecordingChunkQuery) (MissionRecordingChunkPage, error)
+}
+
+type MissionRecordingChunkQuery struct {
+	MissionCode string
+	RobotCode   string
+	Limit       int
+	Offset      int
+}
+
+type MissionRecordingChunkPage struct {
+	Chunks []domain.RecordingChunk
+	Limit  int
+	Offset int
+	Total  int
+}
+
+type MissionRecordingSummary struct {
+	MissionCode string
+	TotalChunks int
+	Robots      []MissionRecordingRobotSummary
+}
+
+type MissionRecordingRobotSummary struct {
+	RobotCode            string
+	ChunkCount           int
+	UploadedChunkCount   int
+	RecordingChunkCount  int
+	FinalizingChunkCount int
+	PartialChunkCount    int
+	FirstStartedAt       *time.Time
+	LastEndedAt          *time.Time
+	AvailableFileCounts  map[string]int
+	MissingFileCounts    map[string]int
 }

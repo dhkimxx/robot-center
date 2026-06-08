@@ -156,6 +156,78 @@ func TestRecordingRepositoryListSkipsClosedSessionOpenChunks(t *testing.T) {
 	}
 }
 
+func TestRecordingRepositoryListsMissionChunksWithPagination(t *testing.T) {
+	store := newPostgresTestStore(t)
+	fixture := createActiveMissionFixture(t, store)
+	otherFixture := createActiveMissionFixture(t, store)
+	ctx := context.Background()
+	base := time.Date(2026, 6, 8, 1, 0, 0, 0, time.UTC)
+
+	for index := 0; index < 305; index++ {
+		createRecordingChunkFixture(t, store, fixture, base.Add(time.Duration(index)*10*time.Minute))
+	}
+	createRecordingChunkFixture(t, store, otherFixture, base.Add(500*10*time.Minute))
+
+	page, err := store.ListMissionRecordingChunks(ctx, repo.MissionRecordingChunkQuery{
+		MissionCode: fixture.Mission.MissionCode,
+		RobotCode:   fixture.Robot.RobotCode,
+		Limit:       2,
+		Offset:      1,
+	})
+	if err != nil {
+		t.Fatalf("list mission recording chunks: %v", err)
+	}
+	if page.Total != 305 {
+		t.Fatalf("page total = %d, want 305", page.Total)
+	}
+	if len(page.Chunks) != 2 {
+		t.Fatalf("page chunk count = %d, want 2", len(page.Chunks))
+	}
+	if page.Chunks[0].MissionCode != fixture.Mission.MissionCode || page.Chunks[0].ChunkIndex != 303 {
+		t.Fatalf("first paged chunk = %#v, want mission chunk index 303", page.Chunks[0])
+	}
+	if page.Chunks[1].ChunkIndex != 302 {
+		t.Fatalf("second paged chunk = %#v, want chunk index 302", page.Chunks[1])
+	}
+}
+
+func TestRecordingRepositorySummarizesMissionRecordings(t *testing.T) {
+	store := newPostgresTestStore(t)
+	fixture := createActiveMissionFixture(t, store)
+	ctx := context.Background()
+	base := time.Date(2026, 6, 8, 2, 0, 0, 0, time.UTC)
+	firstChunk := createRecordingChunkFixture(t, store, fixture, base)
+	secondChunk := createRecordingChunkFixture(t, store, fixture, base.Add(10*time.Minute))
+
+	if _, err := store.MarkRecordingChunkUploaded(ctx, firstChunk.ID, repo.RecordingUploadMetadata{}); err != nil {
+		t.Fatalf("mark first chunk uploaded: %v", err)
+	}
+	if _, err := store.MarkRecordingFileUploaded(ctx, secondChunk.ID, "rgb_audio_mp4", repo.RecordingUploadMetadata{}); err != nil {
+		t.Fatalf("mark second chunk rgb uploaded: %v", err)
+	}
+	if _, err := store.MarkRecordingChunkUploaded(ctx, secondChunk.ID, repo.RecordingUploadMetadata{}); err != nil {
+		t.Fatalf("mark second chunk uploaded: %v", err)
+	}
+
+	summary, err := store.SummarizeMissionRecordings(ctx, fixture.Mission.MissionCode)
+	if err != nil {
+		t.Fatalf("summarize mission recordings: %v", err)
+	}
+	if summary.TotalChunks != 2 || len(summary.Robots) != 1 {
+		t.Fatalf("unexpected summary: %#v", summary)
+	}
+	robotSummary := summary.Robots[0]
+	if robotSummary.RobotCode != fixture.Robot.RobotCode || robotSummary.UploadedChunkCount != 2 || robotSummary.PartialChunkCount != 1 {
+		t.Fatalf("unexpected robot summary: %#v", robotSummary)
+	}
+	if robotSummary.AvailableFileCounts["rgb_audio_mp4"] != 1 || robotSummary.AvailableFileCounts["manifest"] != 2 {
+		t.Fatalf("unexpected available file counts: %#v", robotSummary.AvailableFileCounts)
+	}
+	if robotSummary.MissingFileCounts["rgb_audio_mp4"] != 1 {
+		t.Fatalf("unexpected missing file counts: %#v", robotSummary.MissingFileCounts)
+	}
+}
+
 func createRecordingChunkFixture(t *testing.T, store *Store, fixture activeMissionFixture, now time.Time) domain.RecordingChunk {
 	t.Helper()
 	ctx := context.Background()

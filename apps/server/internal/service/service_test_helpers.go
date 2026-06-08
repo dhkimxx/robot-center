@@ -40,8 +40,9 @@ type recordingRepositorySpy struct {
 	markChunkUploadedErr error
 	markFileUploadedErr  error
 
-	queuedFinalizationJobs int64
-	queueFinalizationErr   error
+	listMissionRecordingChunksInput store.MissionRecordingChunkQuery
+	queuedFinalizationJobs          int64
+	queueFinalizationErr            error
 }
 
 func (r *recordingRepositorySpy) FindRecordingTarget(_ context.Context, missionCode string, robotCode string) (store.RecordingTarget, error) {
@@ -120,6 +121,15 @@ func (r *recordingRepositorySpy) MarkRecordingFileUploaded(_ context.Context, ch
 
 func (r *recordingRepositorySpy) ListRecordingChunks(_ context.Context) ([]domain.RecordingChunk, error) {
 	return nil, nil
+}
+
+func (r *recordingRepositorySpy) SummarizeMissionRecordings(_ context.Context, _ string) (store.MissionRecordingSummary, error) {
+	return store.MissionRecordingSummary{}, nil
+}
+
+func (r *recordingRepositorySpy) ListMissionRecordingChunks(_ context.Context, query store.MissionRecordingChunkQuery) (store.MissionRecordingChunkPage, error) {
+	r.listMissionRecordingChunksInput = query
+	return store.MissionRecordingChunkPage{}, nil
 }
 
 func (r *recordingRepositorySpy) QueueRecordingFinalizationJobsForInactiveMissions(_ context.Context) (int64, error) {

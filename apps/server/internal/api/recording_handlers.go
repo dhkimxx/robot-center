@@ -2,13 +2,9 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
-	"net"
 	"net/http"
-	"net/url"
 	"robot-center/apps/server/internal/api/dto"
-	"robot-center/apps/server/internal/domain"
 	"robot-center/apps/server/internal/store"
 	"strings"
 	"time"
@@ -28,149 +24,6 @@ func (s *Server) handleRecordingTargets(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeJSON(w, http.StatusOK, dto.RecorderRecordingTargetsPayload(targets))
-}
-
-// @Summary 녹화 chunk 조회
-// @Description 관제 UI가 조회하는 recording chunk와 파일 상태 목록을 반환합니다. missionCode를 지정하면 해당 임무의 chunk만 반환합니다.
-// @Tags Operator API
-// @Produce json
-// @Param missionCode query string false "조회할 임무 코드"
-// @Success 200 {object} dto.OperatorRecordingsResponse
-// @Failure 500 {object} dto.ErrorResponse
-// @Router /api/v1/operator/recordings [get]
-func (s *Server) handleListRecordings(w http.ResponseWriter, r *http.Request) {
-	recordings, err := s.services.Recording.ListRecordingChunks(r.Context())
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	missionCode := strings.TrimSpace(r.URL.Query().Get("missionCode"))
-	response := make([]dto.OperatorRecordingChunkResponse, 0, len(recordings))
-	for _, recording := range recordings {
-		if missionCode != "" && recording.MissionCode != missionCode {
-			continue
-		}
-		response = append(response, s.createOperatorRecordingResponse(recording))
-	}
-	writeJSON(w, http.StatusOK, dto.OperatorRecordingsPayload(response))
-}
-
-func (s *Server) createOperatorRecordingResponse(recording domain.RecordingChunk) dto.OperatorRecordingChunkResponse {
-	response := dto.OperatorRecordingChunk(recording)
-	response.Status = normalizeRecordingResponseStatus(recording)
-	response.Files = []dto.OperatorRecordingFileResponse{
-		s.createOperatorRecordingFileResponse(recording, "rgb_audio_mp4", "RGB MP4", "video/mp4", recording.MediaObjectKeys["rgbMp4"], recording.AvailableFileTypes["rgb_audio_mp4"]),
-		s.createOperatorRecordingFileResponse(recording, "thermal_mp4", "Thermal MP4", "video/mp4", recording.MediaObjectKeys["thermal"], recording.AvailableFileTypes["thermal_mp4"]),
-		s.createOperatorRecordingFileResponse(recording, "sensor_jsonl", "Sensor JSONL", "application/x-ndjson", recording.MediaObjectKeys["sensor"], recording.AvailableFileTypes["sensor_jsonl"]),
-		s.createOperatorRecordingFileResponse(recording, "telemetry_jsonl", "Telemetry/GPS JSONL", "application/x-ndjson", recording.MediaObjectKeys["telemetry"], recording.AvailableFileTypes["telemetry_jsonl"]),
-		s.createOperatorRecordingFileResponse(recording, "manifest", "저장 메타데이터", "application/json", recording.ManifestObjectKey, recording.AvailableFileTypes["manifest"] || recording.Status == "uploaded"),
-	}
-	return response
-}
-
-func normalizeRecordingResponseStatus(recording domain.RecordingChunk) string {
-	if recording.Status == "uploaded" && !hasAvailableRecordingVideo(recording) {
-		return "partial"
-	}
-	return recording.Status
-}
-
-func hasAvailableRecordingVideo(recording domain.RecordingChunk) bool {
-	return recording.AvailableFileTypes["rgb_audio_mp4"] || recording.AvailableFileTypes["thermal_mp4"]
-}
-
-func (s *Server) createOperatorRecordingFileResponse(recording domain.RecordingChunk, fileType string, label string, contentType string, objectKey string, available bool) dto.OperatorRecordingFileResponse {
-	status := "planned"
-	fileURL := ""
-	if available {
-		status = "available"
-		fileURL = s.createStorageObjectURL(objectKey)
-	} else if recording.Status == "recording" || recording.Status == "pending" {
-		status = "recording"
-	} else if recording.Status == "finalizing" {
-		status = "finalizing"
-	} else if recording.Status == "partial" || recording.Status == "stopped" {
-		status = "partial"
-	} else if recording.Status == "failed" {
-		status = "failed"
-	}
-	return dto.OperatorRecordingFileResponse{
-		Type:        fileType,
-		Label:       label,
-		Status:      status,
-		ContentType: contentType,
-		ObjectKey:   objectKey,
-		URL:         fileURL,
-	}
-}
-
-func (s *Server) createStorageObjectURL(objectKey string) string {
-	objectKey = strings.TrimSpace(objectKey)
-	if objectKey == "" {
-		return ""
-	}
-
-	publicMinIOURL := strings.TrimSpace(s.config.MinIOPublicURL)
-	if publicMinIOURL != "" {
-		fileURL := createObjectStorageURL(publicMinIOURL, s.config.MinIOBucket, objectKey)
-		if fileURL != "" {
-			return fileURL
-		}
-	}
-	return createObjectStorageURL(s.createLegacyStoragePublicBaseURL(), s.config.MinIOBucket, objectKey)
-}
-
-func (s *Server) createLegacyStoragePublicBaseURL() string {
-	publicURL, publicErr := url.Parse(s.config.AppServerPublicURL)
-	minioURL, minioErr := url.Parse(s.config.MinIOInternalURL)
-
-	scheme := "http"
-	if publicErr == nil && publicURL.Scheme != "" {
-		scheme = publicURL.Scheme
-	} else if minioErr == nil && minioURL.Scheme != "" {
-		scheme = minioURL.Scheme
-	}
-
-	host := ""
-	if publicErr == nil {
-		host = publicURL.Hostname()
-	}
-	if host == "" && minioErr == nil {
-		host = minioURL.Hostname()
-	}
-	if host == "" {
-		host = "localhost"
-	}
-
-	port := "9000"
-	if minioErr == nil && minioURL.Port() != "" {
-		port = minioURL.Port()
-	}
-	return fmt.Sprintf("%s://%s", scheme, net.JoinHostPort(host, port))
-}
-
-func createObjectStorageURL(baseURL string, bucket string, objectKey string) string {
-	parsedURL, err := url.Parse(strings.TrimSpace(baseURL))
-	if err != nil || parsedURL.Scheme == "" || parsedURL.Host == "" {
-		return ""
-	}
-	bucket = strings.TrimSpace(bucket)
-	if bucket == "" {
-		bucket = "robot-center"
-	}
-	pathSegments := []string{}
-	if basePath := strings.Trim(parsedURL.Path, "/"); basePath != "" {
-		pathSegments = append(pathSegments, strings.Split(basePath, "/")...)
-	}
-	pathSegments = append(pathSegments, bucket)
-	if trimmedObjectKey := strings.Trim(objectKey, "/"); trimmedObjectKey != "" {
-		pathSegments = append(pathSegments, strings.Split(trimmedObjectKey, "/")...)
-	}
-	parsedURL.Path = "/" + strings.Join(pathSegments, "/")
-	parsedURL.RawPath = ""
-	parsedURL.RawQuery = ""
-	parsedURL.Fragment = ""
-	return parsedURL.String()
 }
 
 // @Summary 녹화 tick 반영

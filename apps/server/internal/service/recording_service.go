@@ -116,6 +116,31 @@ func (s *RecordingService) ListRecordingChunks(ctx context.Context) ([]domain.Re
 	return s.repository.ListRecordingChunks(ctx)
 }
 
+func (s *RecordingService) SummarizeMissionRecordings(ctx context.Context, missionCode string) (store.MissionRecordingSummary, error) {
+	if _, err := s.repository.QueueRecordingFinalizationJobsForInactiveMissions(ctx); err != nil {
+		return store.MissionRecordingSummary{}, err
+	}
+	return s.repository.SummarizeMissionRecordings(ctx, strings.TrimSpace(missionCode))
+}
+
+func (s *RecordingService) ListMissionRecordingChunks(ctx context.Context, query store.MissionRecordingChunkQuery) (store.MissionRecordingChunkPage, error) {
+	if _, err := s.repository.QueueRecordingFinalizationJobsForInactiveMissions(ctx); err != nil {
+		return store.MissionRecordingChunkPage{}, err
+	}
+	query.MissionCode = strings.TrimSpace(query.MissionCode)
+	query.RobotCode = strings.TrimSpace(query.RobotCode)
+	if query.Limit <= 0 {
+		query.Limit = 100
+	}
+	if query.Limit > 300 {
+		query.Limit = 300
+	}
+	if query.Offset < 0 {
+		query.Offset = 0
+	}
+	return s.repository.ListMissionRecordingChunks(ctx, query)
+}
+
 func (s *RecordingService) ClaimFinalizationJobs(ctx context.Context, workerID string, limit int, lockDuration time.Duration) ([]domain.RecordingFinalizationJob, error) {
 	return s.repository.ClaimRecordingFinalizationJobs(ctx, workerID, limit, lockDuration)
 }

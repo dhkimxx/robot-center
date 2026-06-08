@@ -87,6 +87,36 @@ func TestRecordingServiceApplyRecordingTickCreatesChunkWithDomainRules(t *testin
 	}
 }
 
+func TestRecordingServiceListMissionRecordingChunksNormalizesQuery(t *testing.T) {
+	repository := &recordingRepositorySpy{}
+	service := &RecordingService{repository: repository}
+
+	if _, err := service.ListMissionRecordingChunks(context.Background(), store.MissionRecordingChunkQuery{
+		MissionCode: " mission-001 ",
+		RobotCode:   " robot-001 ",
+		Limit:       999,
+		Offset:      -10,
+	}); err != nil {
+		t.Fatalf("ListMissionRecordingChunks returned error: %v", err)
+	}
+
+	if repository.queuedFinalizationJobs != 1 {
+		t.Fatalf("expected inactive mission finalization queue check, got %d", repository.queuedFinalizationJobs)
+	}
+	if repository.listMissionRecordingChunksInput.MissionCode != "mission-001" {
+		t.Fatalf("MissionCode = %q, want mission-001", repository.listMissionRecordingChunksInput.MissionCode)
+	}
+	if repository.listMissionRecordingChunksInput.RobotCode != "robot-001" {
+		t.Fatalf("RobotCode = %q, want robot-001", repository.listMissionRecordingChunksInput.RobotCode)
+	}
+	if repository.listMissionRecordingChunksInput.Limit != 300 {
+		t.Fatalf("Limit = %d, want 300", repository.listMissionRecordingChunksInput.Limit)
+	}
+	if repository.listMissionRecordingChunksInput.Offset != 0 {
+		t.Fatalf("Offset = %d, want 0", repository.listMissionRecordingChunksInput.Offset)
+	}
+}
+
 func TestRecordingServiceMarkRecordingChunkUploadedUsesTransactionRepository(t *testing.T) {
 	outsideRepository := &recordingStoreSpy{}
 	transactionRepository := &recordingStoreSpy{}

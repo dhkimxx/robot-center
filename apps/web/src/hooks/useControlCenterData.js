@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchMissionLiveStatus } from "../api/liveApi.js";
 import { fetchMissions } from "../api/missionsApi.js";
-import { fetchRecordings } from "../api/recordingsApi.js";
 import { fetchRobots } from "../api/robotsApi.js";
 import { fetchSystemStatus } from "../api/systemApi.js";
 
@@ -10,7 +9,6 @@ export function useControlCenterData() {
   const [robots, setRobots] = useState([]);
   const [missions, setMissions] = useState([]);
   const [missionLiveStatuses, setMissionLiveStatuses] = useState({});
-  const [recordings, setRecordings] = useState([]);
   const [statusError, setStatusError] = useState("");
   const [dataLoadState, setDataLoadState] = useState({
     hasLoaded: false,
@@ -30,8 +28,7 @@ export function useControlCenterData() {
       payloads = await Promise.all([
         fetchSystemStatus(),
         fetchRobots(),
-        fetchMissions(),
-        fetchRecordings()
+        fetchMissions()
       ]);
     } catch (error) {
       if (requestSequence !== requestSequenceRef.current || options.isCancelled?.()) {
@@ -46,7 +43,7 @@ export function useControlCenterData() {
     if (requestSequence !== requestSequenceRef.current || options.isCancelled?.()) {
       return false;
     }
-    const [statusPayload, robotPayload, missionPayload, recordingPayload] = payloads;
+    const [statusPayload, robotPayload, missionPayload] = payloads;
     const nextMissions = missionPayload.missions ?? [];
     const liveStatusResults = await Promise.allSettled(
       nextMissions
@@ -67,7 +64,6 @@ export function useControlCenterData() {
     setRobots(robotPayload.robots ?? []);
     setMissions(nextMissions);
     setMissionLiveStatuses(nextLiveStatuses);
-    setRecordings(recordingPayload.recordings ?? []);
     setStatusError("");
     setDataLoadState({
       hasLoaded: true,
@@ -126,8 +122,6 @@ export function useControlCenterData() {
     setMissions,
     missionLiveStatuses,
     setMissionLiveStatuses,
-    recordings,
-    setRecordings,
     statusError,
     setStatusError,
     dataLoadState: {

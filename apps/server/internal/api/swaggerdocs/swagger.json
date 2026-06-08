@@ -160,6 +160,106 @@
                 }
             }
         },
+        "/api/v1/operator/missions/{missionCode}/recordings/chunks": {
+            "get": {
+                "description": "관제 UI 리플레이 화면이 특정 임무의 녹화 chunk를 최신순으로 페이지 조회합니다. robotCode를 지정하면 해당 로봇의 chunk만 반환합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Operator API"
+                ],
+                "summary": "임무 녹화 chunk 페이지 조회",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "조회할 임무 코드",
+                        "name": "missionCode",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "조회할 로봇 코드",
+                        "name": "robotCode",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "페이지 크기. 기본 100, 최대 200",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "조회 시작 위치. 기본 0",
+                        "name": "offset",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.OperatorMissionRecordingChunksResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/operator/missions/{missionCode}/recordings/summary": {
+            "get": {
+                "description": "관제 UI 리플레이 화면이 특정 임무의 로봇별 녹화 청크 수와 파일 저장 상태를 요약 조회합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Operator API"
+                ],
+                "summary": "임무 녹화 요약 조회",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "조회할 임무 코드",
+                        "name": "missionCode",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.OperatorMissionRecordingSummaryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/operator/missions/{missionCode}/start": {
             "post": {
                 "description": "ready 상태 임무를 active 상태로 전환합니다.",
@@ -203,7 +303,7 @@
         },
         "/api/v1/operator/recordings": {
             "get": {
-                "description": "관제 UI가 조회하는 recording chunk와 파일 상태 목록을 반환합니다. missionCode를 지정하면 해당 임무의 chunk만 반환합니다.",
+                "description": "관제 UI가 조회하는 recording chunk와 파일 상태 목록을 최신순으로 최대 300개 반환합니다. missionCode를 지정하면 해당 임무 안에서 최신 300개를 반환합니다.",
                 "produces": [
                     "application/json"
                 ],
@@ -1663,6 +1763,78 @@
                 }
             }
         },
+        "robot-center_apps_server_internal_api_dto.OperatorMissionRecordingChunksResponse": {
+            "type": "object",
+            "properties": {
+                "page": {
+                    "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.OperatorRecordingPageResponse"
+                },
+                "recordings": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.OperatorRecordingChunkResponse"
+                    }
+                }
+            }
+        },
+        "robot-center_apps_server_internal_api_dto.OperatorMissionRecordingRobotSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "availableFileCounts": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "chunkCount": {
+                    "type": "integer"
+                },
+                "finalizingChunkCount": {
+                    "type": "integer"
+                },
+                "firstStartedAt": {
+                    "type": "string"
+                },
+                "lastEndedAt": {
+                    "type": "string"
+                },
+                "missingFileCounts": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "partialChunkCount": {
+                    "type": "integer"
+                },
+                "recordingChunkCount": {
+                    "type": "integer"
+                },
+                "robotCode": {
+                    "type": "string"
+                },
+                "uploadedChunkCount": {
+                    "type": "integer"
+                }
+            }
+        },
+        "robot-center_apps_server_internal_api_dto.OperatorMissionRecordingSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "missionCode": {
+                    "type": "string"
+                },
+                "robots": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.OperatorMissionRecordingRobotSummaryResponse"
+                    }
+                },
+                "totalChunks": {
+                    "type": "integer"
+                }
+            }
+        },
         "robot-center_apps_server_internal_api_dto.OperatorRecordingChunkResponse": {
             "type": "object",
             "properties": {
@@ -1745,6 +1917,26 @@
                 },
                 "url": {
                     "type": "string"
+                }
+            }
+        },
+        "robot-center_apps_server_internal_api_dto.OperatorRecordingPageResponse": {
+            "type": "object",
+            "properties": {
+                "hasMore": {
+                    "type": "boolean"
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "nextOffset": {
+                    "type": "integer"
+                },
+                "offset": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
                 }
             }
         },
