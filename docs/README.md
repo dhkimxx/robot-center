@@ -1,7 +1,7 @@
 ---
 title: "docs"
 created: 2026-06-04
-updated: '2026-06-04'
+updated: '2026-06-08'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>"]
 type: "guide"
@@ -18,6 +18,7 @@ history:
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: align feature examples with done catalog'
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: remove moved feature from examples'
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: replace root done with feature status directories'
+- '2026-06-08 danya.kim <danya.kim@thundersoft.com>: document monthly plan file convention'
 ---
 
 # Docs
@@ -71,6 +72,19 @@ stable > guides > plans > features
 특정 작업을 어떤 순서로 진행할지 정리한다.
 
 작업 계획, 단계별 구현 계획, 보안/인증 전환 계획처럼 시간이 지나면 완료/폐기/수정될 수 있는 문서를 둔다.
+
+월별 계획 문서는 다음 파일명으로 추가한다.
+
+```text
+docs/plans/YYYY-MM-plan.md
+```
+
+예:
+
+- `docs/plans/2026-06-plan.md`
+- `docs/plans/2026-07-plan.md`
+
+월별 계획은 해당 월의 주차별 목표, 완료 기준, 제외 범위, 산출물을 포함한다.
 
 ### `guides/`
 
