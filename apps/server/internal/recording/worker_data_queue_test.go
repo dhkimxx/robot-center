@@ -45,6 +45,40 @@ func TestWorkerQueuesRecorderDataChannelMessageForAppServerPost(t *testing.T) {
 	}
 }
 
+func TestWorkerQueuesRecorderEventDataChannelMessageForAppServerPost(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	appServerClient := &fakeAppServerClient{postedPayloadCh: make(chan []byte, 1)}
+	worker := newWorkerWithCollaborators(config.RecorderWorkerConfig{}, appServerClient, &fakeObjectStorage{})
+	worker.updateSubscriberStatus("mission-001", func(status *recorderSessionStatus) {
+		status.robotCode = "robot-001"
+		status.robotCodes = map[string]struct{}{"robot-001": {}}
+	})
+	worker.startRecorderDataQueueWorkers(ctx)
+
+	worker.enqueueRecorderDataChannelMessage(ctx, "mission-001", "channel.event", []byte(`{"messageType":"event","events":[{"eventType":"mission.event","values":{"code":"mock.ready"}}]}`))
+
+	var payload []byte
+	select {
+	case payload = <-appServerClient.postedPayloadCh:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for queued event post")
+	}
+	var body map[string]any
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatalf("posted payload is not JSON: %v", err)
+	}
+	if body["robotCode"] != "robot-001" || body["channelRole"] != "channel.event" {
+		t.Fatalf("posted event context = %#v, want robotCode and channel.event", body)
+	}
+	waitForCondition(t, time.Second, func() bool {
+		appServerClient.mu.Lock()
+		defer appServerClient.mu.Unlock()
+		return len(appServerClient.postedLabels) == 1 && appServerClient.postedLabels[0] == "channel.event"
+	})
+}
+
 func TestWorkerDropsRecorderDataChannelPostWhenQueueIsFull(t *testing.T) {
 	ctx := context.Background()
 	worker := newWorkerWithCollaborators(config.RecorderWorkerConfig{}, &fakeAppServerClient{}, &fakeObjectStorage{})

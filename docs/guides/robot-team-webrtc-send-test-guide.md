@@ -42,6 +42,10 @@ history:
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: Clarify H264/90000 RTP clock requirement for recording validation'
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: reorganize docs directories by document purpose'
 - '2026-06-08 danya.kim <danya.kim@thundersoft.com>: document channel.event v0 robot payload contract'
+- '2026-06-08 danya.kim <danya.kim@thundersoft.com>: clarify channel.event storage and live projection responsibilities'
+- '2026-06-08 danya.kim <danya.kim@thundersoft.com>: clarify detection.object snapshot cadence and empty-list clearing'
+- '2026-06-08 danya.kim <danya.kim@thundersoft.com>: remove bbox.format from detection.object because bbox is always normalized xywh'
+- '2026-06-08 danya.kim <danya.kim@thundersoft.com>: align robot team channel.event guide with timestamp and values contract'
 ---
 
 # Robot Team WebRTC Send Test Guide
@@ -879,7 +883,6 @@ valid         -> sample.values.valid
 
 이번 v0 범위에서 제외하는 것:
 
-- DB 저장 정책
 - 알림/ACK
 - suppression/sampling
 - replay overlay 정밀 동기화
@@ -893,15 +896,14 @@ Event envelope:
 {
   "messageId": "uuid",
   "messageType": "event",
-  "schemaVersion": "event.v0",
   "events": [
     {
       "eventType": "mission.event",
-      "severity": "notice",
-      "occurredAt": "2026-06-08T10:03:12.000Z",
-      "title": "목표 지점 도착",
-      "description": "로봇이 waypoint-3에 도착했습니다.",
-      "payload": {
+      "timestamp": "2026-06-08T10:03:12.000Z",
+      "values": {
+        "severity": "notice",
+        "title": "목표 지점 도착",
+        "description": "로봇이 waypoint-3에 도착했습니다.",
         "category": "navigation",
         "code": "waypoint.arrived"
       }
@@ -916,7 +918,6 @@ Event envelope schema:
 | --- | --- | --- | --- | --- |
 | `messageId` | string | Recommended | UUID 또는 `robot-123-event-102` | 메시지 추적 id |
 | `messageType` | string | Recommended | `event` | event channel 기본 타입 |
-| `schemaVersion` | string | No | `event.v0` | event schema version |
 | `events` | array | Yes | Event item list | 한 메시지에 여러 event를 batch 가능 |
 
 Event item common schema:
@@ -925,13 +926,8 @@ Event item common schema:
 | --- | --- | --- | --- | --- |
 | `eventId` | string | Recommended | `evt-001` | 로봇 또는 추론 모듈이 생성한 event id |
 | `eventType` | string | Yes | `detection.object`, `mission.event` | 이벤트 의미 분류 |
-| `severity` | string | No | `info`, `notice`, `warning`, `critical` | 없으면 관제 UI는 `info`로 처리 |
-| `occurredAt` | string(date-time) | Recommended | `2026-06-08T10:03:12.000Z` | 로봇 또는 추론 모듈 기준 발생 시각 |
-| `title` | string | Conditional | `목표 지점 도착` | `mission.event`에서 이벤트 패널 표시 제목 |
-| `description` | string | No | `waypoint-3 도착` | `mission.event` 상세 설명 |
-| `source` | object | No | `{ "module": "navigation" }` | 발생 모듈 정보 |
-| `media` | object | Conditional | `{ "trackId": "track.video_1" }` | `detection.object`에서 필수 |
-| `payload` | object | Yes | `{}` | eventType별 세부 데이터 |
+| `timestamp` | string(date-time) | Recommended | `2026-06-08T10:03:12.000Z` | 로봇 또는 추론 모듈 기준 발생 시각 |
+| `values` | object | Yes | `{}` | eventType별 세부 데이터 |
 
 `detection.object` 예시:
 
@@ -941,17 +937,14 @@ Event item common schema:
   "events": [
     {
       "eventType": "detection.object",
-      "occurredAt": "2026-06-08T10:00:00.000Z",
-      "media": {
-        "trackId": "track.video_1"
-      },
-      "payload": {
+      "timestamp": "2026-06-08T10:00:00.000Z",
+      "values": {
+        "trackId": "track.video_1",
         "detections": [
           {
             "className": "person",
             "confidence": 0.92,
             "bbox": {
-              "format": "normalized_xywh",
               "x": 0.42,
               "y": 0.31,
               "width": 0.18,
@@ -965,33 +958,56 @@ Event item common schema:
 }
 ```
 
+객체 없음 또는 overlay clear snapshot 예시:
+
+```json
+{
+  "messageType": "event",
+  "events": [
+    {
+      "eventType": "detection.object",
+      "timestamp": "2026-06-08T10:00:01.000Z",
+      "values": {
+        "trackId": "track.video_1",
+        "detections": []
+      }
+    }
+  ]
+}
+```
+
 `detection.object` 규칙:
 
-- `media.trackId`는 필수다.
+- `values.trackId`는 필수다.
 - `track.video_1`은 RGB 영상 overlay에 사용한다.
 - `track.video_2`는 Thermal 영상 overlay에 사용한다.
-- `payload.detections[]`는 같은 frame의 객체 목록이다. 객체 1개당 event를 만들지 않는다.
-- bbox는 `normalized_xywh`만 사용한다.
-- `x`, `y`, `width`, `height`는 `0.0`~`1.0` 범위다.
+- `detection.object`는 사건 로그가 아니라 track별 최신 추론 snapshot이다.
+- 관제 서버는 `channel.event` envelope를 append-only 이벤트 로그로 저장하지만, Live 영상 overlay는 저장 로그를 직접 스캔하지 않고 최신 snapshot projection만 사용한다.
+- 일반 이벤트 피드 기본 조회에서는 `detection.object`를 제외한다. detection 이력은 eventType 또는 track 기준으로 명시 조회한다.
+- `values.detections[]`는 같은 frame/tick의 객체 목록이다. 객체 1개당 event를 만들지 않는다.
+- 해당 track에서 객체가 없으면 `values.detections: []`를 보낸다. 관제 UI는 해당 track의 이전 bbox를 즉시 제거한다.
+- 로봇은 detection snapshot을 주기적으로 송신한다. P0 권장 주기는 1~2Hz이고, 실제 모델/네트워크 상태에 따라 2~5Hz까지 조정할 수 있다.
+- `bbox`는 항상 normalized xywh 의미로 해석한다. 별도 `format` 필드는 보내지 않는다.
+- `bbox.x`, `bbox.y`, `bbox.width`, `bbox.height`는 `0.0`~`1.0` 범위다.
 - 로봇은 model name, model version, bbox 색상, UI label, overlay style, show/hide flag를 보내지 않는다.
 - 관제 Web UI는 `className`을 deterministic hash로 색상 palette에 매핑한다.
-- Live overlay는 짧은 TTL로 표시한다. 오래된 detection은 UI에서 자동 제거된다.
+- 관제 Web UI는 track별 최신 detection snapshot만 overlay한다. 새 snapshot이 오면 기존 bbox를 교체하고, 빈 snapshot이 오면 즉시 제거한다.
+- 관제 Web UI는 최신 snapshot을 약 3초 TTL로 유지한다. TTL 이후 새 snapshot이 없으면 stale overlay로 보고 자동 제거한다.
 
 `detection.object` 필드:
 
 | Field | Required | Description |
 | --- | --- | --- |
 | `eventType` | Yes | `detection.object` |
-| `occurredAt` | Recommended | 추론 기준 시각 |
-| `media.trackId` | Yes | `track.video_1` 또는 `track.video_2` |
-| `payload.detections` | Yes | detection list |
-| `payload.detections[].className` | Yes | 탐지 class label |
-| `payload.detections[].confidence` | Yes | `0.0`~`1.0` confidence |
-| `payload.detections[].bbox.format` | Yes | `normalized_xywh` |
-| `payload.detections[].bbox.x` | Yes | 좌상단 x |
-| `payload.detections[].bbox.y` | Yes | 좌상단 y |
-| `payload.detections[].bbox.width` | Yes | bbox width |
-| `payload.detections[].bbox.height` | Yes | bbox height |
+| `timestamp` | Recommended | 추론 기준 시각 |
+| `values.trackId` | Yes | `track.video_1` 또는 `track.video_2` |
+| `values.detections` | Yes | detection list. 객체가 없으면 빈 배열 `[]` |
+| `values.detections[].className` | Yes | 탐지 class label |
+| `values.detections[].confidence` | Yes | `0.0`~`1.0` confidence |
+| `values.detections[].bbox.x` | Yes | 좌상단 x |
+| `values.detections[].bbox.y` | Yes | 좌상단 y |
+| `values.detections[].bbox.width` | Yes | bbox width |
+| `values.detections[].bbox.height` | Yes | bbox height |
 
 `mission.event` 예시:
 
@@ -1001,11 +1017,11 @@ Event item common schema:
   "events": [
     {
       "eventType": "mission.event",
-      "severity": "notice",
-      "occurredAt": "2026-06-08T10:03:12.000Z",
-      "title": "목표 지점 도착",
-      "description": "로봇이 waypoint-3에 도착했습니다.",
-      "payload": {
+      "timestamp": "2026-06-08T10:03:12.000Z",
+      "values": {
+        "severity": "notice",
+        "title": "목표 지점 도착",
+        "description": "로봇이 waypoint-3에 도착했습니다.",
         "category": "navigation",
         "code": "waypoint.arrived"
       }
@@ -1017,8 +1033,9 @@ Event item common schema:
 `mission.event` 규칙:
 
 - Live 이벤트 패널에 한 줄 표시할 수 있는 임무 중 일반 이벤트다.
-- `title`을 우선 표시하고, 없으면 `payload.code` 또는 `eventType`을 표시한다.
-- `description`은 상세 문구로 선택 사용한다.
+- `values.title`을 우선 표시하고, 없으면 `values.code` 또는 `eventType`을 표시한다.
+- `values.description`은 상세 문구로 선택 사용한다.
+- `values.severity`는 `info`, `notice`, `warning`, `critical` 중 하나를 사용한다. 없거나 알 수 없는 값이면 관제 UI는 `info`로 처리한다.
 - 복잡한 timeline, ACK, 알림 정책은 이번 v0 범위가 아니다.
 
 ## 9. 통과 기준
@@ -1044,7 +1061,7 @@ SFU/WebRTC:
 - 관제 UI에서 RGB/Thermal 영상 표시
 - GPS/position sample이 있으면 관제 UI 위치 영역에 표시
 - telemetry sample이 있으면 관제 UI 센서 영역에 표시
-- `detection.object` payload가 있으면 `media.trackId`에 맞는 RGB/Thermal 영상 위에 bbox overlay 표시
+- `detection.object` event가 있으면 `values.trackId`에 맞는 RGB/Thermal 영상 위에 bbox overlay 표시
 - `mission.event` payload가 있으면 Live 이벤트 패널에 표시
 - offer SDP의 video codec line이 `H264/90000`
 - SFU와 recorder 로그에서 video codec이 `video/H264`로 관측
@@ -1065,8 +1082,8 @@ SFU/WebRTC:
 | DataChannel open callback 없음 | DataChannel을 offer 전에 만들었는지, offer SDP의 `m=application`, `a=sctp-port`, `a=group:BUNDLE`, `a=bundle-only` 확인 |
 | 영상은 보이나 센서 없음 | DataChannel label, open 상태, payload envelope |
 | 센서는 오나 위치 없음 | position sensorId/value shape |
-| detection overlay가 안 보임 | `channel.event` open 여부, `eventType=detection.object`, `media.trackId`, bbox `normalized_xywh` 범위 |
-| 이벤트 패널에 mission event가 안 보임 | `channel.event` open 여부, `eventType=mission.event`, `title` 또는 `payload.code` |
+| detection overlay가 안 보임 | `channel.event` open 여부, `eventType=detection.object`, `values.trackId`, `values.detections[].bbox`의 `x/y/width/height` 0~1 범위 |
+| 이벤트 패널에 mission event가 안 보임 | `channel.event` open 여부, `eventType=mission.event`, `values.title` 또는 `values.code` |
 
 ## 11. 로봇팀이 관제팀에 공유할 로그
 

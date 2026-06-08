@@ -35,7 +35,7 @@ The mock publishes:
 - `track.audio_1`: silent Opus-preferred audio
 - `track.audio_2`: reserved secondary audio slot
 - `channel.telemetry`: `SensorDescriptor` / `SensorSample` payloads for GPS, six-channel gas module values, battery
-- `channel.event`: event v0 payloads for `detection.object` video overlay and `mission.event` panel entries
+- `channel.event`: event v0 payloads for `detection.object` RGB/Thermal snapshot overlays and `mission.event` panel entries
 - `channel.spatial`: reserved channel; the mock creates the channel but does not emit payloads
 - `channel.control`: reserved stub; the mock creates the channel but does not emit control payloads
 
@@ -45,6 +45,7 @@ Robot-team reference points:
 - Use the mission response `sfu.signalingUrl` and `turnServers` as-is.
 - Do not send DataChannel payloads immediately after `createDataChannel()` or immediately after applying the answer.
 - Send telemetry and event payloads only after their DataChannel is OPEN. This mock gates sends with `channel.readyState == "open"`; SDKs with callbacks should use the equivalent open callback.
+- Send `detection.object` as the latest per-track snapshot. This mock emits RGB and Thermal `values.trackId` snapshots every second and periodically sends `values.detections: []` to verify overlay clearing.
 - Keep `robotCode`, `missionId`, `missionCode`, and `channelRole` out of the robot payload. The server injects that context from the authenticated robot, room, and DataChannel label.
 
 Runtime options keep the robot-team integration path explicit:

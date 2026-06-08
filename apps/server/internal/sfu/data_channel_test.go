@@ -6,7 +6,7 @@ import (
 )
 
 func TestDataChannelPayloadWithContextPreservesEventEnvelope(t *testing.T) {
-	raw := []byte(`{"messageType":"event","events":[{"eventType":"detection.object","media":{"trackId":"track.video_1"},"payload":{"detections":[]}}]}`)
+	raw := []byte(`{"messageType":"event","events":[{"eventType":"detection.object","values":{"trackId":"track.video_1","detections":[]}}]}`)
 
 	got := dataChannelPayloadWithContext("mission-001", "robot-001", StreamRoleChannelEvent, raw)
 

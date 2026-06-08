@@ -47,7 +47,7 @@ func TestRecorderStorageDataChannelLabelKeepsSensorSampleChannels(t *testing.T) 
 	cases := map[string]string{
 		"channel.telemetry": "channel.telemetry",
 		"channel.spatial":   "",
-		"channel.event":     "",
+		"channel.event":     "channel.event",
 		"channel.control":   "",
 		"telemetry":         "",
 		"sensor":            "",

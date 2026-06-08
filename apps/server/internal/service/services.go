@@ -10,6 +10,7 @@ type Services struct {
 	Robots    *RobotService
 	Missions  *MissionService
 	Sensors   *SensorService
+	Events    *EventService
 	Recording *RecordingService
 	Streams   *StreamSessionService
 	Live      *LiveStatusService
@@ -24,6 +25,7 @@ func NewServices(repository store.Store) *Services {
 		Robots:            &RobotService{repository: repository},
 		Missions:          &MissionService{repository: repository, recordingRepository: repository, transactionRunner: transactionRunner},
 		Sensors:           &SensorService{repository: repository},
+		Events:            &EventService{repository: repository},
 		Recording:         &RecordingService{repository: repository, transactionRunner: transactionRunner},
 		Streams:           &StreamSessionService{repository: repository},
 		Live:              &LiveStatusService{},

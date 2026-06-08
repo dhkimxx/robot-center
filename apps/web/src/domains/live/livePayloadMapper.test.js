@@ -48,15 +48,14 @@ describe("mapLiveDataChannelPayload", () => {
       events: [
         {
           eventType: "detection.object",
-          occurredAt: "2026-06-08T01:00:00.000Z",
-          media: { trackId: "track.video_1" },
-          payload: {
+          timestamp: "2026-06-08T01:00:00.000Z",
+          values: {
+            trackId: "track.video_1",
             detections: [
               {
                 className: "person",
                 confidence: 0.92,
                 bbox: {
-                  format: "normalized_xywh",
                   x: 0.1,
                   y: 0.2,
                   width: 0.3,
@@ -73,6 +72,7 @@ describe("mapLiveDataChannelPayload", () => {
     expect(result.eventMessage).toBe("");
     expect(result.detectionOverlays).toHaveLength(1);
     expect(result.detectionOverlays[0]).toMatchObject({
+      timestamp: "2026-06-08T01:00:00.000Z",
       trackId: "track.video_1",
       trackSlot: "rgb",
       detections: [
@@ -90,6 +90,32 @@ describe("mapLiveDataChannelPayload", () => {
     });
   });
 
+  it("maps empty detection snapshots to an overlay clear projection", () => {
+    const result = mapLiveDataChannelPayload("channel.event", JSON.stringify({
+      channelRole: "channel.event",
+      messageType: "event",
+      events: [
+        {
+          eventType: "detection.object",
+          timestamp: "2026-06-08T01:00:01.000Z",
+          values: {
+            trackId: "track.video_2",
+            detections: []
+          }
+        }
+      ]
+    }));
+
+    expect(result.ok).toBe(true);
+    expect(result.detectionOverlays).toEqual([
+      expect.objectContaining({
+        detections: [],
+        trackId: "track.video_2",
+        trackSlot: "thermal"
+      })
+    ]);
+  });
+
   it("maps mission events to live event panel items", () => {
     const result = mapLiveDataChannelPayload("channel.event", JSON.stringify({
       channelRole: "channel.event",
@@ -97,11 +123,11 @@ describe("mapLiveDataChannelPayload", () => {
       events: [
         {
           eventType: "mission.event",
-          severity: "notice",
-          occurredAt: "2026-06-08T01:03:00.000Z",
-          title: "목표 지점 도착",
-          description: "waypoint-3 도착",
-          payload: {
+          timestamp: "2026-06-08T01:03:00.000Z",
+          values: {
+            severity: "notice",
+            title: "목표 지점 도착",
+            description: "waypoint-3 도착",
             category: "navigation",
             code: "waypoint.arrived"
           }

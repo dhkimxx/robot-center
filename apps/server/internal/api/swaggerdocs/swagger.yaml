@@ -54,6 +54,36 @@ definitions:
       error:
         type: string
     type: object
+  robot-center_apps_server_internal_api_dto.EventEnvelopeRequest:
+    properties:
+      channelRole:
+        type: string
+      events:
+        items:
+          $ref: '#/definitions/robot-center_apps_server_internal_api_dto.EventItemRequest'
+        type: array
+      messageId:
+        type: string
+      messageType:
+        type: string
+      missionCode:
+        type: string
+      missionId:
+        type: string
+      robotCode:
+        type: string
+    type: object
+  robot-center_apps_server_internal_api_dto.EventItemRequest:
+    properties:
+      eventId:
+        type: string
+      eventType:
+        type: string
+      timestamp:
+        type: string
+      values:
+        type: object
+    type: object
   robot-center_apps_server_internal_api_dto.HealthResponse:
     properties:
       service:
@@ -141,6 +171,48 @@ definitions:
       mission:
         $ref: '#/definitions/robot-center_apps_server_internal_api_dto.MissionResponse'
     type: object
+  robot-center_apps_server_internal_api_dto.MissionEventResponse:
+    properties:
+      createdAt:
+        type: string
+      description:
+        type: string
+      detectionCount:
+        type: integer
+      eventCategory:
+        type: string
+      eventId:
+        type: string
+      eventType:
+        type: string
+      id:
+        type: string
+      missionId:
+        type: string
+      receivedAt:
+        type: string
+      robotCode:
+        type: string
+      severity:
+        type: string
+      timestamp:
+        type: string
+      title:
+        type: string
+      trackId:
+        type: string
+      updatedAt:
+        type: string
+      values:
+        type: object
+    type: object
+  robot-center_apps_server_internal_api_dto.MissionEventsResponse:
+    properties:
+      events:
+        items:
+          $ref: '#/definitions/robot-center_apps_server_internal_api_dto.MissionEventResponse'
+        type: array
+    type: object
   robot-center_apps_server_internal_api_dto.MissionLiveStatusResponse:
     properties:
       missionCode:
@@ -223,6 +295,15 @@ definitions:
         type: integer
       usedPercent:
         type: number
+    type: object
+  robot-center_apps_server_internal_api_dto.OperatorMissionEventsResponse:
+    properties:
+      events:
+        items:
+          $ref: '#/definitions/robot-center_apps_server_internal_api_dto.MissionEventResponse'
+        type: array
+      missionCode:
+        type: string
     type: object
   robot-center_apps_server_internal_api_dto.OperatorMissionRecordingChunksResponse:
     properties:
@@ -1107,6 +1188,54 @@ paths:
       summary: 임무 종료
       tags:
       - Operator API
+  /api/v1/operator/missions/{missionCode}/events:
+    get:
+      description: operator가 mission 기준 이벤트 로그를 조회합니다. 기본 조회는 Live 이벤트 피드용이며 detection.object는
+        제외합니다. detection overlay 로그는 eventType 또는 includeDetections=true로 명시 조회합니다.
+      parameters:
+      - description: 임무 코드
+        in: path
+        name: missionCode
+        required: true
+        type: string
+      - description: 로봇 코드
+        in: query
+        name: robotCode
+        type: string
+      - description: '이벤트 타입. 예: mission.event, detection.object'
+        in: query
+        name: eventType
+        type: string
+      - description: '이벤트 카테고리. 예: mission, detection, alarm, system'
+        in: query
+        name: eventCategory
+        type: string
+      - description: '미디어 track ID. 예: track.video_1'
+        in: query
+        name: trackId
+        type: string
+      - description: 기본 이벤트 피드에 detection.object 포함 여부
+        in: query
+        name: includeDetections
+        type: boolean
+      - description: 조회 개수 제한. 기본 100, 최대 500
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/robot-center_apps_server_internal_api_dto.OperatorMissionEventsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse'
+      summary: 임무 이벤트 조회
+      tags:
+      - Operator API
   /api/v1/operator/missions/{missionCode}/live-status:
     get:
       description: 임무에 배정된 로봇의 연결, 스트림, 녹화 상태를 반환합니다.
@@ -1576,6 +1705,37 @@ paths:
           schema:
             $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse'
       summary: 녹화 chunk 업로드 완료
+      tags:
+      - Recorder API
+  /api/v1/recorder/events:
+    post:
+      consumes:
+      - application/json
+      description: recorder-worker가 channel.event envelope를 저장합니다. Live overlay는 별도
+        projection이고, 이 API는 append-only 이벤트 로그를 남깁니다.
+      parameters:
+      - description: channel.event envelope
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/robot-center_apps_server_internal_api_dto.EventEnvelopeRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/robot-center_apps_server_internal_api_dto.MissionEventsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse'
+      summary: recorder 이벤트 저장
       tags:
       - Recorder API
   /api/v1/recorder/finalization-jobs/{jobID}/completed:

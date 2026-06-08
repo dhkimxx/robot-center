@@ -12,26 +12,26 @@ describe("createEventLiveProjection", () => {
       events: [
         {
           eventType: "detection.object",
-          media: { trackId: "track.video_9" },
-          payload: {
+          values: {
+            trackId: "track.video_9",
             detections: [
               {
                 className: "person",
                 confidence: 0.9,
-                bbox: { format: "normalized_xywh", x: 0.1, y: 0.1, width: 0.2, height: 0.2 }
+                bbox: { x: 0.1, y: 0.1, width: 0.2, height: 0.2 }
               }
             ]
           }
         },
         {
           eventType: "detection.object",
-          media: { trackId: "track.video_1" },
-          payload: {
+          values: {
+            trackId: "track.video_1",
             detections: [
               {
                 className: "person",
                 confidence: 0.9,
-                bbox: { format: "normalized_xywh", x: 0.9, y: 0.1, width: 0.2, height: 0.2 }
+                bbox: { x: 0.9, y: 0.1, width: 0.2, height: 0.2 }
               }
             ]
           }
@@ -47,10 +47,33 @@ describe("createEventLiveProjection", () => {
     expect(getDetectionColor("person")).toBe(getDetectionColor("person"));
   });
 
-  it("expires detection overlays by TTL", () => {
-    const overlay = { receivedAt: "2026-06-08T01:00:00.000Z" };
+  it("keeps empty detection snapshots so the matching overlay can be cleared", () => {
+    const projection = createEventLiveProjection({
+      receivedAt: "2026-06-08T01:00:00.000Z",
+      events: [
+        {
+          eventType: "detection.object",
+          values: {
+            trackId: "track.video_1",
+            detections: []
+          }
+        }
+      ]
+    });
 
-    expect(isDetectionOverlayFresh(overlay, Date.parse("2026-06-08T01:00:00.500Z"))).toBe(true);
-    expect(isDetectionOverlayFresh(overlay, Date.parse("2026-06-08T01:00:02.000Z"))).toBe(false);
+    expect(projection.detectionOverlays).toEqual([
+      expect.objectContaining({
+        detections: [],
+        trackId: "track.video_1",
+        trackSlot: "rgb"
+      })
+    ]);
+  });
+
+  it("expires detection overlays by TTL", () => {
+    const overlay = { timestamp: "2026-06-08T01:00:00.000Z" };
+
+    expect(isDetectionOverlayFresh(overlay, Date.parse("2026-06-08T01:00:02.500Z"))).toBe(true);
+    expect(isDetectionOverlayFresh(overlay, Date.parse("2026-06-08T01:00:04.000Z"))).toBe(false);
   });
 });

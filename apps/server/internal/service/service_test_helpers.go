@@ -246,6 +246,14 @@ func (s *recordingStoreSpy) ClearSensorData(_ context.Context) (store.SensorData
 	return store.SensorDataClearResult{}, nil
 }
 
+func (s *recordingStoreSpy) SaveMissionEventEnvelope(_ context.Context, envelope domain.MissionEventEnvelope) ([]domain.MissionEvent, error) {
+	return envelope.Events, nil
+}
+
+func (s *recordingStoreSpy) ListMissionEvents(_ context.Context, _ store.EventQuery) ([]domain.MissionEvent, error) {
+	return nil, nil
+}
+
 func (s *recordingStoreSpy) StartRobotStreamSession(_ context.Context, _ store.StartRobotStreamSessionInput) (domain.RobotStreamSession, error) {
 	return domain.RobotStreamSession{}, nil
 }

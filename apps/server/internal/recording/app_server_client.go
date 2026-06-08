@@ -176,6 +176,8 @@ func (c *HTTPAppServerClient) PostDataChannelPayload(ctx context.Context, label 
 	switch label {
 	case "channel.telemetry", "channel.spatial":
 		path = "/api/v1/recorder/sensor-samples"
+	case "channel.event":
+		path = "/api/v1/recorder/events"
 	default:
 		return nil
 	}

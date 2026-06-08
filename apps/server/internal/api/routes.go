@@ -37,6 +37,7 @@ func (s *Server) registerOperatorRoutes(group *gin.RouterGroup) {
 
 	group.GET("/missions", ginHTTPHandler(s.handleListMissions))
 	group.POST("/missions", ginHTTPHandler(s.handleCreateMission))
+	group.GET("/missions/:missionCode/events", ginHTTPHandler(s.handleListMissionEvents, "missionCode"))
 	group.GET("/missions/:missionCode/live-status", ginHTTPHandler(s.handleMissionLiveStatus, "missionCode"))
 	group.GET("/missions/:missionCode/recordings/summary", ginHTTPHandler(s.handleMissionRecordingSummary, "missionCode"))
 	group.GET("/missions/:missionCode/recordings/chunks", ginHTTPHandler(s.handleMissionRecordingChunks, "missionCode"))
@@ -56,6 +57,7 @@ func (s *Server) registerRecorderRoutes(group *gin.RouterGroup) {
 	group.POST("/chunks/:chunkID/uploaded", ginHTTPHandler(s.handleRecorderChunkUploaded, "chunkID"))
 	group.POST("/chunks/:chunkID/files/:fileType/uploaded", ginHTTPHandler(s.handleRecorderFileUploaded, "chunkID", "fileType"))
 	group.POST("/sensor-samples", ginHTTPHandler(s.handleCreateSensorSamples))
+	group.POST("/events", ginHTTPHandler(s.handleCreateMissionEvents))
 	group.GET("/sfu/ws", ginHTTPHandler(s.handleRecorderSFUWebSocket))
 }
 

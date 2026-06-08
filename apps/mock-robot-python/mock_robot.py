@@ -744,8 +744,6 @@ class MockRobot:
                 payload = self.create_telemetry_payload()
             elif label == "channel.event":
                 self.event_sequence += 1
-                if self.event_sequence % 2 != 0:
-                    continue
                 payload = self.create_event_payload(self.event_sequence)
             else:
                 continue
@@ -927,45 +925,51 @@ class MockRobot:
 
     def create_event_payload(self, sequence: int) -> dict[str, Any]:
         occurred_at = utc_now_iso()
-        track_id = "track.video_1" if sequence % 4 != 0 else "track.video_2"
-        class_name = ["person", "smoke", "vehicle"][sequence % 3]
-        x = 0.12 + (sequence % 5) * 0.08
-        y = 0.16 + (sequence % 4) * 0.07
-        events: list[dict[str, Any]] = [
-            {
-                "eventId": f"{self.robot_code}-detect-{sequence}",
+
+        def detection_snapshot_event(track_id: str, offset: int) -> dict[str, Any]:
+            tick = sequence + offset
+            class_name = ["person", "smoke", "vehicle"][tick % 3]
+            x = 0.12 + (tick % 5) * 0.08
+            y = 0.16 + (tick % 4) * 0.07
+            should_clear_snapshot = (track_id == "track.video_1" and sequence % 15 == 0) or (
+                track_id == "track.video_2" and sequence % 20 == 0
+            )
+            detections = [] if should_clear_snapshot else [
+                {
+                    "className": class_name,
+                    "confidence": round(0.72 + (tick % 20) / 100, 2),
+                    "bbox": {
+                        "x": round(x, 3),
+                        "y": round(y, 3),
+                        "width": 0.22,
+                        "height": 0.28,
+                    },
+                }
+            ]
+            return {
+                "eventId": f"{self.robot_code}-detect-{track_id.replace('.', '_')}-{sequence}",
                 "eventType": "detection.object",
-                "occurredAt": occurred_at,
-                "media": {
+                "timestamp": occurred_at,
+                "values": {
                     "trackId": track_id,
-                },
-                "payload": {
-                    "detections": [
-                        {
-                            "className": class_name,
-                            "confidence": round(0.72 + (sequence % 20) / 100, 2),
-                            "bbox": {
-                                "format": "normalized_xywh",
-                                "x": round(x, 3),
-                                "y": round(y, 3),
-                                "width": 0.22,
-                                "height": 0.28,
-                            },
-                        }
-                    ],
+                    "detections": detections,
                 },
             }
+
+        events: list[dict[str, Any]] = [
+            detection_snapshot_event("track.video_1", 0),
+            detection_snapshot_event("track.video_2", 1),
         ]
         if sequence % 10 == 0:
             events.append(
                 {
                     "eventId": f"{self.robot_code}-mission-{sequence}",
                     "eventType": "mission.event",
-                    "severity": "notice",
-                    "occurredAt": occurred_at,
-                    "title": "Mock mission event",
-                    "description": f"{self.robot_code} event sequence {sequence}",
-                    "payload": {
+                    "timestamp": occurred_at,
+                    "values": {
+                        "severity": "notice",
+                        "title": "Mock mission event",
+                        "description": f"{self.robot_code} event sequence {sequence}",
                         "category": "mock",
                         "code": "mock.event",
                     },
@@ -974,7 +978,6 @@ class MockRobot:
         return {
             "messageId": f"{self.robot_code}-event-{sequence}",
             "messageType": "event",
-            "schemaVersion": "event.v0",
             "events": events,
         }
 

@@ -112,6 +112,24 @@ func sensorListHasID(sensors []dto.SensorLatestResponse, sensorID string) bool {
 	return false
 }
 
+func eventListHasType(events []dto.MissionEventResponse, eventType string) bool {
+	for _, event := range events {
+		if event.EventType == eventType {
+			return true
+		}
+	}
+	return false
+}
+
+func eventListHasDetectionCount(events []dto.MissionEventResponse, trackID string, detectionCount int) bool {
+	for _, event := range events {
+		if event.TrackID == trackID && event.DetectionCount != nil && *event.DetectionCount == detectionCount {
+			return true
+		}
+	}
+	return false
+}
+
 func assertStringListEqual(t *testing.T, actual []string, expected []string) {
 	t.Helper()
 	if len(actual) != len(expected) {

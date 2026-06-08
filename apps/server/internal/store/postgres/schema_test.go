@@ -44,6 +44,30 @@ func TestAutoMigrateRemovesLegacySensorSampleValueColumns(t *testing.T) {
 	assertColumnPresent(t, store, "sensor_descriptors", "label")
 }
 
+func TestAutoMigrateAppliesEventValueSchema(t *testing.T) {
+	store := newPostgresTestStore(t)
+
+	for _, columnName := range []string{
+		"event_id",
+		"event_category",
+		"track_id",
+		"received_at",
+		"detection_count",
+		"values",
+		"raw_message",
+	} {
+		assertColumnPresent(t, store, "events", columnName)
+	}
+	for _, columnName := range []string{
+		"source_channel",
+		"media_timestamp_ms",
+		"payload",
+		"raw_event",
+	} {
+		assertColumnMissing(t, store, "events", columnName)
+	}
+}
+
 func assertColumnPresent(t *testing.T, store *Store, tableName string, columnName string) {
 	t.Helper()
 

@@ -26,6 +26,18 @@ func intQueryValue(r *http.Request, key string, fallback int) int {
 	return value
 }
 
+func boolQueryValue(r *http.Request, key string, fallback bool) bool {
+	rawValue := strings.TrimSpace(r.URL.Query().Get(key))
+	if rawValue == "" {
+		return fallback
+	}
+	value, err := strconv.ParseBool(rawValue)
+	if err != nil {
+		return fallback
+	}
+	return value
+}
+
 func nonNegativeIntQueryValue(r *http.Request, key string, fallback int) int {
 	value, err := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get(key)))
 	if err != nil || value < 0 {

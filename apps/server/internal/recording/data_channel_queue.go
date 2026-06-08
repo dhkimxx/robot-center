@@ -326,9 +326,9 @@ func (w *Worker) recordRecorderDataPostRetry() {
 }
 
 func recorderShouldPostDataChannelLabel(storageLabel string) bool {
-	return storageLabel == "channel.telemetry"
+	return storageLabel == "channel.telemetry" || storageLabel == "channel.event"
 }
 
 func recorderShouldRequireRobotCode(storageLabel string) bool {
-	return storageLabel == "channel.telemetry"
+	return storageLabel == "channel.telemetry" || storageLabel == "channel.event"
 }

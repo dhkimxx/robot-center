@@ -1,4 +1,4 @@
-export const detectionOverlayTtlMs = 1200;
+export const detectionOverlayTtlMs = 3000;
 
 const videoTrackSlots = {
   "track.video_1": "rgb",
@@ -25,7 +25,7 @@ function normalizeSeverity(severity) {
 }
 
 function eventTimestamp(event, fallbackTimestamp) {
-  return event?.occurredAt || fallbackTimestamp || new Date().toISOString();
+  return event?.timestamp || fallbackTimestamp || new Date().toISOString();
 }
 
 function isFiniteUnitNumber(value) {
@@ -33,7 +33,7 @@ function isFiniteUnitNumber(value) {
 }
 
 function normalizeBbox(bbox) {
-  if (!bbox || bbox.format !== "normalized_xywh") {
+  if (!bbox) {
     return null;
   }
   const normalized = {
@@ -68,23 +68,28 @@ function normalizeDetection(detection, index) {
 const detectionObjectStrategy = {
   eventType: "detection.object",
   createProjection(event, context) {
-    const trackId = String(event?.media?.trackId ?? "").trim();
+    const values = event?.values ?? {};
+    const trackId = String(values.trackId ?? "").trim();
     const trackSlot = videoTrackSlots[trackId];
     if (!trackSlot) {
       return null;
     }
-    const detections = (Array.isArray(event?.payload?.detections) ? event.payload.detections : [])
+    const rawDetections = Array.isArray(values.detections) ? values.detections : null;
+    if (!rawDetections) {
+      return null;
+    }
+    const detections = rawDetections
       .map(normalizeDetection)
       .filter(Boolean);
-    if (detections.length === 0) {
+    if (rawDetections.length > 0 && detections.length === 0) {
       return null;
     }
     return {
       detectionOverlay: {
         id: String(event?.eventId ?? `${trackId}-${eventTimestamp(event, context.receivedAt)}`),
         detections,
-        occurredAt: eventTimestamp(event, context.receivedAt),
         receivedAt: context.receivedAt,
+        timestamp: eventTimestamp(event, context.receivedAt),
         trackId,
         trackSlot
       }
@@ -95,19 +100,19 @@ const detectionObjectStrategy = {
 const missionEventStrategy = {
   eventType: "mission.event",
   createProjection(event, context) {
-    const payload = event?.payload ?? {};
-    const title = String(event?.title ?? payload.code ?? event?.eventType ?? "").trim();
+    const values = event?.values ?? {};
+    const title = String(values.title ?? values.code ?? event?.eventType ?? "").trim();
     if (!title) {
       return null;
     }
-    const description = String(event?.description ?? "").trim();
+    const description = String(values.description ?? "").trim();
     return {
       liveEvent: {
         at: eventTimestamp(event, context.receivedAt),
         description,
         id: String(event?.eventId ?? `${title}-${eventTimestamp(event, context.receivedAt)}`),
         message: title,
-        severity: normalizeSeverity(event?.severity)
+        severity: normalizeSeverity(values.severity)
       }
     };
   }
@@ -144,8 +149,8 @@ export function createEmptyDetectionOverlays() {
 }
 
 export function isDetectionOverlayFresh(overlay, nowMs = Date.now()) {
-  const timestamp = Date.parse(overlay?.receivedAt || overlay?.occurredAt || "");
-  return Number.isFinite(timestamp) && nowMs - timestamp <= detectionOverlayTtlMs;
+  const measuredAt = Date.parse(overlay?.receivedAt || overlay?.timestamp || "");
+  return Number.isFinite(measuredAt) && nowMs - measuredAt <= detectionOverlayTtlMs;
 }
 
 export function getDetectionColor(className) {

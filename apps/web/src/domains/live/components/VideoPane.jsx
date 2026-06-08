@@ -160,9 +160,9 @@ export function VideoPane({ className = "", compact = false, detectionOverlay = 
       return undefined;
     }
     const now = Date.now();
-    const timestamp = Date.parse(detectionOverlay.receivedAt || detectionOverlay.occurredAt || "");
-    const expiresInMs = Number.isFinite(timestamp)
-      ? Math.max(0, detectionOverlayTtlMs - (now - timestamp))
+    const measuredAt = Date.parse(detectionOverlay.receivedAt || detectionOverlay.timestamp || "");
+    const expiresInMs = Number.isFinite(measuredAt)
+      ? Math.max(0, detectionOverlayTtlMs - (now - measuredAt))
       : detectionOverlayTtlMs;
     setOverlayNow(now);
     const timeoutId = window.setTimeout(() => setOverlayNow(Date.now()), expiresInMs + 50);

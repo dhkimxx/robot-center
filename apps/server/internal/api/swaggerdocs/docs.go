@@ -126,6 +126,77 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/operator/missions/{missionCode}/events": {
+            "get": {
+                "description": "operator가 mission 기준 이벤트 로그를 조회합니다. 기본 조회는 Live 이벤트 피드용이며 detection.object는 제외합니다. detection overlay 로그는 eventType 또는 includeDetections=true로 명시 조회합니다.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Operator API"
+                ],
+                "summary": "임무 이벤트 조회",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "임무 코드",
+                        "name": "missionCode",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "로봇 코드",
+                        "name": "robotCode",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "이벤트 타입. 예: mission.event, detection.object",
+                        "name": "eventType",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "이벤트 카테고리. 예: mission, detection, alarm, system",
+                        "name": "eventCategory",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "미디어 track ID. 예: track.video_1",
+                        "name": "trackId",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "기본 이벤트 피드에 detection.object 포함 여부",
+                        "name": "includeDetections",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "조회 개수 제한. 기본 100, 최대 500",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.OperatorMissionEventsResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/operator/missions/{missionCode}/live-status": {
             "get": {
                 "description": "임무에 배정된 로봇의 연결, 스트림, 녹화 상태를 반환합니다.",
@@ -839,6 +910,52 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/recorder/events": {
+            "post": {
+                "description": "recorder-worker가 channel.event envelope를 저장합니다. Live overlay는 별도 projection이고, 이 API는 append-only 이벤트 로그를 남깁니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Recorder API"
+                ],
+                "summary": "recorder 이벤트 저장",
+                "parameters": [
+                    {
+                        "description": "channel.event envelope",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.EventEnvelopeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.MissionEventsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/recorder/finalization-jobs/claim": {
             "post": {
                 "description": "recorder-worker가 처리할 finalization job을 claim합니다.",
@@ -1520,6 +1637,52 @@ const docTemplate = `{
                 }
             }
         },
+        "robot-center_apps_server_internal_api_dto.EventEnvelopeRequest": {
+            "type": "object",
+            "properties": {
+                "channelRole": {
+                    "type": "string"
+                },
+                "events": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.EventItemRequest"
+                    }
+                },
+                "messageId": {
+                    "type": "string"
+                },
+                "messageType": {
+                    "type": "string"
+                },
+                "missionCode": {
+                    "type": "string"
+                },
+                "missionId": {
+                    "type": "string"
+                },
+                "robotCode": {
+                    "type": "string"
+                }
+            }
+        },
+        "robot-center_apps_server_internal_api_dto.EventItemRequest": {
+            "type": "object",
+            "properties": {
+                "eventId": {
+                    "type": "string"
+                },
+                "eventType": {
+                    "type": "string"
+                },
+                "timestamp": {
+                    "type": "string"
+                },
+                "values": {
+                    "type": "object"
+                }
+            }
+        },
         "robot-center_apps_server_internal_api_dto.HealthResponse": {
             "type": "object",
             "properties": {
@@ -1654,6 +1817,70 @@ const docTemplate = `{
                 }
             }
         },
+        "robot-center_apps_server_internal_api_dto.MissionEventResponse": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "detectionCount": {
+                    "type": "integer"
+                },
+                "eventCategory": {
+                    "type": "string"
+                },
+                "eventId": {
+                    "type": "string"
+                },
+                "eventType": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "missionId": {
+                    "type": "string"
+                },
+                "receivedAt": {
+                    "type": "string"
+                },
+                "robotCode": {
+                    "type": "string"
+                },
+                "severity": {
+                    "type": "string"
+                },
+                "timestamp": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "trackId": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                },
+                "values": {
+                    "type": "object"
+                }
+            }
+        },
+        "robot-center_apps_server_internal_api_dto.MissionEventsResponse": {
+            "type": "object",
+            "properties": {
+                "events": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.MissionEventResponse"
+                    }
+                }
+            }
+        },
         "robot-center_apps_server_internal_api_dto.MissionLiveStatusResponse": {
             "type": "object",
             "properties": {
@@ -1778,6 +2005,20 @@ const docTemplate = `{
                 },
                 "usedPercent": {
                     "type": "number"
+                }
+            }
+        },
+        "robot-center_apps_server_internal_api_dto.OperatorMissionEventsResponse": {
+            "type": "object",
+            "properties": {
+                "events": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.MissionEventResponse"
+                    }
+                },
+                "missionCode": {
+                    "type": "string"
                 }
             }
         },

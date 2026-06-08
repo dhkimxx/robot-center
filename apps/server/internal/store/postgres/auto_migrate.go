@@ -86,8 +86,18 @@ func (s *Store) applyPostAutoMigrateDDL(db *gorm.DB) error {
 		sensorSampleValueColumnMigrationStatement(),
 		sensorContractCleanupMigrationStatement(),
 		sensorLatestInitialBackfillStatement(),
+		eventStorageMigrationStatement(),
 		`CREATE INDEX IF NOT EXISTS events_geom_idx
 				ON events USING gist(geom)`,
+		`CREATE INDEX IF NOT EXISTS events_mission_type_occurred_idx
+				ON events(mission_id, event_type, occurred_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS events_mission_robot_type_occurred_idx
+				ON events(mission_id, robot_id, event_type, occurred_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS events_robot_occurred_idx
+				ON events(robot_id, occurred_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS events_detection_track_occurred_idx
+				ON events(mission_id, robot_id, track_id, occurred_at DESC)
+				WHERE event_type = 'detection.object'`,
 		dropEmptyTableStatement("sensor_readings"),
 		dropEmptyTableStatement("telemetry_snapshots"),
 	}
@@ -267,6 +277,58 @@ func sensorLatestInitialBackfillStatement() string {
 					) latest_samples;
 				END IF;
 			END $$`
+}
+
+func eventStorageMigrationStatement() string {
+	return `DO $$
+		BEGIN
+			IF to_regclass('public.events') IS NOT NULL THEN
+				ALTER TABLE events ADD COLUMN IF NOT EXISTS event_id text;
+				ALTER TABLE events ADD COLUMN IF NOT EXISTS event_category text;
+				ALTER TABLE events ADD COLUMN IF NOT EXISTS track_id text;
+				ALTER TABLE events ADD COLUMN IF NOT EXISTS received_at timestamptz;
+				ALTER TABLE events ADD COLUMN IF NOT EXISTS detection_count integer;
+				ALTER TABLE events ADD COLUMN IF NOT EXISTS "values" jsonb;
+				ALTER TABLE events ADD COLUMN IF NOT EXISTS raw_message jsonb;
+
+				UPDATE events
+				SET event_category = CASE
+					WHEN event_type = 'detection.object' THEN 'detection'
+					WHEN event_type LIKE 'alarm.%' THEN 'alarm'
+					WHEN event_type LIKE 'system.%' THEN 'system'
+					ELSE 'mission'
+				END
+				WHERE event_category IS NULL OR event_category = '';
+
+				UPDATE events SET received_at = COALESCE(occurred_at, created_at, now()) WHERE received_at IS NULL;
+				IF EXISTS (
+					SELECT 1
+					FROM information_schema.columns
+					WHERE table_schema = 'public'
+						AND table_name = 'events'
+						AND column_name = 'payload'
+				) THEN
+					UPDATE events SET "values" = payload WHERE "values" IS NULL AND payload IS NOT NULL;
+				END IF;
+				UPDATE events SET "values" = '{}'::jsonb WHERE "values" IS NULL;
+				UPDATE events SET raw_message = COALESCE(raw_message, raw_payload, '{}'::jsonb) WHERE raw_message IS NULL;
+				UPDATE events SET raw_payload = COALESCE(raw_payload, raw_message, '{}'::jsonb) WHERE raw_payload IS NULL;
+
+				ALTER TABLE events ALTER COLUMN event_category SET DEFAULT 'mission';
+				ALTER TABLE events ALTER COLUMN event_category SET NOT NULL;
+				ALTER TABLE events ALTER COLUMN received_at SET DEFAULT now();
+				ALTER TABLE events ALTER COLUMN received_at SET NOT NULL;
+				ALTER TABLE events ALTER COLUMN "values" SET DEFAULT '{}'::jsonb;
+				ALTER TABLE events ALTER COLUMN "values" SET NOT NULL;
+				ALTER TABLE events ALTER COLUMN raw_message SET DEFAULT '{}'::jsonb;
+				ALTER TABLE events ALTER COLUMN raw_message SET NOT NULL;
+
+				ALTER TABLE events DROP COLUMN IF EXISTS source_channel;
+				ALTER TABLE events DROP COLUMN IF EXISTS media_timestamp_ms;
+				ALTER TABLE events DROP COLUMN IF EXISTS payload;
+				ALTER TABLE events DROP COLUMN IF EXISTS raw_event;
+			END IF;
+		END $$`
 }
 
 func baseModelTableNames() []string {

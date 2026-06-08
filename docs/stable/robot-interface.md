@@ -31,6 +31,10 @@ history:
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: Clarify H.264 as recording precondition without server-side codec enforcement'
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: Clarify H264/90000 RTP clock requirement'
 - '2026-06-08 danya.kim <danya.kim@thundersoft.com>: define channel.event v0 for detection overlay and mission events'
+- '2026-06-08 danya.kim <danya.kim@thundersoft.com>: clarify channel.event storage and live projection responsibilities'
+- '2026-06-08 danya.kim <danya.kim@thundersoft.com>: remove bbox.format from detection.object because bbox is always normalized xywh'
+- '2026-06-08 danya.kim <danya.kim@thundersoft.com>: clarify detection.object as latest snapshot with empty-list clearing'
+- '2026-06-08 danya.kim <danya.kim@thundersoft.com>: simplify channel.event contract to timestamp and values'
 ---
 
 # Robot Gateway Interface
@@ -415,22 +419,18 @@ Gas module sample `values`는 장비 원본 필드를 유지한다.
 {
   "messageId": "uuid",
   "messageType": "event",
-  "schemaVersion": "event.v0",
   "events": [
     {
       "eventId": "evt-001",
       "eventType": "detection.object",
-      "occurredAt": "2026-06-08T10:00:00.000Z",
-      "media": {
-        "trackId": "track.video_1"
-      },
-      "payload": {
+      "timestamp": "2026-06-08T10:00:00.000Z",
+      "values": {
+        "trackId": "track.video_1",
         "detections": [
           {
             "className": "person",
             "confidence": 0.92,
             "bbox": {
-              "format": "normalized_xywh",
               "x": 0.42,
               "y": 0.31,
               "width": 0.18,
@@ -444,13 +444,30 @@ Gas module sample `values`는 장비 원본 필드를 유지한다.
 }
 ```
 
+객체 없음 또는 overlay clear snapshot 예시:
+
+```json
+{
+  "messageType": "event",
+  "events": [
+    {
+      "eventType": "detection.object",
+      "timestamp": "2026-06-08T10:00:01.000Z",
+      "values": {
+        "trackId": "track.video_1",
+        "detections": []
+      }
+    }
+  ]
+}
+```
+
 Event envelope:
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `messageId` | string | No | 메시지 추적 id |
 | `messageType` | string | Recommended | `event` |
-| `schemaVersion` | string | No | 현재 `event.v0` |
 | `events` | array | Yes | Event list. 한 메시지에 여러 event를 batch할 수 있음 |
 
 Event item:
@@ -459,13 +476,8 @@ Event item:
 | --- | --- | --- | --- |
 | `eventId` | string | Recommended | 로봇 또는 추론 모듈이 생성한 event id. 없으면 서버가 저장 시 생성 |
 | `eventType` | string | Yes | dot namespace. v0 확정값은 `detection.object`, `mission.event` |
-| `severity` | string | No | `info`, `notice`, `warning`, `critical`. 없으면 UI가 `info`로 처리 |
-| `occurredAt` | string(date-time) | Recommended | 로봇 또는 추론 모듈 기준 발생 시각. 없으면 UI 수신 시각 사용 |
-| `title` | string | Conditional | `mission.event`는 권장. `detection.object`에는 사용하지 않음 |
-| `description` | string | No | `mission.event` 상세 설명 |
-| `source` | object | No | 발생 주체. 예: `{ "module": "navigation" }` |
-| `media` | object | Conditional | `detection.object`는 필수. 영상 track 연결용 |
-| `payload` | object | Yes | eventType별 세부 데이터. 없으면 `{}` |
+| `timestamp` | string(date-time) | Recommended | 로봇 또는 추론 모듈 기준 발생 시각. 없으면 서버/UI 수신 시각 사용 |
+| `values` | object | Yes | eventType별 세부 데이터. 없으면 `{}` |
 
 Event type namespace:
 
@@ -477,50 +489,59 @@ Event type namespace:
 확장 규칙:
 
 - 새 event type은 `domain.name` 형태의 dot namespace로 추가한다.
-- 공통 필드는 top-level에만 둔다. type별 세부값은 `payload`에만 추가한다.
-- 기존 event type의 필드 의미를 바꾸지 않는다. 필요한 경우 새 event type 또는 `schemaVersion`을 올린다.
+- 공통 필드는 `eventId`, `eventType`, `timestamp`, `values`로 제한한다.
+- type별 세부값은 `values`에만 추가한다.
+- 기존 event type의 필드 의미를 바꾸지 않는다. 의미가 바뀌면 새 event type을 추가한다.
 - 서버 또는 UI가 모르는 event type은 Live UI에 표시하지 않고 무시할 수 있다.
 - control command/ack는 `channel.control` 책임이다. 운영 제어 lifecycle을 `channel.event`에 섞지 않는다.
-- DB 저장, 알림, ACK, suppression, sampling, replay timestamp 정밀 동기화는 v0 범위가 아니다.
+- 알림, ACK, suppression, sampling, replay timestamp 정밀 동기화는 v0 범위가 아니다.
+- 관제 서버는 `channel.event` envelope를 append-only `events` 로그에 저장한다.
+- Live UI overlay는 저장 로그를 직접 스캔하지 않고, `detection.object` 최신 snapshot projection으로만 표시한다.
+- 일반 이벤트 피드 기본 조회에서는 `detection.object`를 제외한다. detection 이력은 `eventType=detection.object` 또는 track filter로 명시 조회한다.
 
 YOLO / detection overlay 규칙:
 
-- `detection.object`는 object 1개당 event를 만들지 않고, 추론 frame 1개당 event 1개로 보낸다.
-- `payload.detections[]`에 같은 frame의 객체 목록을 넣는다.
-- `media.trackId`는 `track.video_1`, `track.video_2` 같은 canonical media track slot을 사용한다.
+- `detection.object`는 사건 로그가 아니라 track별 최신 추론 snapshot이다.
+- `detection.object`는 object 1개당 event를 만들지 않고, 추론 frame 또는 추론 tick 1개당 event 1개로 보낸다.
+- `values.detections[]`에 같은 frame/tick의 객체 목록을 넣는다.
+- 해당 track에서 객체가 없으면 `values.detections: []`를 보낸다. 관제 UI는 이를 해당 track overlay clear 신호로 처리한다.
+- 로봇은 detection snapshot을 주기적으로 송신한다. P0 권장 주기는 1~2Hz이고, 추후 실제 모델 FPS에 따라 2~5Hz까지 조정할 수 있다.
+- `values.trackId`는 `track.video_1`, `track.video_2` 같은 canonical media track slot을 사용한다.
 - `track.video_1`은 RGB 영상 overlay, `track.video_2`는 Thermal 영상 overlay에 사용한다.
-- bbox는 `normalized_xywh`만 사용한다. `x`, `y`, `width`, `height`는 `0.0`~`1.0` 범위다.
+- `bbox`는 항상 normalized xywh 의미로 해석한다. 별도 `format` 필드는 보내지 않는다.
+- `bbox.x`, `bbox.y`, `bbox.width`, `bbox.height`는 `0.0`~`1.0` 범위다.
 - 로봇 payload는 model name, model version, bbox color, UI label, show/hide flag를 보내지 않는다.
 - Web UI는 `className`을 deterministic hash로 색상 palette에 매핑한다.
-- Live UI는 track별 최신 detection event를 짧은 TTL로 overlay한다. 정밀 replay sync는 recording timestamp 기준으로 후속 확장한다.
+- Live UI는 track별 최신 detection snapshot만 overlay한다. 새 snapshot이 오면 이전 bbox를 교체하고, 빈 snapshot이 오면 즉시 제거한다.
+- Live UI는 네트워크 지연과 일시적 packet loss를 고려해 최신 snapshot을 약 3초 TTL로 유지한다. TTL 이후 새 snapshot이 없으면 stale overlay로 보고 자동 제거한다.
+- 정밀 replay sync는 recording timestamp 기준으로 후속 확장한다.
 
 `detection.object` event item:
 
 | Field | Required | Description |
 | --- | --- | --- |
 | `eventType` | Yes | `detection.object` |
-| `occurredAt` | Recommended | 추론 기준 시각 |
-| `media.trackId` | Yes | `track.video_1` 또는 `track.video_2` |
-| `payload.detections` | Yes | 같은 frame의 detection list |
-| `payload.detections[].className` | Yes | 탐지 class label |
-| `payload.detections[].confidence` | Yes | `0.0`~`1.0` confidence |
-| `payload.detections[].bbox.format` | Yes | `normalized_xywh` |
-| `payload.detections[].bbox.x` | Yes | 좌상단 x, `0.0`~`1.0` |
-| `payload.detections[].bbox.y` | Yes | 좌상단 y, `0.0`~`1.0` |
-| `payload.detections[].bbox.width` | Yes | bbox width, `0.0`~`1.0` |
-| `payload.detections[].bbox.height` | Yes | bbox height, `0.0`~`1.0` |
+| `timestamp` | Recommended | 추론 기준 시각 |
+| `values.trackId` | Yes | `track.video_1` 또는 `track.video_2` |
+| `values.detections` | Yes | 같은 frame/tick의 detection list. 객체가 없으면 빈 배열 `[]` |
+| `values.detections[].className` | Yes | 탐지 class label |
+| `values.detections[].confidence` | Yes | `0.0`~`1.0` confidence |
+| `values.detections[].bbox.x` | Yes | 좌상단 x, `0.0`~`1.0` |
+| `values.detections[].bbox.y` | Yes | 좌상단 y, `0.0`~`1.0` |
+| `values.detections[].bbox.width` | Yes | bbox width, `0.0`~`1.0` |
+| `values.detections[].bbox.height` | Yes | bbox height, `0.0`~`1.0` |
 
 `mission.event` event item:
 
 | Field | Required | Description |
 | --- | --- | --- |
 | `eventType` | Yes | `mission.event` |
-| `severity` | No | `info`, `notice`, `warning`, `critical` |
-| `occurredAt` | Recommended | 이벤트 발생 시각 |
-| `title` | Recommended | 이벤트 패널 표시 제목 |
-| `description` | No | 상세 설명 |
-| `payload.category` | No | 예: `navigation`, `operation`, `diagnostic` |
-| `payload.code` | No | 예: `waypoint.arrived` |
+| `timestamp` | Recommended | 이벤트 발생 시각 |
+| `values.severity` | No | `info`, `notice`, `warning`, `critical` |
+| `values.title` | Recommended | 이벤트 패널 표시 제목 |
+| `values.description` | No | 상세 설명 |
+| `values.category` | No | 예: `navigation`, `operation`, `diagnostic` |
+| `values.code` | No | 예: `waypoint.arrived` |
 
 ### 8.3 Spatial / Control
 
