@@ -100,8 +100,19 @@ export function MissionControlView({
         ) : (
           <Surface className="grid min-h-0 overflow-hidden p-0">
             <div className="grid min-h-0 grid-cols-2 grid-rows-2 gap-3 p-0 max-[900px]:grid-cols-1 max-[900px]:grid-rows-none">
-            <VideoPane className="min-h-0" label="RGB" stream={selectedSession.videoStreams.rgb} />
-            <VideoPane className="min-h-0" label="Thermal" stream={selectedSession.videoStreams.thermal} thermal />
+            <VideoPane
+              className="min-h-0"
+              detectionOverlay={selectedSession.detectionOverlays?.rgb}
+              label="RGB"
+              stream={selectedSession.videoStreams.rgb}
+            />
+            <VideoPane
+              className="min-h-0"
+              detectionOverlay={selectedSession.detectionOverlays?.thermal}
+              label="Thermal"
+              stream={selectedSession.videoStreams.thermal}
+              thermal
+            />
             <RobotMap className="min-h-0" telemetry={latestTelemetry} />
             <SensorPanel
               className="min-h-0"

@@ -3,6 +3,7 @@ import { makeLiveChannelLabel } from "../../utils/formatters.js";
 import { createEmptyLiveSession, makeLiveTargetKey } from "./liveHelpers.js";
 import { LiveSessionStatus } from "./liveConnectionStates.js";
 import { applyLiveAttemptUpdate } from "./liveSessionAttempts.js";
+import { createEmptyDetectionOverlays } from "./liveEventStrategies.js";
 import { replaceVideoStreamSlot, resetVideoStreams } from "./liveMediaCleanup.js";
 import { mergeSensorSnapshots } from "./sensorDisplayMetrics.js";
 
@@ -22,14 +23,23 @@ export function useLiveSessionStore() {
     });
   }, []);
 
-  const appendLiveEvent = useCallback((targetKey, message, options = {}) => {
+  const appendLiveEvent = useCallback((targetKey, event, options = {}) => {
     if (!targetKey) {
       return;
     }
+    const nextEvent = typeof event === "string"
+      ? { id: `${Date.now()}-${Math.random()}`, message: event, at: new Date().toISOString() }
+      : {
+        id: event.id ?? `${Date.now()}-${Math.random()}`,
+        message: event.message,
+        description: event.description ?? "",
+        severity: event.severity ?? "info",
+        at: event.at ?? new Date().toISOString()
+      };
     updateLiveSession(targetKey, (session) => ({
       ...session,
       events: [
-        { id: `${Date.now()}-${Math.random()}`, message, at: new Date().toISOString() },
+        nextEvent,
         ...session.events
       ].slice(0, 40)
     }), options);
@@ -39,7 +49,10 @@ export function useLiveSessionStore() {
     updateLiveSession(targetKey, (session) => ({
       ...session,
       status,
-      ...(options.resetStreams ? { videoStreams: resetVideoStreams(session.videoStreams) } : {})
+      ...(options.resetStreams ? {
+        detectionOverlays: createEmptyDetectionOverlays(),
+        videoStreams: resetVideoStreams(session.videoStreams)
+      } : {})
     }), options);
   }, [updateLiveSession]);
 
@@ -71,6 +84,25 @@ export function useLiveSessionStore() {
         ...(mappedPayload.telemetry ? { telemetry: mappedPayload.telemetry } : {}),
         ...(mappedPayload.sensor ? { sensor: mergeSensorSnapshots(session.sensor, mappedPayload.sensor) } : {})
       }), options);
+    }
+
+    if (mappedPayload.detectionOverlays?.length > 0) {
+      updateLiveSession(targetKey, (session) => {
+        const detectionOverlays = {
+          ...session.detectionOverlays
+        };
+        mappedPayload.detectionOverlays.forEach((overlay) => {
+          detectionOverlays[overlay.trackSlot] = overlay;
+        });
+        return {
+          ...session,
+          detectionOverlays
+        };
+      }, options);
+    }
+
+    if (mappedPayload.liveEvents?.length > 0) {
+      mappedPayload.liveEvents.forEach((event) => appendLiveEvent(targetKey, event, options));
     }
 
     if (mappedPayload.eventMessage) {

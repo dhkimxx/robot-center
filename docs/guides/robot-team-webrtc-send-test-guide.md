@@ -1,7 +1,7 @@
 ---
 title: "robot-team-webrtc-send-test-guide"
 created: 2026-05-27
-updated: '2026-06-04'
+updated: '2026-06-08'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>"]
 type: "guide"
@@ -41,6 +41,7 @@ history:
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: Clarify H.264 as recording precondition without server-side codec enforcement'
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: Clarify H264/90000 RTP clock requirement for recording validation'
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: reorganize docs directories by document purpose'
+- '2026-06-08 danya.kim <danya.kim@thundersoft.com>: document channel.event v0 robot payload contract'
 ---
 
 # Robot Team WebRTC Send Test Guide
@@ -678,22 +679,22 @@ track identity는 DataChannel payload나 WebSocket query에 넣지 않는다. We
 | --- | --- | --- |
 | `channel.telemetry` | `telemetry` | GPS, battery, 가스 같은 저속 상태. 이번 테스트에서 payload schema 확정 |
 | `channel.spatial` | `spatial` 또는 domain-specific type | IMU, odometry, point cloud descriptor. 이번 테스트에서는 label 예약 |
-| `channel.event` | `event` 또는 domain-specific type | alarm, fault, detection, mission event. 이번 테스트에서는 label 예약 |
+| `channel.event` | `event` | Live UI 표시용 detection/mission event. v0 payload schema 확정 |
 | `channel.control` | reserved | reserved control/ack side channel. 이번 테스트에서는 label 예약 |
 
 ### 8.1 Payload schema 확정 범위
 
-현재 로봇팀 송신 테스트에서 확정된 payload schema는 `channel.telemetry`의 sensor envelope 구조다.
+현재 로봇팀 송신 테스트에서 확정된 payload schema는 `channel.telemetry`의 sensor envelope와 `channel.event`의 Live event envelope v0다.
 
 | Label | Negotiation status | Payload schema status | 이번 테스트 필수 여부 |
 | --- | --- | --- | --- |
 | `channel.telemetry` | 확정 | 확정. `descriptors` / `samples` / `values` 구조 사용 | Yes |
 | `channel.spatial` | DataChannel label 예약 | 미확정. 현재 관제 mock은 payload를 송신하지 않고 open 협상만 확인 | No |
-| `channel.event` | DataChannel label 예약 | 미확정. alarm/fault/detection/mission event taxonomy는 별도 협의 필요 | No |
+| `channel.event` | 확정 | 확정. `events[]` 구조, `detection.object` / `mission.event` v0 사용 | Optional |
 | `channel.control` | DataChannel label 예약 | 미확정. command/ack/권한/감사 정책은 별도 협의 필요 | No |
 
-따라서 이번 로봇팀 송신 테스트에서 가스, GPS, battery 같은 센서 측정값은 `channel.telemetry`로 보낸다. `channel.spatial`, `channel.event`, `channel.control`은 offer/DataChannel negotiation에 포함할 수 있지만, payload 세부 schema는 이 문서에서 확정 계약으로 보지 않는다.
-관제팀 GStreamer mock도 schema가 확정된 `channel.telemetry` payload만 주기적으로 송신하며, `channel.spatial`, `channel.event`, `channel.control`은 DataChannel open 협상 확인용으로만 생성한다.
+따라서 이번 로봇팀 송신 테스트에서 가스, GPS, battery 같은 센서 측정값은 `channel.telemetry`로 보낸다. YOLO/object detection overlay나 임무 중 일반 이벤트 메시지는 `channel.event`로 보낸다. `channel.spatial`, `channel.control`은 offer/DataChannel negotiation에 포함할 수 있지만, payload 세부 schema는 이 문서에서 확정 계약으로 보지 않는다.
+관제팀 GStreamer mock은 schema가 확정된 `channel.telemetry` payload를 주기적으로 송신한다. `channel.event` payload 송신은 Live UI event v0 검증 시나리오에서만 사용한다. `channel.spatial`, `channel.control`은 DataChannel open 협상 확인용으로만 생성한다.
 
 `messageType`은 payload subtype 식별자이며 1차 라우팅 기준이 아니다. 현재 1차 라우팅 기준은 DataChannel label이다.
 
@@ -703,10 +704,10 @@ track identity는 DataChannel payload나 WebSocket query에 넣지 않는다. We
 | --- | --- |
 | `channel.telemetry` | `telemetry` 또는 `telemetry.*` |
 | `channel.spatial` | `spatial.*` |
-| `channel.event` | `event.*` |
+| `channel.event` | `event` |
 | `channel.control` | `control.*` |
 
-관제 서버는 현재 `channel.telemetry`의 `descriptors` / `samples` / `values` 구조를 로봇팀 송신 테스트의 필수 검증 대상으로 본다. 다른 채널의 payload schema는 관제팀과 별도 합의한다.
+관제 서버는 현재 `channel.telemetry`의 `descriptors` / `samples` / `values` 구조와 `channel.event`의 `events[]` 구조를 로봇팀 송신 테스트의 검증 대상으로 본다. `channel.spatial`, `channel.control` payload schema는 관제팀과 별도 합의한다.
 
 ### 8.2 DataChannel lifecycle
 
@@ -867,6 +868,159 @@ valid         -> sample.values.valid
 - `sensorType`은 관제 UI 해석 전략 선택 키이며 descriptor 필수값이다. 새 타입이 필요하면 관제팀과 먼저 이름을 맞춘다.
 - `unknown`은 관제 내부 fallback용 예약값이다. 로봇팀 payload에서 보내지 않는다.
 
+### 8.4 `channel.event` payload schema v0
+
+`channel.event`는 Live UI에 바로 표시할 이벤트를 보낸다. v0에서 확정된 이벤트 타입은 두 가지다.
+
+| eventType | 목적 | Live UI 노출 위치 |
+| --- | --- | --- |
+| `detection.object` | YOLO/object detection 결과 | RGB/Thermal 영상 overlay |
+| `mission.event` | 임무 중 일반 이벤트 메시지 | Live 이벤트 패널 |
+
+이번 v0 범위에서 제외하는 것:
+
+- DB 저장 정책
+- 알림/ACK
+- suppression/sampling
+- replay overlay 정밀 동기화
+- 모델 이름/modelVersion
+- bbox 색상 또는 UI 표시 스타일 payload
+- 로봇 payload의 `showInUi` 같은 UI 정책 flag
+
+Event envelope:
+
+```json
+{
+  "messageId": "uuid",
+  "messageType": "event",
+  "schemaVersion": "event.v0",
+  "events": [
+    {
+      "eventType": "mission.event",
+      "severity": "notice",
+      "occurredAt": "2026-06-08T10:03:12.000Z",
+      "title": "목표 지점 도착",
+      "description": "로봇이 waypoint-3에 도착했습니다.",
+      "payload": {
+        "category": "navigation",
+        "code": "waypoint.arrived"
+      }
+    }
+  ]
+}
+```
+
+Event envelope schema:
+
+| Field | Type | Required | Values / Example | Description |
+| --- | --- | --- | --- | --- |
+| `messageId` | string | Recommended | UUID 또는 `robot-123-event-102` | 메시지 추적 id |
+| `messageType` | string | Recommended | `event` | event channel 기본 타입 |
+| `schemaVersion` | string | No | `event.v0` | event schema version |
+| `events` | array | Yes | Event item list | 한 메시지에 여러 event를 batch 가능 |
+
+Event item common schema:
+
+| Field | Type | Required | Values / Example | Description |
+| --- | --- | --- | --- | --- |
+| `eventId` | string | Recommended | `evt-001` | 로봇 또는 추론 모듈이 생성한 event id |
+| `eventType` | string | Yes | `detection.object`, `mission.event` | 이벤트 의미 분류 |
+| `severity` | string | No | `info`, `notice`, `warning`, `critical` | 없으면 관제 UI는 `info`로 처리 |
+| `occurredAt` | string(date-time) | Recommended | `2026-06-08T10:03:12.000Z` | 로봇 또는 추론 모듈 기준 발생 시각 |
+| `title` | string | Conditional | `목표 지점 도착` | `mission.event`에서 이벤트 패널 표시 제목 |
+| `description` | string | No | `waypoint-3 도착` | `mission.event` 상세 설명 |
+| `source` | object | No | `{ "module": "navigation" }` | 발생 모듈 정보 |
+| `media` | object | Conditional | `{ "trackId": "track.video_1" }` | `detection.object`에서 필수 |
+| `payload` | object | Yes | `{}` | eventType별 세부 데이터 |
+
+`detection.object` 예시:
+
+```json
+{
+  "messageType": "event",
+  "events": [
+    {
+      "eventType": "detection.object",
+      "occurredAt": "2026-06-08T10:00:00.000Z",
+      "media": {
+        "trackId": "track.video_1"
+      },
+      "payload": {
+        "detections": [
+          {
+            "className": "person",
+            "confidence": 0.92,
+            "bbox": {
+              "format": "normalized_xywh",
+              "x": 0.42,
+              "y": 0.31,
+              "width": 0.18,
+              "height": 0.33
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
+`detection.object` 규칙:
+
+- `media.trackId`는 필수다.
+- `track.video_1`은 RGB 영상 overlay에 사용한다.
+- `track.video_2`는 Thermal 영상 overlay에 사용한다.
+- `payload.detections[]`는 같은 frame의 객체 목록이다. 객체 1개당 event를 만들지 않는다.
+- bbox는 `normalized_xywh`만 사용한다.
+- `x`, `y`, `width`, `height`는 `0.0`~`1.0` 범위다.
+- 로봇은 model name, model version, bbox 색상, UI label, overlay style, show/hide flag를 보내지 않는다.
+- 관제 Web UI는 `className`을 deterministic hash로 색상 palette에 매핑한다.
+- Live overlay는 짧은 TTL로 표시한다. 오래된 detection은 UI에서 자동 제거된다.
+
+`detection.object` 필드:
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `eventType` | Yes | `detection.object` |
+| `occurredAt` | Recommended | 추론 기준 시각 |
+| `media.trackId` | Yes | `track.video_1` 또는 `track.video_2` |
+| `payload.detections` | Yes | detection list |
+| `payload.detections[].className` | Yes | 탐지 class label |
+| `payload.detections[].confidence` | Yes | `0.0`~`1.0` confidence |
+| `payload.detections[].bbox.format` | Yes | `normalized_xywh` |
+| `payload.detections[].bbox.x` | Yes | 좌상단 x |
+| `payload.detections[].bbox.y` | Yes | 좌상단 y |
+| `payload.detections[].bbox.width` | Yes | bbox width |
+| `payload.detections[].bbox.height` | Yes | bbox height |
+
+`mission.event` 예시:
+
+```json
+{
+  "messageType": "event",
+  "events": [
+    {
+      "eventType": "mission.event",
+      "severity": "notice",
+      "occurredAt": "2026-06-08T10:03:12.000Z",
+      "title": "목표 지점 도착",
+      "description": "로봇이 waypoint-3에 도착했습니다.",
+      "payload": {
+        "category": "navigation",
+        "code": "waypoint.arrived"
+      }
+    }
+  ]
+}
+```
+
+`mission.event` 규칙:
+
+- Live 이벤트 패널에 한 줄 표시할 수 있는 임무 중 일반 이벤트다.
+- `title`을 우선 표시하고, 없으면 `payload.code` 또는 `eventType`을 표시한다.
+- `description`은 상세 문구로 선택 사용한다.
+- 복잡한 timeline, ACK, 알림 정책은 이번 v0 범위가 아니다.
+
 ## 9. 통과 기준
 
 Robot gateway:
@@ -880,14 +1034,18 @@ SFU/WebRTC:
 
 - Robot publisher ICE state가 `connected` 또는 `completed`
 - Robot publisher local DataChannel `channel.telemetry` open callback 발생
+- event v0를 테스트하는 경우 Robot publisher local DataChannel `channel.event` open callback 발생
 - Robot publisher에서 H.264 RGB/Thermal video track과 필요한 경우 Opus audio track 송신 시작
 - Robot publisher에서 telemetry 첫 payload send 성공
+- event v0를 테스트하는 경우 `detection.object` 또는 `mission.event` payload send 성공
 
 관제팀 확인:
 
 - 관제 UI에서 RGB/Thermal 영상 표시
 - GPS/position sample이 있으면 관제 UI 위치 영역에 표시
 - telemetry sample이 있으면 관제 UI 센서 영역에 표시
+- `detection.object` payload가 있으면 `media.trackId`에 맞는 RGB/Thermal 영상 위에 bbox overlay 표시
+- `mission.event` payload가 있으면 Live 이벤트 패널에 표시
 - offer SDP의 video codec line이 `H264/90000`
 - SFU와 recorder 로그에서 video codec이 `video/H264`로 관측
 - 녹화 종료 또는 chunk finalization 후 RGB/Thermal MP4 파일이 available 상태로 표시
@@ -907,6 +1065,8 @@ SFU/WebRTC:
 | DataChannel open callback 없음 | DataChannel을 offer 전에 만들었는지, offer SDP의 `m=application`, `a=sctp-port`, `a=group:BUNDLE`, `a=bundle-only` 확인 |
 | 영상은 보이나 센서 없음 | DataChannel label, open 상태, payload envelope |
 | 센서는 오나 위치 없음 | position sensorId/value shape |
+| detection overlay가 안 보임 | `channel.event` open 여부, `eventType=detection.object`, `media.trackId`, bbox `normalized_xywh` 범위 |
+| 이벤트 패널에 mission event가 안 보임 | `channel.event` open 여부, `eventType=mission.event`, `title` 또는 `payload.code` |
 
 ## 11. 로봇팀이 관제팀에 공유할 로그
 

@@ -1,3 +1,5 @@
+import { createEventLiveProjection } from "./liveEventStrategies.js";
+
 const telemetryChannelRoles = new Set(["channel.telemetry"]);
 const eventChannelRoles = new Set(["channel.event"]);
 const spatialChannelRoles = new Set(["channel.spatial"]);
@@ -63,7 +65,7 @@ function createTelemetrySensorProjection(payload) {
 
 function createChannelEventMessage(channelRole, payload) {
   if (eventChannelRoles.has(channelRole)) {
-    return payload?.event?.message ? `이벤트: ${payload.event.message}` : "이벤트 데이터 수신";
+    return payload?.event?.message ? `이벤트: ${payload.event.message}` : "";
   }
   if (spatialChannelRoles.has(channelRole)) {
     return "공간 데이터 수신";
@@ -110,9 +112,15 @@ export function mapLiveDataChannelPayload(label, message) {
     eventChannelRoles.has(channelRole)
     || controlChannelRoles.has(channelRole)
   ) {
+    const contextualPayload = withReceivedAt(payload);
+    const eventProjection = eventChannelRoles.has(channelRole)
+      ? createEventLiveProjection(contextualPayload)
+      : { detectionOverlays: [], liveEvents: [] };
     return {
       channelRole,
       eventMessage: createChannelEventMessage(channelRole, payload),
+      detectionOverlays: eventProjection.detectionOverlays,
+      liveEvents: eventProjection.liveEvents,
       ok: true
     };
   }

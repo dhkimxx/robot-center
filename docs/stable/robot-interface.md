@@ -1,7 +1,7 @@
 ---
 title: "robot-interface"
 created: 2026-05-26
-updated: '2026-06-04'
+updated: '2026-06-08'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>"]
 type: "design"
@@ -30,6 +30,7 @@ history:
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: Set Robot Gateway video codec contract to H.264'
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: Clarify H.264 as recording precondition without server-side codec enforcement'
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: Clarify H264/90000 RTP clock requirement'
+- '2026-06-08 danya.kim <danya.kim@thundersoft.com>: define channel.event v0 for detection overlay and mission events'
 ---
 
 # Robot Gateway Interface
@@ -282,7 +283,7 @@ DataChannel은 역할별로 분리한다.
 ```text
 channel.telemetry  descriptor/sample stream
 channel.spatial    point cloud/space status or object reference
-channel.event      alarm/fault/detection/mission event stream
+channel.event      detection/mission event stream
 channel.control    command ack/control side channel
 ```
 
@@ -292,7 +293,7 @@ Canonical DataChannel role:
 | --- | --- |
 | `channel.telemetry` | GPS, battery, gas 같은 저속 상태. 현재 확정된 payload schema 대상이다. |
 | `channel.spatial` | IMU, odometry, point cloud descriptor. label은 예약되어 있고 payload schema는 별도 합의한다. |
-| `channel.event` | alarm, fault, detection, mission event. label은 예약되어 있고 payload schema는 별도 합의한다. |
+| `channel.event` | Live detection/mission event. event envelope v0 확정 대상이다. |
 | `channel.control` | reserved control/ack side channel이다. |
 
 DataChannel lifecycle 계약:
@@ -305,9 +306,9 @@ DataChannel lifecycle 계약:
 
 DataChannel label은 위 canonical 값만 사용한다.
 
-현재 payload schema가 확정된 채널은 `channel.telemetry`다. `channel.spatial`, `channel.event`, `channel.control`은 label 예약과 open 협상 확인 대상이며, payload schema는 별도 합의 전까지 송신하지 않는다.
+현재 payload schema가 확정된 채널은 `channel.telemetry`와 `channel.event`다. `channel.spatial`, `channel.control`은 label 예약과 open 협상 확인 대상이며, payload schema는 별도 합의 전까지 송신하지 않는다.
 
-DataChannel 메시지는 공통 envelope를 사용한다. 현재 sensor 저장 대상은 `channel.telemetry`이며 메시지는 `descriptors` 또는 `samples`를 포함해야 한다. `channel.spatial` payload schema와 저장 정책은 별도 합의 전까지 활성화하지 않는다.
+DataChannel 메시지는 채널별 envelope를 사용한다. 현재 sensor 저장 대상은 `channel.telemetry`이며 메시지는 `descriptors` 또는 `samples`를 포함해야 한다. 현재 event 저장/표시 대상은 `channel.event`이며 메시지는 `events`를 포함해야 한다. `channel.spatial` payload schema와 저장 정책은 별도 합의 전까지 활성화하지 않는다.
 
 ```json
 {
@@ -404,13 +405,129 @@ Gas module sample `values`는 장비 원본 필드를 유지한다.
 - P0 기본 1Hz
 - 실제 로봇 연동 시 협의
 
-### 8.2 Spatial / Event / Control
+### 8.2 Event
+
+`channel.event`는 Live UI에 바로 표시할 이벤트를 보낸다. v0에서 확정하는 이벤트 타입은 YOLO/object detection overlay용 `detection.object`와 Live 이벤트 패널용 `mission.event` 두 가지다.
+
+로봇 payload는 이벤트 자체와 측정/추론 결과만 담는다. `robotCode`, `missionId`, `missionCode`, `channelRole`은 로봇 payload에 넣지 않는다. 서버가 WebRTC publisher identity, room, DataChannel label에서 주입한다.
+
+```json
+{
+  "messageId": "uuid",
+  "messageType": "event",
+  "schemaVersion": "event.v0",
+  "events": [
+    {
+      "eventId": "evt-001",
+      "eventType": "detection.object",
+      "occurredAt": "2026-06-08T10:00:00.000Z",
+      "media": {
+        "trackId": "track.video_1"
+      },
+      "payload": {
+        "detections": [
+          {
+            "className": "person",
+            "confidence": 0.92,
+            "bbox": {
+              "format": "normalized_xywh",
+              "x": 0.42,
+              "y": 0.31,
+              "width": 0.18,
+              "height": 0.33
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
+Event envelope:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `messageId` | string | No | 메시지 추적 id |
+| `messageType` | string | Recommended | `event` |
+| `schemaVersion` | string | No | 현재 `event.v0` |
+| `events` | array | Yes | Event list. 한 메시지에 여러 event를 batch할 수 있음 |
+
+Event item:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `eventId` | string | Recommended | 로봇 또는 추론 모듈이 생성한 event id. 없으면 서버가 저장 시 생성 |
+| `eventType` | string | Yes | dot namespace. v0 확정값은 `detection.object`, `mission.event` |
+| `severity` | string | No | `info`, `notice`, `warning`, `critical`. 없으면 UI가 `info`로 처리 |
+| `occurredAt` | string(date-time) | Recommended | 로봇 또는 추론 모듈 기준 발생 시각. 없으면 UI 수신 시각 사용 |
+| `title` | string | Conditional | `mission.event`는 권장. `detection.object`에는 사용하지 않음 |
+| `description` | string | No | `mission.event` 상세 설명 |
+| `source` | object | No | 발생 주체. 예: `{ "module": "navigation" }` |
+| `media` | object | Conditional | `detection.object`는 필수. 영상 track 연결용 |
+| `payload` | object | Yes | eventType별 세부 데이터. 없으면 `{}` |
+
+Event type namespace:
+
+| Event type | 용도 | Live UI 처리 |
+| --- | --- | --- |
+| `detection.object` | YOLO 같은 video frame 기반 객체 탐지 결과 | RGB/Thermal 영상 overlay |
+| `mission.event` | 임무 진행 중 일반 이벤트 메시지 | Live 이벤트 패널 |
+
+확장 규칙:
+
+- 새 event type은 `domain.name` 형태의 dot namespace로 추가한다.
+- 공통 필드는 top-level에만 둔다. type별 세부값은 `payload`에만 추가한다.
+- 기존 event type의 필드 의미를 바꾸지 않는다. 필요한 경우 새 event type 또는 `schemaVersion`을 올린다.
+- 서버 또는 UI가 모르는 event type은 Live UI에 표시하지 않고 무시할 수 있다.
+- control command/ack는 `channel.control` 책임이다. 운영 제어 lifecycle을 `channel.event`에 섞지 않는다.
+- DB 저장, 알림, ACK, suppression, sampling, replay timestamp 정밀 동기화는 v0 범위가 아니다.
+
+YOLO / detection overlay 규칙:
+
+- `detection.object`는 object 1개당 event를 만들지 않고, 추론 frame 1개당 event 1개로 보낸다.
+- `payload.detections[]`에 같은 frame의 객체 목록을 넣는다.
+- `media.trackId`는 `track.video_1`, `track.video_2` 같은 canonical media track slot을 사용한다.
+- `track.video_1`은 RGB 영상 overlay, `track.video_2`는 Thermal 영상 overlay에 사용한다.
+- bbox는 `normalized_xywh`만 사용한다. `x`, `y`, `width`, `height`는 `0.0`~`1.0` 범위다.
+- 로봇 payload는 model name, model version, bbox color, UI label, show/hide flag를 보내지 않는다.
+- Web UI는 `className`을 deterministic hash로 색상 palette에 매핑한다.
+- Live UI는 track별 최신 detection event를 짧은 TTL로 overlay한다. 정밀 replay sync는 recording timestamp 기준으로 후속 확장한다.
+
+`detection.object` event item:
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `eventType` | Yes | `detection.object` |
+| `occurredAt` | Recommended | 추론 기준 시각 |
+| `media.trackId` | Yes | `track.video_1` 또는 `track.video_2` |
+| `payload.detections` | Yes | 같은 frame의 detection list |
+| `payload.detections[].className` | Yes | 탐지 class label |
+| `payload.detections[].confidence` | Yes | `0.0`~`1.0` confidence |
+| `payload.detections[].bbox.format` | Yes | `normalized_xywh` |
+| `payload.detections[].bbox.x` | Yes | 좌상단 x, `0.0`~`1.0` |
+| `payload.detections[].bbox.y` | Yes | 좌상단 y, `0.0`~`1.0` |
+| `payload.detections[].bbox.width` | Yes | bbox width, `0.0`~`1.0` |
+| `payload.detections[].bbox.height` | Yes | bbox height, `0.0`~`1.0` |
+
+`mission.event` event item:
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `eventType` | Yes | `mission.event` |
+| `severity` | No | `info`, `notice`, `warning`, `critical` |
+| `occurredAt` | Recommended | 이벤트 발생 시각 |
+| `title` | Recommended | 이벤트 패널 표시 제목 |
+| `description` | No | 상세 설명 |
+| `payload.category` | No | 예: `navigation`, `operation`, `diagnostic` |
+| `payload.code` | No | 예: `waypoint.arrived` |
+
+### 8.3 Spatial / Control
 
 - `channel.spatial`: 기본 자동 표시 대상이 아니다. `available`, `subscribed`, `paused`, `unsupported` 같은 상태를 먼저 표현한다.
-- `channel.event`: telemetry와 별도 경로다. alarm/fault/detection/mission event처럼 발생 순서가 중요한 메시지를 보낸다.
 - `channel.control`: telemetry/event와 섞지 않는다. 향후 권한 체크, command validation, ack, audit log, rate limit이 붙을 자리다.
 
-### 8.3 Relay
+### 8.4 Relay
 
 실시간 표시 경로:
 

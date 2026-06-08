@@ -362,6 +362,7 @@ class MockRobot:
         self.publish_tasks: list[asyncio.Task[Any]] = []
         self.pending_remote_candidates: list[dict[str, Any]] = []
         self.sequence = 0
+        self.event_sequence = 0
         self.offer_sent = False
 
     async def run(self) -> None:
@@ -637,7 +638,7 @@ class MockRobot:
         @channel.on("open")
         def on_open() -> None:
             self.log(f"{label} DataChannel open")
-            if label != "channel.telemetry":
+            if label not in ("channel.telemetry", "channel.event"):
                 self.log(f"{label} DataChannel idle: payload schema not finalized")
 
         @channel.on("close")
@@ -736,10 +737,16 @@ class MockRobot:
             await asyncio.sleep(1)
             if channel.readyState != "open":
                 continue
-            self.sequence += 1
-            if label != "channel.telemetry":
+            if label == "channel.telemetry":
+                self.sequence += 1
+                payload = self.create_telemetry_payload()
+            elif label == "channel.event":
+                self.event_sequence += 1
+                if self.event_sequence % 2 != 0:
+                    continue
+                payload = self.create_event_payload(self.event_sequence)
+            else:
                 continue
-            payload = self.create_telemetry_payload()
             channel.send(json.dumps(payload, separators=(",", ":")))
 
     async def heartbeat_loop(self) -> None:
@@ -914,6 +921,59 @@ class MockRobot:
                     "values": {"batteryPercent": self.current_battery_percent()},
                 },
             ],
+        }
+
+    def create_event_payload(self, sequence: int) -> dict[str, Any]:
+        occurred_at = utc_now_iso()
+        track_id = "track.video_1" if sequence % 4 != 0 else "track.video_2"
+        class_name = ["person", "smoke", "vehicle"][sequence % 3]
+        x = 0.12 + (sequence % 5) * 0.08
+        y = 0.16 + (sequence % 4) * 0.07
+        events: list[dict[str, Any]] = [
+            {
+                "eventId": f"{self.robot_code}-detect-{sequence}",
+                "eventType": "detection.object",
+                "occurredAt": occurred_at,
+                "media": {
+                    "trackId": track_id,
+                },
+                "payload": {
+                    "detections": [
+                        {
+                            "className": class_name,
+                            "confidence": round(0.72 + (sequence % 20) / 100, 2),
+                            "bbox": {
+                                "format": "normalized_xywh",
+                                "x": round(x, 3),
+                                "y": round(y, 3),
+                                "width": 0.22,
+                                "height": 0.28,
+                            },
+                        }
+                    ],
+                },
+            }
+        ]
+        if sequence % 10 == 0:
+            events.append(
+                {
+                    "eventId": f"{self.robot_code}-mission-{sequence}",
+                    "eventType": "mission.event",
+                    "severity": "notice",
+                    "occurredAt": occurred_at,
+                    "title": "Mock mission event",
+                    "description": f"{self.robot_code} event sequence {sequence}",
+                    "payload": {
+                        "category": "mock",
+                        "code": "mock.event",
+                    },
+                }
+            )
+        return {
+            "messageId": f"{self.robot_code}-event-{sequence}",
+            "messageType": "event",
+            "schemaVersion": "event.v0",
+            "events": events,
         }
 
     def current_position(self) -> tuple[float, float]:

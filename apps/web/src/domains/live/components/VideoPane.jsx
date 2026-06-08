@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { cn } from "../../../utils/cn.js";
+import { detectionOverlayTtlMs, getDetectionColor, isDetectionOverlayFresh } from "../liveEventStrategies.js";
 import { stopMediaStreamTracks } from "../liveMediaCleanup.js";
 
 const emptyVideoMetrics = {
@@ -8,8 +9,11 @@ const emptyVideoMetrics = {
   fps: 0
 };
 
-export function VideoPane({ className = "", compact = false, label, stream, thermal = false }) {
+export function VideoPane({ className = "", compact = false, detectionOverlay = null, label, stream, thermal = false }) {
+  const containerRef = useRef(null);
   const videoRef = useRef(null);
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const [overlayNow, setOverlayNow] = useState(Date.now());
   const [isVideoReady, setIsVideoReady] = useState(false);
   const [videoMetrics, setVideoMetrics] = useState(emptyVideoMetrics);
 
@@ -43,6 +47,24 @@ export function VideoPane({ className = "", compact = false, label, stream, ther
       stopMediaStreamTracks(stream);
     };
   }, [stream]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || typeof ResizeObserver !== "function") {
+      return undefined;
+    }
+    const updateContainerSize = () => {
+      const rect = container.getBoundingClientRect();
+      setContainerSize({
+        width: rect.width,
+        height: rect.height
+      });
+    };
+    updateContainerSize();
+    const observer = new ResizeObserver(updateContainerSize);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -133,12 +155,29 @@ export function VideoPane({ className = "", compact = false, label, stream, ther
     };
   }, [stream]);
 
+  useEffect(() => {
+    if (!detectionOverlay) {
+      return undefined;
+    }
+    const now = Date.now();
+    const timestamp = Date.parse(detectionOverlay.receivedAt || detectionOverlay.occurredAt || "");
+    const expiresInMs = Number.isFinite(timestamp)
+      ? Math.max(0, detectionOverlayTtlMs - (now - timestamp))
+      : detectionOverlayTtlMs;
+    setOverlayNow(now);
+    const timeoutId = window.setTimeout(() => setOverlayNow(Date.now()), expiresInMs + 50);
+    return () => window.clearTimeout(timeoutId);
+  }, [detectionOverlay]);
+
   const shouldShowLoading = !stream || !isVideoReady;
   const resolutionLabel = videoMetrics.width && videoMetrics.height ? `${videoMetrics.width}x${videoMetrics.height}` : "-";
   const fpsLabel = videoMetrics.fps > 0 ? `${videoMetrics.fps} fps` : "- fps";
+  const visibleDetections = isDetectionOverlayFresh(detectionOverlay, overlayNow) ? detectionOverlay.detections ?? [] : [];
+  const videoRect = calculateVideoContentRect(containerSize, videoMetrics);
 
   return (
     <div
+      ref={containerRef}
       className={cn(
         "relative min-h-[260px] overflow-hidden rounded-xl border border-slate-500/20 bg-command-950",
         thermal && "bg-[#111015]",
@@ -147,6 +186,9 @@ export function VideoPane({ className = "", compact = false, label, stream, ther
       )}
     >
       <video className="absolute inset-0 h-full w-full object-contain" ref={videoRef} autoPlay playsInline muted={label !== "Audio"} />
+      {visibleDetections.length > 0 ? (
+        <DetectionOverlay detections={visibleDetections} videoRect={videoRect} />
+      ) : null}
       {shouldShowLoading ? (
         <div className="absolute inset-0 grid place-items-center bg-command-950/60">
           <div className="grid justify-items-center gap-3">
@@ -166,6 +208,62 @@ export function VideoPane({ className = "", compact = false, label, stream, ther
         <span className="h-3 w-px bg-slate-500/40" />
         <span className="tabular-nums text-slate-300">{fpsLabel}</span>
       </div>
+    </div>
+  );
+}
+
+function calculateVideoContentRect(containerSize, videoMetrics) {
+  const containerWidth = containerSize.width || 0;
+  const containerHeight = containerSize.height || 0;
+  const videoWidth = videoMetrics.width || 0;
+  const videoHeight = videoMetrics.height || 0;
+  if (!containerWidth || !containerHeight || !videoWidth || !videoHeight) {
+    return {
+      left: 0,
+      top: 0,
+      width: containerWidth,
+      height: containerHeight
+    };
+  }
+  const scale = Math.min(containerWidth / videoWidth, containerHeight / videoHeight);
+  const width = videoWidth * scale;
+  const height = videoHeight * scale;
+  return {
+    left: (containerWidth - width) / 2,
+    top: (containerHeight - height) / 2,
+    width,
+    height
+  };
+}
+
+function DetectionOverlay({ detections, videoRect }) {
+  return (
+    <div className="pointer-events-none absolute inset-0 z-10">
+      {detections.map((detection) => {
+        const color = getDetectionColor(detection.className);
+        const style = {
+          borderColor: color,
+          color,
+          height: `${detection.bbox.height * videoRect.height}px`,
+          left: `${videoRect.left + detection.bbox.x * videoRect.width}px`,
+          top: `${videoRect.top + detection.bbox.y * videoRect.height}px`,
+          width: `${detection.bbox.width * videoRect.width}px`
+        };
+        return (
+          <div
+            className="absolute min-h-4 min-w-4 rounded-sm border-2 bg-command-950/10 shadow-[0_0_0_1px_rgba(0,0,0,0.35)]"
+            key={detection.id}
+            style={style}
+          >
+            <span
+              className="absolute -left-0.5 -top-7 max-w-[180px] truncate rounded-sm border bg-command-950/90 px-1.5 py-0.5 text-[11px] font-black leading-5 shadow-lg"
+              style={{ borderColor: color, color }}
+            >
+              {detection.className} {Math.round(detection.confidence * 100)}%
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }

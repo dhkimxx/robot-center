@@ -1,11 +1,13 @@
 import { makeMissionRobotKey } from "../missions/missionHelpers.js";
 import { LiveSessionStatus } from "./liveConnectionStates.js";
+import { createEmptyDetectionOverlays } from "./liveEventStrategies.js";
 import { createEmptyVideoStreams } from "./liveMediaCleanup.js";
 
 export function createEmptyLiveSession() {
   return {
     attemptId: null,
     events: [],
+    detectionOverlays: createEmptyDetectionOverlays(),
     sensor: null,
     status: LiveSessionStatus.DISCONNECTED,
     telemetry: null,

@@ -41,6 +41,85 @@ describe("mapLiveDataChannelPayload", () => {
     expect(result.eventMessage).toBe("이벤트: mock robot streaming");
   });
 
+  it("maps detection object events to RGB overlay projection", () => {
+    const result = mapLiveDataChannelPayload("channel.event", JSON.stringify({
+      channelRole: "channel.event",
+      messageType: "event",
+      events: [
+        {
+          eventType: "detection.object",
+          occurredAt: "2026-06-08T01:00:00.000Z",
+          media: { trackId: "track.video_1" },
+          payload: {
+            detections: [
+              {
+                className: "person",
+                confidence: 0.92,
+                bbox: {
+                  format: "normalized_xywh",
+                  x: 0.1,
+                  y: 0.2,
+                  width: 0.3,
+                  height: 0.4
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }));
+
+    expect(result.ok).toBe(true);
+    expect(result.eventMessage).toBe("");
+    expect(result.detectionOverlays).toHaveLength(1);
+    expect(result.detectionOverlays[0]).toMatchObject({
+      trackId: "track.video_1",
+      trackSlot: "rgb",
+      detections: [
+        {
+          className: "person",
+          confidence: 0.92,
+          bbox: {
+            x: 0.1,
+            y: 0.2,
+            width: 0.3,
+            height: 0.4
+          }
+        }
+      ]
+    });
+  });
+
+  it("maps mission events to live event panel items", () => {
+    const result = mapLiveDataChannelPayload("channel.event", JSON.stringify({
+      channelRole: "channel.event",
+      messageType: "event",
+      events: [
+        {
+          eventType: "mission.event",
+          severity: "notice",
+          occurredAt: "2026-06-08T01:03:00.000Z",
+          title: "목표 지점 도착",
+          description: "waypoint-3 도착",
+          payload: {
+            category: "navigation",
+            code: "waypoint.arrived"
+          }
+        }
+      ]
+    }));
+
+    expect(result.ok).toBe(true);
+    expect(result.liveEvents).toEqual([
+      expect.objectContaining({
+        at: "2026-06-08T01:03:00.000Z",
+        description: "waypoint-3 도착",
+        message: "목표 지점 도착",
+        severity: "notice"
+      })
+    ]);
+  });
+
   it("maps spatial channel to event message and sensor payload", () => {
     const payload = {
       channelRole: "channel.spatial",
