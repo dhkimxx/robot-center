@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -13,6 +14,11 @@ import (
 	"robot-center/apps/server/internal/store"
 	"robot-center/apps/server/internal/utils"
 )
+
+var canonicalDetectionTrackIDs = map[string]struct{}{
+	"track.video_1": {},
+	"track.video_2": {},
+}
 
 // @Summary 임무 이벤트 조회
 // @Description operator가 mission 기준 이벤트 로그를 조회합니다. 기본 조회는 Live 이벤트 피드용이며 detection.object는 제외합니다. detection overlay 로그는 eventType 또는 includeDetections=true로 명시 조회합니다.
@@ -48,7 +54,7 @@ func (s *Server) handleListMissionEvents(w http.ResponseWriter, r *http.Request)
 }
 
 // @Summary recorder 이벤트 저장
-// @Description recorder-worker가 channel.event envelope를 저장합니다. Live overlay는 별도 projection이고, 이 API는 append-only 이벤트 로그를 남깁니다.
+// @Description recorder-worker가 channel.event envelope를 저장합니다. Live overlay는 별도 projection이고, 이 API는 append-only 이벤트 로그를 남깁니다. detection.object는 values.trackId가 track.video_1 또는 track.video_2여야 하며, values.detections[].className/confidence/bbox.x/y/width/height를 검증합니다.
 // @Tags Recorder API
 // @Accept json
 // @Produce json
@@ -167,16 +173,26 @@ func eventValueProjection(eventType string, values json.RawMessage) (string, *in
 	if err != nil {
 		return "", nil, err
 	}
-	if detectionValues.TrackID == "" {
-		return "", nil, errors.New("values.trackId is required for detection.object")
-	}
 	detectionCount := len(detectionValues.Detections)
 	return detectionValues.TrackID, &detectionCount, nil
 }
 
 type detectionObjectValues struct {
-	TrackID    string            `json:"trackId"`
-	Detections []json.RawMessage `json:"detections"`
+	TrackID    string                     `json:"trackId"`
+	Detections []detectionObjectDetection `json:"detections"`
+}
+
+type detectionObjectDetection struct {
+	ClassName  string               `json:"className"`
+	Confidence *float64             `json:"confidence"`
+	BBox       *detectionObjectBbox `json:"bbox"`
+}
+
+type detectionObjectBbox struct {
+	X      *float64 `json:"x"`
+	Y      *float64 `json:"y"`
+	Width  *float64 `json:"width"`
+	Height *float64 `json:"height"`
 }
 
 func parseDetectionObjectValues(values json.RawMessage) (detectionObjectValues, error) {
@@ -185,15 +201,90 @@ func parseDetectionObjectValues(values json.RawMessage) (detectionObjectValues, 
 		return detectionObjectValues{}, err
 	}
 	request.TrackID = strings.TrimSpace(request.TrackID)
+	if request.TrackID == "" {
+		return detectionObjectValues{}, errors.New("values.trackId is required for detection.object")
+	}
+	if _, ok := canonicalDetectionTrackIDs[request.TrackID]; !ok {
+		return detectionObjectValues{}, errors.New("values.trackId must be track.video_1 or track.video_2 for detection.object")
+	}
 	if request.Detections == nil {
 		return detectionObjectValues{}, errors.New("values.detections is required for detection.object")
+	}
+	for index, detection := range request.Detections {
+		if err := validateDetectionObjectDetection(index, detection); err != nil {
+			return detectionObjectValues{}, err
+		}
 	}
 	return request, nil
 }
 
+func validateDetectionObjectDetection(index int, detection detectionObjectDetection) error {
+	if strings.TrimSpace(detection.ClassName) == "" {
+		return fmt.Errorf("values.detections[%d].className is required for detection.object", index)
+	}
+	if detection.Confidence == nil {
+		return fmt.Errorf("values.detections[%d].confidence is required for detection.object", index)
+	}
+	if *detection.Confidence < 0 || *detection.Confidence > 1 {
+		return fmt.Errorf("values.detections[%d].confidence must be between 0 and 1 for detection.object", index)
+	}
+	if err := validateDetectionObjectBbox(index, detection.BBox); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateDetectionObjectBbox(index int, bbox *detectionObjectBbox) error {
+	if bbox == nil {
+		return fmt.Errorf("values.detections[%d].bbox is required for detection.object", index)
+	}
+	x, err := requiredUnitFloat(bbox.X, fmt.Sprintf("values.detections[%d].bbox.x", index))
+	if err != nil {
+		return err
+	}
+	y, err := requiredUnitFloat(bbox.Y, fmt.Sprintf("values.detections[%d].bbox.y", index))
+	if err != nil {
+		return err
+	}
+	width, err := requiredUnitFloat(bbox.Width, fmt.Sprintf("values.detections[%d].bbox.width", index))
+	if err != nil {
+		return err
+	}
+	height, err := requiredUnitFloat(bbox.Height, fmt.Sprintf("values.detections[%d].bbox.height", index))
+	if err != nil {
+		return err
+	}
+	if width <= 0 {
+		return fmt.Errorf("values.detections[%d].bbox.width must be greater than 0 for detection.object", index)
+	}
+	if height <= 0 {
+		return fmt.Errorf("values.detections[%d].bbox.height must be greater than 0 for detection.object", index)
+	}
+	if x+width > 1 {
+		return fmt.Errorf("values.detections[%d].bbox.x + width must be <= 1 for detection.object", index)
+	}
+	if y+height > 1 {
+		return fmt.Errorf("values.detections[%d].bbox.y + height must be <= 1 for detection.object", index)
+	}
+	return nil
+}
+
+func requiredUnitFloat(value *float64, fieldName string) (float64, error) {
+	if value == nil {
+		return 0, fmt.Errorf("%s is required for detection.object", fieldName)
+	}
+	if *value < 0 || *value > 1 {
+		return 0, fmt.Errorf("%s must be between 0 and 1 for detection.object", fieldName)
+	}
+	return *value, nil
+}
+
 func normalizeEventValues(values json.RawMessage) (json.RawMessage, error) {
-	if len(values) == 0 || !json.Valid(values) || string(values) == "null" {
-		return json.RawMessage(`{}`), nil
+	if len(values) == 0 || string(values) == "null" {
+		return nil, errors.New("values is required")
+	}
+	if !json.Valid(values) {
+		return nil, errors.New("values must be a valid JSON object")
 	}
 	var object map[string]any
 	if err := json.Unmarshal(values, &object); err != nil {

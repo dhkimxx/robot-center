@@ -72,6 +72,9 @@ definitions:
         type: string
       robotCode:
         type: string
+    required:
+    - channelRole
+    - events
     type: object
   robot-center_apps_server_internal_api_dto.EventItemRequest:
     properties:
@@ -83,6 +86,9 @@ definitions:
         type: string
       values:
         type: object
+    required:
+    - eventType
+    - values
     type: object
   robot-center_apps_server_internal_api_dto.HealthResponse:
     properties:
@@ -1712,7 +1718,9 @@ paths:
       consumes:
       - application/json
       description: recorder-worker가 channel.event envelope를 저장합니다. Live overlay는 별도
-        projection이고, 이 API는 append-only 이벤트 로그를 남깁니다.
+        projection이고, 이 API는 append-only 이벤트 로그를 남깁니다. detection.object는 values.trackId가
+        track.video_1 또는 track.video_2여야 하며, values.detections[].className/confidence/bbox.x/y/width/height를
+        검증합니다.
       parameters:
       - description: channel.event envelope
         in: body

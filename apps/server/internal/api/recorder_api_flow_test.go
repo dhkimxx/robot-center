@@ -148,10 +148,16 @@ func TestRecorderAPIFlow(t *testing.T) {
 		MissionID:   mission.id,
 		Events: []dto.EventItemRequest{
 			{
-				EventID:   "detection-rgb-empty",
+				EventID:   "detection-rgb-person",
 				EventType: "detection.object",
 				Timestamp: &eventTimestamp,
-				Values:    []byte(`{"trackId":"track.video_1","detections":[]}`),
+				Values:    []byte(`{"trackId":"track.video_1","detections":[{"className":"person","confidence":0.92,"bbox":{"x":0.1,"y":0.2,"width":0.3,"height":0.4}}]}`),
+			},
+			{
+				EventID:   "detection-thermal-empty",
+				EventType: "detection.object",
+				Timestamp: &eventTimestamp,
+				Values:    []byte(`{"trackId":"track.video_2","detections":[]}`),
 			},
 			{
 				EventID:   "mission-waypoint",
@@ -161,13 +167,16 @@ func TestRecorderAPIFlow(t *testing.T) {
 			},
 		},
 	})
-	if len(eventPayload.Events) != 2 {
-		t.Fatalf("expected two event rows, got %#v", eventPayload)
+	if len(eventPayload.Events) != 3 {
+		t.Fatalf("expected three event rows, got %#v", eventPayload)
 	}
 	if !eventListHasType(eventPayload.Events, "detection.object") || !eventListHasType(eventPayload.Events, "mission.event") {
 		t.Fatalf("expected detection and mission events, got %#v", eventPayload)
 	}
-	if !eventListHasDetectionCount(eventPayload.Events, "track.video_1", 0) {
+	if !eventListHasDetectionCount(eventPayload.Events, "track.video_1", 1) {
+		t.Fatalf("expected non-empty detection snapshot to persist with detectionCount=1, got %#v", eventPayload)
+	}
+	if !eventListHasDetectionCount(eventPayload.Events, "track.video_2", 0) {
 		t.Fatalf("expected empty detection snapshot to persist with detectionCount=0, got %#v", eventPayload)
 	}
 
@@ -176,24 +185,24 @@ func TestRecorderAPIFlow(t *testing.T) {
 		t.Fatalf("expected default operator event feed to exclude detection.object, got %#v", operatorEventsPayload)
 	}
 	operatorDetectionsPayload := requestJSON[dto.OperatorMissionEventsResponse](t, server.baseURL, http.MethodGet, "/api/v1/operator/missions/"+mission.code+"/events?eventType=detection.object", "", nil)
-	if len(operatorDetectionsPayload.Events) != 1 || operatorDetectionsPayload.Events[0].TrackID != "track.video_1" {
+	if len(operatorDetectionsPayload.Events) != 2 || !eventListHasDetectionCount(operatorDetectionsPayload.Events, "track.video_1", 1) || !eventListHasDetectionCount(operatorDetectionsPayload.Events, "track.video_2", 0) {
 		t.Fatalf("expected explicit detection query to return snapshot, got %#v", operatorDetectionsPayload)
 	}
-	invalidDetectionStatus := requestStatus(t, server.baseURL, http.MethodPost, "/api/v1/recorder/events", "", dto.EventEnvelopeRequest{
-		MessageID:   "event-invalid-detection",
-		MessageType: "event",
-		ChannelRole: "channel.event",
-		RobotCode:   robot.code,
-		MissionID:   mission.id,
-		Events: []dto.EventItemRequest{
+	assertInvalidDetectionObjectEventsRejected(t, server, robot, mission)
+	missingEventValuesStatus := requestStatus(t, server.baseURL, http.MethodPost, "/api/v1/recorder/events", "", map[string]any{
+		"messageId":   "event-missing-values",
+		"messageType": "event",
+		"channelRole": "channel.event",
+		"robotCode":   robot.code,
+		"missionId":   mission.id,
+		"events": []map[string]any{
 			{
-				EventType: "detection.object",
-				Values:    []byte(`{"detections":[]}`),
+				"eventType": "mission.event",
 			},
 		},
 	})
-	if invalidDetectionStatus != http.StatusBadRequest {
-		t.Fatalf("expected detection without values.trackId to be rejected, got %d", invalidDetectionStatus)
+	if missingEventValuesStatus != http.StatusBadRequest {
+		t.Fatalf("expected event without values to be rejected, got %d", missingEventValuesStatus)
 	}
 
 	clearSensorPayload := requestJSON[dto.ClearSensorDataResponse](t, server.baseURL, http.MethodPost, "/api/v1/system/sensors/clear", "", dto.ClearSensorDataRequest{
@@ -274,5 +283,41 @@ func TestRecorderAPIFlow(t *testing.T) {
 	missingMissionRecordingsPayload := requestJSON[dto.OperatorRecordingsResponse](t, server.baseURL, http.MethodGet, "/api/v1/operator/recordings?missionCode=missing-mission", "", nil)
 	if len(missingMissionRecordingsPayload.Recordings) != 0 {
 		t.Fatalf("expected no recordings for missing mission filter, got %#v", missingMissionRecordingsPayload)
+	}
+}
+
+func assertInvalidDetectionObjectEventsRejected(t *testing.T, server apiFlowTestServer, robot testRobot, mission testMission) {
+	t.Helper()
+
+	invalidDetectionCases := []struct {
+		name   string
+		values string
+	}{
+		{name: "missing-track", values: `{"detections":[]}`},
+		{name: "invalid-track", values: `{"trackId":"track.video_9","detections":[]}`},
+		{name: "missing-detections", values: `{"trackId":"track.video_1"}`},
+		{name: "missing-class", values: `{"trackId":"track.video_1","detections":[{"confidence":0.9,"bbox":{"x":0.1,"y":0.1,"width":0.2,"height":0.2}}]}`},
+		{name: "invalid-confidence", values: `{"trackId":"track.video_1","detections":[{"className":"person","confidence":1.1,"bbox":{"x":0.1,"y":0.1,"width":0.2,"height":0.2}}]}`},
+		{name: "missing-bbox", values: `{"trackId":"track.video_1","detections":[{"className":"person","confidence":0.9}]}`},
+		{name: "invalid-bbox-range", values: `{"trackId":"track.video_1","detections":[{"className":"person","confidence":0.9,"bbox":{"x":0.9,"y":0.1,"width":0.2,"height":0.2}}]}`},
+		{name: "non-object-values", values: `[]`},
+	}
+	for _, testCase := range invalidDetectionCases {
+		invalidDetectionStatus := requestStatus(t, server.baseURL, http.MethodPost, "/api/v1/recorder/events", "", dto.EventEnvelopeRequest{
+			MessageID:   "event-invalid-detection-" + testCase.name,
+			MessageType: "event",
+			ChannelRole: "channel.event",
+			RobotCode:   robot.code,
+			MissionID:   mission.id,
+			Events: []dto.EventItemRequest{
+				{
+					EventType: "detection.object",
+					Values:    []byte(testCase.values),
+				},
+			},
+		})
+		if invalidDetectionStatus != http.StatusBadRequest {
+			t.Fatalf("expected invalid detection %s to be rejected, got %d", testCase.name, invalidDetectionStatus)
+		}
 	}
 }

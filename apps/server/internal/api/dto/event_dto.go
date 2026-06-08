@@ -13,15 +13,15 @@ type EventEnvelopeRequest struct {
 	RobotCode   string             `json:"robotCode"`
 	MissionID   string             `json:"missionId"`
 	MissionCode string             `json:"missionCode"`
-	ChannelRole string             `json:"channelRole"`
-	Events      []EventItemRequest `json:"events"`
+	ChannelRole string             `json:"channelRole" binding:"required"`
+	Events      []EventItemRequest `json:"events" binding:"required"`
 }
 
 type EventItemRequest struct {
 	EventID   string          `json:"eventId"`
-	EventType string          `json:"eventType"`
+	EventType string          `json:"eventType" binding:"required"`
 	Timestamp *time.Time      `json:"timestamp,omitempty"`
-	Values    json.RawMessage `json:"values" swaggertype:"object"`
+	Values    json.RawMessage `json:"values" binding:"required" swaggertype:"object"`
 }
 
 type MissionEventResponse struct {

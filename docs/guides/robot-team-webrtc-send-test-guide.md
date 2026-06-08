@@ -46,6 +46,7 @@ history:
 - '2026-06-08 danya.kim <danya.kim@thundersoft.com>: clarify detection.object snapshot cadence and empty-list clearing'
 - '2026-06-08 danya.kim <danya.kim@thundersoft.com>: remove bbox.format from detection.object because bbox is always normalized xywh'
 - '2026-06-08 danya.kim <danya.kim@thundersoft.com>: align robot team channel.event guide with timestamp and values contract'
+- '2026-06-08 danya.kim <danya.kim@thundersoft.com>: document strict detection.object validation rules'
 ---
 
 # Robot Team WebRTC Send Test Guide
@@ -927,7 +928,7 @@ Event item common schema:
 | `eventId` | string | Recommended | `evt-001` | 로봇 또는 추론 모듈이 생성한 event id |
 | `eventType` | string | Yes | `detection.object`, `mission.event` | 이벤트 의미 분류 |
 | `timestamp` | string(date-time) | Recommended | `2026-06-08T10:03:12.000Z` | 로봇 또는 추론 모듈 기준 발생 시각 |
-| `values` | object | Yes | `{}` | eventType별 세부 데이터 |
+| `values` | object | Yes | `{ "title": "목표 지점 도착" }` | eventType별 세부 데이터. 반드시 JSON object로 보낸다 |
 
 `detection.object` 예시:
 
@@ -979,6 +980,7 @@ Event item common schema:
 `detection.object` 규칙:
 
 - `values.trackId`는 필수다.
+- `values.trackId`는 `track.video_1` 또는 `track.video_2`만 허용한다.
 - `track.video_1`은 RGB 영상 overlay에 사용한다.
 - `track.video_2`는 Thermal 영상 overlay에 사용한다.
 - `detection.object`는 사건 로그가 아니라 track별 최신 추론 snapshot이다.
@@ -989,10 +991,14 @@ Event item common schema:
 - 로봇은 detection snapshot을 주기적으로 송신한다. P0 권장 주기는 1~2Hz이고, 실제 모델/네트워크 상태에 따라 2~5Hz까지 조정할 수 있다.
 - `bbox`는 항상 normalized xywh 의미로 해석한다. 별도 `format` 필드는 보내지 않는다.
 - `bbox.x`, `bbox.y`, `bbox.width`, `bbox.height`는 `0.0`~`1.0` 범위다.
+- `bbox.width`, `bbox.height`는 `0`보다 커야 한다.
+- `bbox.x + bbox.width`, `bbox.y + bbox.height`는 `1.0` 이하여야 한다.
 - 로봇은 model name, model version, bbox 색상, UI label, overlay style, show/hide flag를 보내지 않는다.
 - 관제 Web UI는 `className`을 deterministic hash로 색상 palette에 매핑한다.
 - 관제 Web UI는 track별 최신 detection snapshot만 overlay한다. 새 snapshot이 오면 기존 bbox를 교체하고, 빈 snapshot이 오면 즉시 제거한다.
 - 관제 Web UI는 최신 snapshot을 약 3초 TTL로 유지한다. TTL 이후 새 snapshot이 없으면 stale overlay로 보고 자동 제거한다.
+- 관제 서버는 `detection.object`의 `values.trackId`, `values.detections`, `className`, `confidence`, `bbox` 필수값과 범위를 검증한다.
+- 유효하지 않은 `detection.object`는 관제 저장/overlay에 반영되지 않는다. DataChannel 송신자는 HTTP 응답을 직접 받지 않으므로, 실패 여부는 관제 로그로 확인한다.
 
 `detection.object` 필드:
 
@@ -1004,10 +1010,10 @@ Event item common schema:
 | `values.detections` | Yes | detection list. 객체가 없으면 빈 배열 `[]` |
 | `values.detections[].className` | Yes | 탐지 class label |
 | `values.detections[].confidence` | Yes | `0.0`~`1.0` confidence |
-| `values.detections[].bbox.x` | Yes | 좌상단 x |
-| `values.detections[].bbox.y` | Yes | 좌상단 y |
-| `values.detections[].bbox.width` | Yes | bbox width |
-| `values.detections[].bbox.height` | Yes | bbox height |
+| `values.detections[].bbox.x` | Yes | 좌상단 x, `0.0`~`1.0` |
+| `values.detections[].bbox.y` | Yes | 좌상단 y, `0.0`~`1.0` |
+| `values.detections[].bbox.width` | Yes | bbox width, `0.0`~`1.0`. `0`보다 커야 함 |
+| `values.detections[].bbox.height` | Yes | bbox height, `0.0`~`1.0`. `0`보다 커야 함 |
 
 `mission.event` 예시:
 

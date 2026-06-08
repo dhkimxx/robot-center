@@ -35,6 +35,7 @@ history:
 - '2026-06-08 danya.kim <danya.kim@thundersoft.com>: remove bbox.format from detection.object because bbox is always normalized xywh'
 - '2026-06-08 danya.kim <danya.kim@thundersoft.com>: clarify detection.object as latest snapshot with empty-list clearing'
 - '2026-06-08 danya.kim <danya.kim@thundersoft.com>: simplify channel.event contract to timestamp and values'
+- '2026-06-08 danya.kim <danya.kim@thundersoft.com>: document strict detection.object validation rules'
 ---
 
 # Robot Gateway Interface
@@ -477,7 +478,7 @@ Event item:
 | `eventId` | string | Recommended | 로봇 또는 추론 모듈이 생성한 event id. 없으면 서버가 저장 시 생성 |
 | `eventType` | string | Yes | dot namespace. v0 확정값은 `detection.object`, `mission.event` |
 | `timestamp` | string(date-time) | Recommended | 로봇 또는 추론 모듈 기준 발생 시각. 없으면 서버/UI 수신 시각 사용 |
-| `values` | object | Yes | eventType별 세부 데이터. 없으면 `{}` |
+| `values` | object | Yes | eventType별 세부 데이터. 반드시 JSON object로 보낸다. |
 
 Event type namespace:
 
@@ -510,11 +511,15 @@ YOLO / detection overlay 규칙:
 - `track.video_1`은 RGB 영상 overlay, `track.video_2`는 Thermal 영상 overlay에 사용한다.
 - `bbox`는 항상 normalized xywh 의미로 해석한다. 별도 `format` 필드는 보내지 않는다.
 - `bbox.x`, `bbox.y`, `bbox.width`, `bbox.height`는 `0.0`~`1.0` 범위다.
+- `bbox.width`, `bbox.height`는 `0`보다 커야 한다.
+- `bbox.x + bbox.width`, `bbox.y + bbox.height`는 `1.0` 이하여야 한다.
 - 로봇 payload는 model name, model version, bbox color, UI label, show/hide flag를 보내지 않는다.
 - Web UI는 `className`을 deterministic hash로 색상 palette에 매핑한다.
 - Live UI는 track별 최신 detection snapshot만 overlay한다. 새 snapshot이 오면 이전 bbox를 교체하고, 빈 snapshot이 오면 즉시 제거한다.
 - Live UI는 네트워크 지연과 일시적 packet loss를 고려해 최신 snapshot을 약 3초 TTL로 유지한다. TTL 이후 새 snapshot이 없으면 stale overlay로 보고 자동 제거한다.
 - 정밀 replay sync는 recording timestamp 기준으로 후속 확장한다.
+- 관제 서버는 `detection.object`의 `values.trackId`, `values.detections`, `className`, `confidence`, `bbox` 필수값과 범위를 검증한다.
+- 유효하지 않은 `detection.object`는 저장/overlay에 반영하지 않고 거절한다.
 
 `detection.object` event item:
 
@@ -528,8 +533,8 @@ YOLO / detection overlay 규칙:
 | `values.detections[].confidence` | Yes | `0.0`~`1.0` confidence |
 | `values.detections[].bbox.x` | Yes | 좌상단 x, `0.0`~`1.0` |
 | `values.detections[].bbox.y` | Yes | 좌상단 y, `0.0`~`1.0` |
-| `values.detections[].bbox.width` | Yes | bbox width, `0.0`~`1.0` |
-| `values.detections[].bbox.height` | Yes | bbox height, `0.0`~`1.0` |
+| `values.detections[].bbox.width` | Yes | bbox width, `0.0`~`1.0`. `0`보다 커야 함 |
+| `values.detections[].bbox.height` | Yes | bbox height, `0.0`~`1.0`. `0`보다 커야 함 |
 
 `mission.event` event item:
 
