@@ -240,26 +240,37 @@ func (s *Store) ClearSensorData(ctx context.Context) (repo.SensorDataClearResult
 	}
 
 	runner := s.sqlRunner()
-	latestResult, err := runner.ExecContext(ctx, `DELETE FROM sensor_latest_samples`)
+	if _, err := runner.ExecContext(ctx, `LOCK TABLE sensor_latest_samples, sensor_samples, sensor_descriptors IN ACCESS EXCLUSIVE MODE`); err != nil {
+		return repo.SensorDataClearResult{}, err
+	}
+	sensorLatestSamplesDeleted, sensorSamplesDeleted, sensorDescriptorsDeleted, err := countSensorDataRows(ctx, runner)
 	if err != nil {
 		return repo.SensorDataClearResult{}, err
 	}
-	sampleResult, err := runner.ExecContext(ctx, `DELETE FROM sensor_samples`)
-	if err != nil {
+	if _, err := runner.ExecContext(ctx, `TRUNCATE TABLE sensor_latest_samples, sensor_samples, sensor_descriptors`); err != nil {
 		return repo.SensorDataClearResult{}, err
 	}
-	descriptorResult, err := runner.ExecContext(ctx, `DELETE FROM sensor_descriptors`)
-	if err != nil {
-		return repo.SensorDataClearResult{}, err
-	}
-	sensorLatestSamplesDeleted, _ := latestResult.RowsAffected()
-	sensorSamplesDeleted, _ := sampleResult.RowsAffected()
-	sensorDescriptorsDeleted, _ := descriptorResult.RowsAffected()
 	return repo.SensorDataClearResult{
 		SensorLatestSamplesDeleted: sensorLatestSamplesDeleted,
 		SensorSamplesDeleted:       sensorSamplesDeleted,
 		SensorDescriptorsDeleted:   sensorDescriptorsDeleted,
 	}, nil
+}
+
+func countSensorDataRows(ctx context.Context, runner sqlContextRunner) (int64, int64, int64, error) {
+	var latestCount int64
+	var sampleCount int64
+	var descriptorCount int64
+	err := runner.QueryRowContext(ctx, `
+		SELECT
+			(SELECT COUNT(*) FROM sensor_latest_samples),
+			(SELECT COUNT(*) FROM sensor_samples),
+			(SELECT COUNT(*) FROM sensor_descriptors)
+	`).Scan(&latestCount, &sampleCount, &descriptorCount)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	return latestCount, sampleCount, descriptorCount, nil
 }
 
 func (s *Store) upsertSensorDescriptors(ctx context.Context, db *gorm.DB, envelope domain.SensorEnvelope, robotID string) error {
