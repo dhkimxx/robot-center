@@ -139,7 +139,10 @@ describe("mapLiveDataChannelPayload", () => {
     expect(result.liveEvents).toEqual([
       expect.objectContaining({
         at: "2026-06-08T01:03:00.000Z",
+        category: "navigation",
+        code: "waypoint.arrived",
         description: "waypoint-3 도착",
+        eventType: "mission.event",
         message: "목표 지점 도착",
         severity: "notice"
       })

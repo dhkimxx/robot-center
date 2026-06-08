@@ -70,6 +70,38 @@ describe("createEventLiveProjection", () => {
     ]);
   });
 
+  it("normalizes mission event metadata for the event panel", () => {
+    const projection = createEventLiveProjection({
+      receivedAt: "2026-06-08T01:03:01.000Z",
+      events: [
+        {
+          eventId: "evt-low-battery",
+          eventType: "mission.event",
+          timestamp: "2026-06-08T01:03:00.000Z",
+          values: {
+            severity: "WARNING",
+            category: "diagnostic",
+            code: "battery.low"
+          }
+        }
+      ]
+    });
+
+    expect(projection.liveEvents).toEqual([
+      expect.objectContaining({
+        at: "2026-06-08T01:03:00.000Z",
+        category: "diagnostic",
+        code: "battery.low",
+        eventId: "evt-low-battery",
+        eventType: "mission.event",
+        id: "mission.event:evt-low-battery",
+        message: "battery.low",
+        receivedAt: "2026-06-08T01:03:01.000Z",
+        severity: "warning"
+      })
+    ]);
+  });
+
   it("expires detection overlays by TTL", () => {
     const overlay = { timestamp: "2026-06-08T01:00:00.000Z" };
 

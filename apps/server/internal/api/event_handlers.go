@@ -145,8 +145,8 @@ func missionEventFromRequest(item dto.EventItemRequest, envelope domain.MissionE
 	if err != nil {
 		return domain.MissionEvent{}, err
 	}
-	missionValues := eventMissionValues(values)
-	title := utils.FirstNonEmptyString(missionValues.Title, missionValues.Code, eventType)
+	commonValues := parseEventCommonValues(values)
+	title := utils.FirstNonEmptyString(commonValues.Title, commonValues.Code, eventType)
 	return domain.MissionEvent{
 		MissionID:      envelope.MissionID,
 		RobotCode:      envelope.RobotCode,
@@ -154,9 +154,9 @@ func missionEventFromRequest(item dto.EventItemRequest, envelope domain.MissionE
 		EventType:      eventType,
 		EventCategory:  eventCategoryForType(eventType),
 		TrackID:        trackID,
-		Severity:       missionValues.Severity,
+		Severity:       commonValues.Severity,
 		Title:          title,
-		Description:    missionValues.Description,
+		Description:    commonValues.Description,
 		Timestamp:      timestamp,
 		ReceivedAt:     envelope.ReceivedAt,
 		DetectionCount: detectionCount,
@@ -293,17 +293,17 @@ func normalizeEventValues(values json.RawMessage) (json.RawMessage, error) {
 	return append(json.RawMessage(nil), values...), nil
 }
 
-type missionEventValues struct {
+type eventCommonValues struct {
 	Severity    string `json:"severity"`
 	Title       string `json:"title"`
 	Description string `json:"description"`
 	Code        string `json:"code"`
 }
 
-func eventMissionValues(values json.RawMessage) missionEventValues {
-	var request missionEventValues
+func parseEventCommonValues(values json.RawMessage) eventCommonValues {
+	var request eventCommonValues
 	if err := json.Unmarshal(values, &request); err != nil {
-		return missionEventValues{Severity: "info"}
+		return eventCommonValues{Severity: "info"}
 	}
 	request.Severity = normalizeEventSeverity(request.Severity)
 	request.Title = strings.TrimSpace(request.Title)
@@ -313,9 +313,10 @@ func eventMissionValues(values json.RawMessage) missionEventValues {
 }
 
 func normalizeEventSeverity(severity string) string {
-	switch strings.TrimSpace(severity) {
+	normalized := strings.ToLower(strings.TrimSpace(severity))
+	switch normalized {
 	case "notice", "warning", "critical":
-		return strings.TrimSpace(severity)
+		return normalized
 	default:
 		return "info"
 	}

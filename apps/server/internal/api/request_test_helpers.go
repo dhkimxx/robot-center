@@ -130,6 +130,15 @@ func eventListHasDetectionCount(events []dto.MissionEventResponse, trackID strin
 	return false
 }
 
+func eventListHasTitleAndSeverity(events []dto.MissionEventResponse, title string, severity string) bool {
+	for _, event := range events {
+		if event.Title == title && event.Severity == severity {
+			return true
+		}
+	}
+	return false
+}
+
 func assertStringListEqual(t *testing.T, actual []string, expected []string) {
 	t.Helper()
 	if len(actual) != len(expected) {

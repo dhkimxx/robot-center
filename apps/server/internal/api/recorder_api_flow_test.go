@@ -165,13 +165,22 @@ func TestRecorderAPIFlow(t *testing.T) {
 				Timestamp: &eventTimestamp,
 				Values:    []byte(`{"severity":"notice","title":"목표 지점 도착","description":"waypoint-3 도착","category":"navigation","code":"waypoint.arrived"}`),
 			},
+			{
+				EventID:   "mission-code-only",
+				EventType: "mission.event",
+				Timestamp: &eventTimestamp,
+				Values:    []byte(`{"severity":"WARNING","category":"diagnostic","code":"battery.low"}`),
+			},
 		},
 	})
-	if len(eventPayload.Events) != 3 {
-		t.Fatalf("expected three event rows, got %#v", eventPayload)
+	if len(eventPayload.Events) != 4 {
+		t.Fatalf("expected four event rows, got %#v", eventPayload)
 	}
 	if !eventListHasType(eventPayload.Events, "detection.object") || !eventListHasType(eventPayload.Events, "mission.event") {
 		t.Fatalf("expected detection and mission events, got %#v", eventPayload)
+	}
+	if !eventListHasTitleAndSeverity(eventPayload.Events, "battery.low", "warning") {
+		t.Fatalf("expected mission event title fallback to code and severity normalization, got %#v", eventPayload)
 	}
 	if !eventListHasDetectionCount(eventPayload.Events, "track.video_1", 1) {
 		t.Fatalf("expected non-empty detection snapshot to persist with detectionCount=1, got %#v", eventPayload)
@@ -181,7 +190,7 @@ func TestRecorderAPIFlow(t *testing.T) {
 	}
 
 	operatorEventsPayload := requestJSON[dto.OperatorMissionEventsResponse](t, server.baseURL, http.MethodGet, "/api/v1/operator/missions/"+mission.code+"/events", "", nil)
-	if len(operatorEventsPayload.Events) != 1 || operatorEventsPayload.Events[0].EventType != "mission.event" {
+	if len(operatorEventsPayload.Events) != 2 || !eventListHasTitleAndSeverity(operatorEventsPayload.Events, "battery.low", "warning") {
 		t.Fatalf("expected default operator event feed to exclude detection.object, got %#v", operatorEventsPayload)
 	}
 	operatorDetectionsPayload := requestJSON[dto.OperatorMissionEventsResponse](t, server.baseURL, http.MethodGet, "/api/v1/operator/missions/"+mission.code+"/events?eventType=detection.object", "", nil)

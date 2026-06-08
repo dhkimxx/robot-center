@@ -21,7 +21,8 @@ function normalizeEventList(payload) {
 }
 
 function normalizeSeverity(severity) {
-  return ["info", "notice", "warning", "critical"].includes(severity) ? severity : "info";
+  const normalized = String(severity ?? "").trim().toLowerCase();
+  return ["info", "notice", "warning", "critical"].includes(normalized) ? normalized : "info";
 }
 
 function eventTimestamp(event, fallbackTimestamp) {
@@ -101,17 +102,27 @@ const missionEventStrategy = {
   eventType: "mission.event",
   createProjection(event, context) {
     const values = event?.values ?? {};
-    const title = String(values.title ?? values.code ?? event?.eventType ?? "").trim();
+    const eventType = String(event?.eventType ?? "mission.event").trim();
+    const eventId = String(event?.eventId ?? "").trim();
+    const code = String(values.code ?? "").trim();
+    const category = String(values.category ?? "").trim();
+    const timestamp = eventTimestamp(event, context.receivedAt);
+    const title = String(values.title ?? "").trim() || code || eventType;
     if (!title) {
       return null;
     }
     const description = String(values.description ?? "").trim();
     return {
       liveEvent: {
-        at: eventTimestamp(event, context.receivedAt),
+        at: timestamp,
+        category,
+        code,
         description,
-        id: String(event?.eventId ?? `${title}-${eventTimestamp(event, context.receivedAt)}`),
+        eventId,
+        eventType,
+        id: eventId ? `${eventType}:${eventId}` : `${eventType}:${code || title}:${timestamp}`,
         message: title,
+        receivedAt: context.receivedAt,
         severity: normalizeSeverity(values.severity)
       }
     };

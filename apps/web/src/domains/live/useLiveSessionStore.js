@@ -7,6 +7,55 @@ import { createEmptyDetectionOverlays } from "./liveEventStrategies.js";
 import { replaceVideoStreamSlot, resetVideoStreams } from "./liveMediaCleanup.js";
 import { mergeSensorSnapshots } from "./sensorDisplayMetrics.js";
 
+const maxLiveEvents = 40;
+
+function normalizeLiveEventSeverity(severity) {
+  const normalized = String(severity ?? "").trim().toLowerCase();
+  return ["info", "notice", "warning", "critical"].includes(normalized) ? normalized : "info";
+}
+
+function createLiveEventRecord(event) {
+  const timestamp = new Date().toISOString();
+  if (typeof event === "string") {
+    return {
+      at: timestamp,
+      description: "",
+      id: `${Date.now()}-${Math.random()}`,
+      message: event,
+      severity: "info"
+    };
+  }
+  const eventType = String(event?.eventType ?? "").trim();
+  const eventId = String(event?.eventId ?? "").trim();
+  const code = String(event?.code ?? "").trim();
+  const message = String(event?.message ?? (code || eventType)).trim();
+  if (!message) {
+    return null;
+  }
+  return {
+    at: event.at ?? timestamp,
+    category: String(event?.category ?? "").trim(),
+    code,
+    description: String(event?.description ?? "").trim(),
+    eventId,
+    eventType,
+    id: event.id ?? (eventId ? `${eventType || "event"}:${eventId}` : `${Date.now()}-${Math.random()}`),
+    message,
+    receivedAt: event.receivedAt ?? "",
+    severity: normalizeLiveEventSeverity(event.severity)
+  };
+}
+
+function mergeLiveEvent(events, nextEvent) {
+  if (!nextEvent) {
+    return events;
+  }
+  return [
+    nextEvent,
+    ...events.filter((event) => event.id !== nextEvent.id)
+  ].slice(0, maxLiveEvents);
+}
+
 export function useLiveSessionStore() {
   const [liveSessions, setLiveSessions] = useState({});
 
@@ -27,21 +76,13 @@ export function useLiveSessionStore() {
     if (!targetKey) {
       return;
     }
-    const nextEvent = typeof event === "string"
-      ? { id: `${Date.now()}-${Math.random()}`, message: event, at: new Date().toISOString() }
-      : {
-        id: event.id ?? `${Date.now()}-${Math.random()}`,
-        message: event.message,
-        description: event.description ?? "",
-        severity: event.severity ?? "info",
-        at: event.at ?? new Date().toISOString()
-      };
+    const nextEvent = createLiveEventRecord(event);
+    if (!nextEvent) {
+      return;
+    }
     updateLiveSession(targetKey, (session) => ({
       ...session,
-      events: [
-        nextEvent,
-        ...session.events
-      ].slice(0, 40)
+      events: mergeLiveEvent(session.events, nextEvent)
     }), options);
   }, [updateLiveSession]);
 
