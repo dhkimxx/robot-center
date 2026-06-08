@@ -65,14 +65,19 @@ func isDataChannelMedia(mediaDescription *sdp.MediaDescription) bool {
 	if mediaDescription == nil || mediaDescription.MediaName.Media != "application" {
 		return false
 	}
-	if !containsString(mediaDescription.MediaName.Formats, "webrtc-datachannel") {
-		return false
-	}
 	if !containsString(mediaDescription.MediaName.Protos, "SCTP") {
 		return false
 	}
-	_, hasSCTPPort := mediaDescription.Attribute("sctp-port")
-	return hasSCTPPort
+	if containsString(mediaDescription.MediaName.Formats, "webrtc-datachannel") {
+		return true
+	}
+	if _, hasSCTPPort := mediaDescription.Attribute("sctp-port"); hasSCTPPort {
+		return true
+	}
+	if sctpMap, hasSCTPMap := mediaDescription.Attribute("sctpmap"); hasSCTPMap {
+		return strings.Contains(strings.ToLower(sctpMap), "webrtc-datachannel")
+	}
+	return false
 }
 
 func codecNameFromRTPMap(value string) string {

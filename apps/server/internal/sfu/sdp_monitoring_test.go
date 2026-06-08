@@ -44,6 +44,29 @@ func TestSDPMonitorFieldsSummarizesRobotOfferWithoutRawSDP(t *testing.T) {
 	}
 }
 
+func TestSDPMonitorFieldsDetectsLegacySCTPMapDataChannel(t *testing.T) {
+	rawSDP := strings.Join([]string{
+		"v=0",
+		"o=- 1 1 IN IP4 0.0.0.0",
+		"s=-",
+		"t=0 0",
+		"a=group:BUNDLE video0 application1",
+		"m=video 9 UDP/TLS/RTP/SAVPF 96",
+		"a=mid:video0",
+		"a=rtpmap:96 H264/90000",
+		"a=msid:robot-stream track.video_1",
+		"m=application 9 UDP/DTLS/SCTP 5000",
+		"a=mid:application1",
+		"a=sctpmap:5000 webrtc-datachannel 1024",
+		"",
+	}, "\r\n")
+
+	fields := monitorFieldsMap(sdpMonitorFields(rawSDP))
+	if fields["datachannel"] != true {
+		t.Fatalf("expected legacy SCTP datachannel summary, got %#v", fields)
+	}
+}
+
 func monitorFieldsMap(fields []any) map[string]any {
 	output := map[string]any{}
 	for index := 0; index+1 < len(fields); index += 2 {
