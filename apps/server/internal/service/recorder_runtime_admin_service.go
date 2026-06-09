@@ -76,3 +76,31 @@ func (s *RecorderRuntimeAdminService) ClearRecorderRuntime(ctx context.Context, 
 	}
 	return payload.RecorderRuntime, nil
 }
+
+func (s *RecorderRuntimeAdminService) GetRecorderRuntimeStatus(ctx context.Context) (domain.RecorderRuntimeStatus, error) {
+	if s == nil || strings.TrimSpace(s.recorderWorkerInternalURL) == "" {
+		return domain.RecorderRuntimeStatus{}, fmt.Errorf("recorder runtime admin service is not configured")
+	}
+	statusContext, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	request, err := http.NewRequestWithContext(statusContext, http.MethodGet, s.recorderWorkerInternalURL+"/runtime/recordings/status", nil)
+	if err != nil {
+		return domain.RecorderRuntimeStatus{}, err
+	}
+	response, err := s.httpClient.Do(request)
+	if err != nil {
+		return domain.RecorderRuntimeStatus{}, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(response.Body, 512))
+		return domain.RecorderRuntimeStatus{}, fmt.Errorf("recorder-worker returned %s: %s", response.Status, strings.TrimSpace(string(body)))
+	}
+	var payload struct {
+		RecorderRuntime domain.RecorderRuntimeStatus `json:"recorderRuntime"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		return domain.RecorderRuntimeStatus{}, err
+	}
+	return payload.RecorderRuntime, nil
+}

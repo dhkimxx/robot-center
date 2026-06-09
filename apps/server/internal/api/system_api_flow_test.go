@@ -23,6 +23,9 @@ func TestSystemAPIFlow(t *testing.T) {
 	if systemStatus.Database.Status != "ok" || systemStatus.Database.DatabaseSizeBytes == nil {
 		t.Fatalf("expected database usage status, got %#v", systemStatus.Database)
 	}
+	if systemStatus.RecorderRuntime.Status != "ok" || systemStatus.RecorderRuntime.UsedBytes != 4096 || !systemStatus.RecorderRuntime.Clearable {
+		t.Fatalf("expected recorder runtime status, got %#v", systemStatus.RecorderRuntime)
+	}
 
 	swaggerResponse, err := http.Get(server.baseURL + "/swagger/index.html")
 	if err != nil {

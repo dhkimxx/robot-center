@@ -4,16 +4,16 @@ import (
 	"context"
 	"errors"
 	"net/http"
-
-	"robot-center/apps/server/internal/api/dto"
-	"robot-center/apps/server/internal/service"
-
 	"strings"
 	"time"
+
+	"robot-center/apps/server/internal/api/dto"
+	"robot-center/apps/server/internal/domain"
+	"robot-center/apps/server/internal/service"
 )
 
 // @Summary 시스템 상태 조회
-// @Description app-server, recorder-worker, storage, SFU room 상태 요약을 반환합니다.
+// @Description 관제 서비스, 녹화 서비스, 저장소, 실시간 연결 상태 요약을 반환합니다.
 // @Tags 시스템 API
 // @Produce json
 // @Success 200 {object} dto.SystemStatusResponse
@@ -47,6 +47,7 @@ func (s *Server) handleSystemStatus(w http.ResponseWriter, r *http.Request) {
 		RecorderWorkerStatus:      s.componentHTTPStatus(requestContext, s.config.RecorderWorkerInternalURL+"/healthz"),
 		ObjectStorage:             s.readObjectStorageStatus(requestContext),
 		Database:                  s.readDatabaseStatus(requestContext),
+		RecorderRuntime:           s.readRecorderRuntimeStatus(requestContext),
 		RobotCount:                len(robots),
 		MissionCount:              len(missions),
 		RecordingCount:            len(recordings),
@@ -73,12 +74,23 @@ func (s *Server) readDatabaseStatus(ctx context.Context) dto.DatabaseStatusRespo
 	return dto.DatabaseStatus(usage)
 }
 
-// @Summary Object Storage 초기화
-// @Description 확인 문자열을 받은 뒤 테스트용 object storage 데이터를 정리합니다. production 환경에서는 실행되지 않습니다.
+func (s *Server) readRecorderRuntimeStatus(ctx context.Context) domain.RecorderRuntimeStatus {
+	if s.services.RecorderRuntime == nil {
+		return domain.RecorderRuntimeStatus{Status: "unavailable", Error: "recorder runtime admin service is not configured"}
+	}
+	status, err := s.services.RecorderRuntime.GetRecorderRuntimeStatus(ctx)
+	if err != nil {
+		return domain.RecorderRuntimeStatus{Status: "unavailable", Error: err.Error()}
+	}
+	return status
+}
+
+// @Summary 객체 스토리지 초기화
+// @Description 확인 문자열을 받은 뒤 테스트용 객체 스토리지 데이터를 정리합니다. production 환경에서는 실행되지 않습니다.
 // @Tags 시스템 API
 // @Accept json
 // @Produce json
-// @Param request body dto.ClearObjectStorageRequest true "Object Storage 초기화 요청"
+// @Param request body dto.ClearObjectStorageRequest true "객체 스토리지 초기화 요청"
 // @Success 200 {object} dto.ClearObjectStorageResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 403 {object} dto.ErrorResponse
@@ -102,12 +114,12 @@ func (s *Server) handleClearObjectStorage(w http.ResponseWriter, r *http.Request
 	})
 }
 
-// @Summary Sensor 데이터 초기화
-// @Description 확인 문자열을 받은 뒤 테스트용 sensor descriptor와 sample 데이터를 정리합니다. production 환경에서는 실행되지 않습니다.
+// @Summary 센서 데이터 초기화
+// @Description 확인 문자열을 받은 뒤 테스트용 센서 정의와 센서값 데이터를 정리합니다. production 환경에서는 실행되지 않습니다.
 // @Tags 시스템 API
 // @Accept json
 // @Produce json
-// @Param request body dto.ClearSensorDataRequest true "Sensor 데이터 초기화 요청"
+// @Param request body dto.ClearSensorDataRequest true "센서 데이터 초기화 요청"
 // @Success 200 {object} dto.ClearSensorDataResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 403 {object} dto.ErrorResponse
@@ -131,12 +143,12 @@ func (s *Server) handleClearSensorData(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// @Summary Event 데이터 초기화
-// @Description 확인 문자열을 받은 뒤 테스트용 mission/event 로그 데이터를 정리합니다. production 환경에서는 실행되지 않습니다.
+// @Summary 이벤트 데이터 초기화
+// @Description 확인 문자열을 받은 뒤 테스트용 임무 이벤트와 객체 탐지 데이터를 정리합니다. production 환경에서는 실행되지 않습니다.
 // @Tags 시스템 API
 // @Accept json
 // @Produce json
-// @Param request body dto.ClearEventDataRequest true "Event 데이터 초기화 요청"
+// @Param request body dto.ClearEventDataRequest true "이벤트 데이터 초기화 요청"
 // @Success 200 {object} dto.ClearEventDataResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 403 {object} dto.ErrorResponse
@@ -160,12 +172,12 @@ func (s *Server) handleClearEventData(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// @Summary Recorder Runtime 초기화
-// @Description 확인 문자열을 받은 뒤 녹화 서비스의 로컬 임시 파일을 정리합니다. active 녹화 상태가 있거나 production 환경이면 실행되지 않습니다.
+// @Summary 녹화 런타임 초기화
+// @Description 확인 문자열을 받은 뒤 녹화 서비스의 로컬 임시 파일을 정리합니다. 진행 중인 녹화 상태가 있거나 production 환경이면 실행되지 않습니다.
 // @Tags 시스템 API
 // @Accept json
 // @Produce json
-// @Param request body dto.ClearRecorderRuntimeRequest true "Recorder Runtime 초기화 요청"
+// @Param request body dto.ClearRecorderRuntimeRequest true "녹화 런타임 초기화 요청"
 // @Success 200 {object} dto.ClearRecorderRuntimeResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 403 {object} dto.ErrorResponse

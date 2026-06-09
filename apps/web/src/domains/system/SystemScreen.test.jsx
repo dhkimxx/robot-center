@@ -6,8 +6,9 @@ import {
   formatStorageByteCount,
   normalizeDatabaseUsage,
   normalizeObjectStorageUsage,
+  normalizeRecorderRuntimeStatus,
   makeRoomStreamingState
-} from "./SystemScreen.jsx";
+} from "./systemViewModel.js";
 
 describe("SystemScreen room summaries", () => {
   it("deduplicates robot peers by robot code and prefers publishers", () => {
@@ -93,6 +94,31 @@ describe("SystemScreen usage summaries", () => {
     });
 
     expect(usage.usedPercent).toBe(25);
+  });
+
+  it("normalizes recorder runtime status for display", () => {
+    const status = normalizeRecorderRuntimeStatus({
+      blockingReason: "active recording target",
+      clearable: false,
+      files: "12",
+      recordingDirectories: "3",
+      status: "ok",
+      totalBytes: 2000,
+      usedBytes: 500,
+      usedPercent: 0
+    });
+
+    expect(status).toEqual({
+      availableBytes: 0,
+      blockingReason: "active recording target",
+      clearable: false,
+      files: 12,
+      recordingDirectories: 3,
+      status: "ok",
+      totalBytes: 2000,
+      usedBytes: 500,
+      usedPercent: 25
+    });
   });
 
   it("formats byte counts with stable units", () => {

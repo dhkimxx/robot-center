@@ -1395,7 +1395,7 @@
         },
         "/api/v1/system/events/clear": {
             "post": {
-                "description": "확인 문자열을 받은 뒤 테스트용 mission/event 로그 데이터를 정리합니다. production 환경에서는 실행되지 않습니다.",
+                "description": "확인 문자열을 받은 뒤 테스트용 임무 이벤트와 객체 탐지 데이터를 정리합니다. production 환경에서는 실행되지 않습니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1405,10 +1405,10 @@
                 "tags": [
                     "시스템 API"
                 ],
-                "summary": "Event 데이터 초기화",
+                "summary": "이벤트 데이터 초기화",
                 "parameters": [
                     {
-                        "description": "Event 데이터 초기화 요청",
+                        "description": "이벤트 데이터 초기화 요청",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -1447,7 +1447,7 @@
         },
         "/api/v1/system/object-storage/clear": {
             "post": {
-                "description": "확인 문자열을 받은 뒤 테스트용 object storage 데이터를 정리합니다. production 환경에서는 실행되지 않습니다.",
+                "description": "확인 문자열을 받은 뒤 테스트용 객체 스토리지 데이터를 정리합니다. production 환경에서는 실행되지 않습니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1457,10 +1457,10 @@
                 "tags": [
                     "시스템 API"
                 ],
-                "summary": "Object Storage 초기화",
+                "summary": "객체 스토리지 초기화",
                 "parameters": [
                     {
-                        "description": "Object Storage 초기화 요청",
+                        "description": "객체 스토리지 초기화 요청",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -1499,7 +1499,7 @@
         },
         "/api/v1/system/recorder-runtime/clear": {
             "post": {
-                "description": "확인 문자열을 받은 뒤 녹화 서비스의 로컬 임시 파일을 정리합니다. active 녹화 상태가 있거나 production 환경이면 실행되지 않습니다.",
+                "description": "확인 문자열을 받은 뒤 녹화 서비스의 로컬 임시 파일을 정리합니다. 진행 중인 녹화 상태가 있거나 production 환경이면 실행되지 않습니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1509,10 +1509,10 @@
                 "tags": [
                     "시스템 API"
                 ],
-                "summary": "Recorder Runtime 초기화",
+                "summary": "녹화 런타임 초기화",
                 "parameters": [
                     {
-                        "description": "Recorder Runtime 초기화 요청",
+                        "description": "녹화 런타임 초기화 요청",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -1557,7 +1557,7 @@
         },
         "/api/v1/system/sensors/clear": {
             "post": {
-                "description": "확인 문자열을 받은 뒤 테스트용 sensor descriptor와 sample 데이터를 정리합니다. production 환경에서는 실행되지 않습니다.",
+                "description": "확인 문자열을 받은 뒤 테스트용 센서 정의와 센서값 데이터를 정리합니다. production 환경에서는 실행되지 않습니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1567,10 +1567,10 @@
                 "tags": [
                     "시스템 API"
                 ],
-                "summary": "Sensor 데이터 초기화",
+                "summary": "센서 데이터 초기화",
                 "parameters": [
                     {
-                        "description": "Sensor 데이터 초기화 요청",
+                        "description": "센서 데이터 초기화 요청",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -1609,7 +1609,7 @@
         },
         "/api/v1/system/status": {
             "get": {
-                "description": "app-server, recorder-worker, storage, SFU room 상태 요약을 반환합니다.",
+                "description": "관제 서비스, 녹화 서비스, 저장소, 실시간 연결 상태 요약을 반환합니다.",
                 "produces": [
                     "application/json"
                 ],
@@ -3182,6 +3182,9 @@
                 "objectStorage": {
                     "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.ObjectStorageStatusResponse"
                 },
+                "recorderRuntime": {
+                    "$ref": "#/definitions/robot-center_apps_server_internal_domain.RecorderRuntimeStatus"
+                },
                 "service": {
                     "type": "string"
                 },
@@ -3238,6 +3241,44 @@
                 },
                 "recordingDirectoriesDeleted": {
                     "type": "integer"
+                }
+            }
+        },
+        "robot-center_apps_server_internal_domain.RecorderRuntimeStatus": {
+            "type": "object",
+            "properties": {
+                "availableBytes": {
+                    "type": "integer"
+                },
+                "blockingReason": {
+                    "type": "string"
+                },
+                "clearable": {
+                    "type": "boolean"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "files": {
+                    "type": "integer"
+                },
+                "recordingDirectories": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "totalBytes": {
+                    "type": "integer"
+                },
+                "updatedAt": {
+                    "type": "string"
+                },
+                "usedBytes": {
+                    "type": "integer"
+                },
+                "usedPercent": {
+                    "type": "number"
                 }
             }
         },

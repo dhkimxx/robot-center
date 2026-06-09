@@ -35,6 +35,12 @@ func main() {
 			"subscriber": worker.SubscriberStatus(),
 		})
 	})
+	mux.HandleFunc("GET /runtime/recordings/status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"recorderRuntime": worker.RuntimeStatus(r.Context()),
+		})
+	})
 	mux.HandleFunc("POST /runtime/recordings/clear", func(w http.ResponseWriter, r *http.Request) {
 		var request struct {
 			Confirmation string `json:"confirmation"`

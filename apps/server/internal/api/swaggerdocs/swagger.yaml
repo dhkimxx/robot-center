@@ -995,6 +995,8 @@ definitions:
         $ref: '#/definitions/robot-center_apps_server_internal_api_dto.DatabaseStatusResponse'
       objectStorage:
         $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ObjectStorageStatusResponse'
+      recorderRuntime:
+        $ref: '#/definitions/robot-center_apps_server_internal_domain.RecorderRuntimeStatus'
       service:
         type: string
       sfuRooms:
@@ -1032,6 +1034,31 @@ definitions:
         type: integer
       recordingDirectoriesDeleted:
         type: integer
+    type: object
+  robot-center_apps_server_internal_domain.RecorderRuntimeStatus:
+    properties:
+      availableBytes:
+        type: integer
+      blockingReason:
+        type: string
+      clearable:
+        type: boolean
+      error:
+        type: string
+      files:
+        type: integer
+      recordingDirectories:
+        type: integer
+      status:
+        type: string
+      totalBytes:
+        type: integer
+      updatedAt:
+        type: string
+      usedBytes:
+        type: integer
+      usedPercent:
+        type: number
     type: object
   robot-center_apps_server_internal_domain.RobotConnectionState:
     enum:
@@ -2101,10 +2128,10 @@ paths:
     post:
       consumes:
       - application/json
-      description: 확인 문자열을 받은 뒤 테스트용 mission/event 로그 데이터를 정리합니다. production 환경에서는
-        실행되지 않습니다.
+      description: 확인 문자열을 받은 뒤 테스트용 임무 이벤트와 객체 탐지 데이터를 정리합니다. production 환경에서는 실행되지
+        않습니다.
       parameters:
-      - description: Event 데이터 초기화 요청
+      - description: 이벤트 데이터 초기화 요청
         in: body
         name: request
         required: true
@@ -2129,17 +2156,16 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse'
-      summary: Event 데이터 초기화
+      summary: 이벤트 데이터 초기화
       tags:
       - 시스템 API
   /api/v1/system/object-storage/clear:
     post:
       consumes:
       - application/json
-      description: 확인 문자열을 받은 뒤 테스트용 object storage 데이터를 정리합니다. production 환경에서는 실행되지
-        않습니다.
+      description: 확인 문자열을 받은 뒤 테스트용 객체 스토리지 데이터를 정리합니다. production 환경에서는 실행되지 않습니다.
       parameters:
-      - description: Object Storage 초기화 요청
+      - description: 객체 스토리지 초기화 요청
         in: body
         name: request
         required: true
@@ -2164,17 +2190,17 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse'
-      summary: Object Storage 초기화
+      summary: 객체 스토리지 초기화
       tags:
       - 시스템 API
   /api/v1/system/recorder-runtime/clear:
     post:
       consumes:
       - application/json
-      description: 확인 문자열을 받은 뒤 녹화 서비스의 로컬 임시 파일을 정리합니다. active 녹화 상태가 있거나 production
+      description: 확인 문자열을 받은 뒤 녹화 서비스의 로컬 임시 파일을 정리합니다. 진행 중인 녹화 상태가 있거나 production
         환경이면 실행되지 않습니다.
       parameters:
-      - description: Recorder Runtime 초기화 요청
+      - description: 녹화 런타임 초기화 요청
         in: body
         name: request
         required: true
@@ -2203,17 +2229,17 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse'
-      summary: Recorder Runtime 초기화
+      summary: 녹화 런타임 초기화
       tags:
       - 시스템 API
   /api/v1/system/sensors/clear:
     post:
       consumes:
       - application/json
-      description: 확인 문자열을 받은 뒤 테스트용 sensor descriptor와 sample 데이터를 정리합니다. production
-        환경에서는 실행되지 않습니다.
+      description: 확인 문자열을 받은 뒤 테스트용 센서 정의와 센서값 데이터를 정리합니다. production 환경에서는 실행되지
+        않습니다.
       parameters:
-      - description: Sensor 데이터 초기화 요청
+      - description: 센서 데이터 초기화 요청
         in: body
         name: request
         required: true
@@ -2238,12 +2264,12 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse'
-      summary: Sensor 데이터 초기화
+      summary: 센서 데이터 초기화
       tags:
       - 시스템 API
   /api/v1/system/status:
     get:
-      description: app-server, recorder-worker, storage, SFU room 상태 요약을 반환합니다.
+      description: 관제 서비스, 녹화 서비스, 저장소, 실시간 연결 상태 요약을 반환합니다.
       produces:
       - application/json
       responses:

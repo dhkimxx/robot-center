@@ -8,14 +8,15 @@ import (
 )
 
 type SystemStatusResponse struct {
-	Service       string                      `json:"service"`
-	Status        string                      `json:"status"`
-	Components    []SystemComponentStatus     `json:"components"`
-	Config        SystemConfigResponse        `json:"config"`
-	ObjectStorage ObjectStorageStatusResponse `json:"objectStorage"`
-	Database      DatabaseStatusResponse      `json:"database"`
-	Summary       SystemSummaryResponse       `json:"summary"`
-	SFURooms      []sfu.RoomSummary           `json:"sfuRooms"`
+	Service         string                       `json:"service"`
+	Status          string                       `json:"status"`
+	Components      []SystemComponentStatus      `json:"components"`
+	Config          SystemConfigResponse         `json:"config"`
+	ObjectStorage   ObjectStorageStatusResponse  `json:"objectStorage"`
+	Database        DatabaseStatusResponse       `json:"database"`
+	RecorderRuntime domain.RecorderRuntimeStatus `json:"recorderRuntime"`
+	Summary         SystemSummaryResponse        `json:"summary"`
+	SFURooms        []sfu.RoomSummary            `json:"sfuRooms"`
 }
 
 type SystemStatusInput struct {
@@ -28,6 +29,7 @@ type SystemStatusInput struct {
 	RecorderWorkerStatus      string
 	ObjectStorage             ObjectStorageStatusResponse
 	Database                  DatabaseStatusResponse
+	RecorderRuntime           domain.RecorderRuntimeStatus
 	RobotCount                int
 	MissionCount              int
 	RecordingCount            int
@@ -137,8 +139,9 @@ func SystemStatus(input SystemStatusInput) SystemStatusResponse {
 			MinIOPublicURL:            input.MinIOPublicURL,
 			MinIOBucket:               input.MinIOBucket,
 		},
-		ObjectStorage: input.ObjectStorage,
-		Database:      input.Database,
+		ObjectStorage:   input.ObjectStorage,
+		Database:        input.Database,
+		RecorderRuntime: input.RecorderRuntime,
 		Summary: SystemSummaryResponse{
 			Robots:     input.RobotCount,
 			Missions:   input.MissionCount,

@@ -62,6 +62,37 @@ func TestWorkerClearRuntimeRecordingsRejectsActiveState(t *testing.T) {
 	}
 }
 
+func TestWorkerRuntimeStatusReportsUsageAndClearableState(t *testing.T) {
+	runtimeDirectory := t.TempDir()
+	t.Setenv("RECORDER_RUNTIME_DIR", runtimeDirectory)
+	writeRuntimeTestFile(t, filepath.Join(runtimeDirectory, "chunk-001", "rgb.h264"), []byte("rgb"))
+	writeRuntimeTestFile(t, filepath.Join(runtimeDirectory, "chunk-001", "telemetry.jsonl"), []byte("telemetry"))
+
+	worker := NewWorker(config.RecorderWorkerConfig{Environment: "development"})
+	status := worker.RuntimeStatus(context.Background())
+	if status.Status != "ok" || status.RecordingDirectories != 1 || status.Files != 2 || status.UsedBytes != int64(len("rgbtelemetry")) {
+		t.Fatalf("unexpected runtime status: %#v", status)
+	}
+	if !status.Clearable || status.BlockingReason != "" {
+		t.Fatalf("expected runtime to be clearable, got %#v", status)
+	}
+	if status.TotalBytes <= 0 || status.AvailableBytes <= 0 {
+		t.Fatalf("expected filesystem capacity in status, got %#v", status)
+	}
+}
+
+func TestWorkerRuntimeStatusReportsActiveBlockingState(t *testing.T) {
+	runtimeDirectory := t.TempDir()
+	t.Setenv("RECORDER_RUNTIME_DIR", runtimeDirectory)
+	worker := NewWorker(config.RecorderWorkerConfig{Environment: "development"})
+	worker.activeTargets["mission-001/robot-001"] = domain.Mission{MissionCode: "mission-001", RobotCode: "robot-001"}
+
+	status := worker.RuntimeStatus(context.Background())
+	if status.Clearable || status.BlockingReason != "active recording target" {
+		t.Fatalf("expected active blocking status, got %#v", status)
+	}
+}
+
 func writeRuntimeTestFile(t *testing.T, path string, payload []byte) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

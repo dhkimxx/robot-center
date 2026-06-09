@@ -38,6 +38,9 @@ type Worker struct {
 	h264ChunkKeyframeWaits map[string]bool
 	h264KeyframeRequests   map[string]time.Time
 	h264Timings            map[string]h264TrackTiming
+	runtimeUsageMu         sync.Mutex
+	runtimeUsageCachedAt   time.Time
+	runtimeUsageCache      domain.RecorderRuntimeStatus
 }
 
 func NewWorker(cfg config.RecorderWorkerConfig) *Worker {
