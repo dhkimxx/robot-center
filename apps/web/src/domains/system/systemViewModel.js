@@ -94,15 +94,17 @@ export function normalizeDatabaseUsage(rawUsage) {
   if (!rawUsage) {
     return null;
   }
+  const rawTables = (rawUsage.tables ?? []).map((table) => ({
+    rowCount: Math.max(0, Math.round(readStorageNumber(table.rowCount))),
+    tableName: table.tableName ?? "",
+    totalBytes: readStorageNumber(table.totalBytes)
+  }));
   return {
+    categories: createDatabaseUsageCategories(rawTables),
     databaseName: rawUsage.databaseName ?? "",
     databaseSizeBytes: readStorageNumber(rawUsage.databaseSizeBytes),
     status: rawUsage.status ?? "unavailable",
-    tables: (rawUsage.tables ?? []).map((table) => ({
-      rowCount: Math.max(0, Math.round(readStorageNumber(table.rowCount))),
-      tableName: table.tableName ?? "",
-      totalBytes: readStorageNumber(table.totalBytes)
-    })),
+    tables: rawTables,
     trackedTableBytes: readStorageNumber(rawUsage.trackedTableBytes)
   };
 }
@@ -228,18 +230,109 @@ export function formatInteger(value) {
   return Math.max(0, Math.round(readStorageNumber(value))).toLocaleString();
 }
 
-export function makeDatabaseTableLabel(tableName) {
-  const labels = {
-    events: "이벤트 데이터",
-    recording_chunks: "녹화 청크",
-    recording_sessions: "녹화 세션",
-    sensor_descriptors: "센서 정의",
-    sensor_latest_samples: "최근 센서값",
-    sensor_samples: "센서 샘플",
-    storage_objects: "녹화 파일 정보"
-  };
-  return labels[tableName] ?? tableName;
+export function createDatabaseUsageCategories(tables) {
+  const categoriesByID = new Map();
+  for (const table of tables) {
+    const category = resolveDatabaseUsageCategory(table.tableName);
+    const current = categoriesByID.get(category.id) ?? {
+      ...category,
+      rowCount: 0,
+      tableCount: 0,
+      totalBytes: 0
+    };
+    current.rowCount += table.rowCount;
+    current.tableCount += 1;
+    current.totalBytes += table.totalBytes;
+    categoriesByID.set(category.id, current);
+  }
+
+  return Array.from(categoriesByID.values())
+    .filter((category) => category.totalBytes > 0 || category.rowCount > 0)
+    .sort((left, right) => {
+      if (left.id === "internal" || right.id === "internal") {
+        return left.id === "internal" ? 1 : -1;
+      }
+      if (left.totalBytes !== right.totalBytes) {
+        return right.totalBytes - left.totalBytes;
+      }
+      return left.sortOrder - right.sortOrder;
+    });
 }
+
+function resolveDatabaseUsageCategory(tableName) {
+  const categoryID = databaseTableCategoryIDs[tableName] ?? (
+    isInternalDatabaseTable(tableName) ? "internal" : "other"
+  );
+  return databaseUsageCategories[categoryID];
+}
+
+function isInternalDatabaseTable(tableName) {
+  return tableName === "spatial_ref_sys"
+    || tableName === "geography_columns"
+    || tableName === "geometry_columns"
+    || tableName.endsWith("_migrations")
+    || tableName.startsWith("schema_");
+}
+
+const databaseUsageCategories = {
+  control: {
+    id: "control",
+    label: "제어 데이터",
+    sortOrder: 50
+  },
+  events: {
+    id: "events",
+    label: "이벤트 데이터",
+    sortOrder: 20
+  },
+  internal: {
+    id: "internal",
+    label: "시스템 내부 데이터",
+    sortOrder: 90
+  },
+  operations: {
+    id: "operations",
+    label: "로봇/임무 운영 데이터",
+    sortOrder: 40
+  },
+  other: {
+    id: "other",
+    label: "기타 관제 데이터",
+    sortOrder: 80
+  },
+  recordings: {
+    id: "recordings",
+    label: "녹화 데이터",
+    sortOrder: 30
+  },
+  sensors: {
+    id: "sensors",
+    label: "센서 데이터",
+    sortOrder: 10
+  }
+};
+
+const databaseTableCategoryIDs = {
+  browser_sessions: "operations",
+  control_acks: "control",
+  control_commands: "control",
+  events: "events",
+  mission_robots: "operations",
+  missions: "operations",
+  recorder_sessions: "operations",
+  recording_chunks: "recordings",
+  recording_finalization_jobs: "recordings",
+  recording_sessions: "recordings",
+  robot_sessions: "operations",
+  robot_stream_sessions: "operations",
+  robot_tokens: "operations",
+  robots: "operations",
+  sensor_descriptors: "sensors",
+  sensor_latest_samples: "sensors",
+  sensor_samples: "sensors",
+  storage_objects: "recordings",
+  users: "operations"
+};
 
 function makePeerSummaryKey(peer) {
   if (!peer?.role) {

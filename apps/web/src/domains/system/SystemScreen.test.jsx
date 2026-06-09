@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   countRoomPublishedTracks,
   countRoomRobotPublishers,
+  createDatabaseUsageCategories,
   createRoomPeerSummaries,
   formatStorageByteCount,
   normalizeDatabaseUsage,
@@ -68,20 +69,50 @@ describe("SystemScreen usage summaries", () => {
       status: "ok",
       tables: [
         { tableName: "events", rowCount: "100036", totalBytes: "7340032" },
-        { tableName: "sensor_samples", rowCount: null, totalBytes: "1048576" }
+        { tableName: "sensor_samples", rowCount: null, totalBytes: "1048576" },
+        { tableName: "spatial_ref_sys", rowCount: "8500", totalBytes: "7340032" }
       ]
     });
 
     expect(usage).toEqual({
+      categories: [
+        { id: "events", label: "이벤트 데이터", rowCount: 100036, sortOrder: 20, tableCount: 1, totalBytes: 7340032 },
+        { id: "sensors", label: "센서 데이터", rowCount: 0, sortOrder: 10, tableCount: 1, totalBytes: 1048576 },
+        { id: "internal", label: "시스템 내부 데이터", rowCount: 8500, sortOrder: 90, tableCount: 1, totalBytes: 7340032 }
+      ],
       databaseName: "robot_center",
       databaseSizeBytes: 10485760,
       status: "ok",
       tables: [
         { tableName: "events", rowCount: 100036, totalBytes: 7340032 },
-        { tableName: "sensor_samples", rowCount: 0, totalBytes: 1048576 }
+        { tableName: "sensor_samples", rowCount: 0, totalBytes: 1048576 },
+        { tableName: "spatial_ref_sys", rowCount: 8500, totalBytes: 7340032 }
       ],
       trackedTableBytes: 8388608
     });
+  });
+
+  it("groups raw database tables into user-facing categories", () => {
+    const categories = createDatabaseUsageCategories([
+      { tableName: "sensor_samples", rowCount: 20, totalBytes: 500 },
+      { tableName: "sensor_descriptors", rowCount: 2, totalBytes: 50 },
+      { tableName: "recording_chunks", rowCount: 10, totalBytes: 300 },
+      { tableName: "spatial_ref_sys", rowCount: 8500, totalBytes: 700 },
+      { tableName: "custom_table", rowCount: 1, totalBytes: 100 }
+    ]);
+
+    expect(categories.map((category) => category.label)).toEqual([
+      "센서 데이터",
+      "녹화 데이터",
+      "기타 관제 데이터",
+      "시스템 내부 데이터"
+    ]);
+    expect(categories.find((category) => category.id === "sensors")).toMatchObject({
+      rowCount: 22,
+      tableCount: 2,
+      totalBytes: 550
+    });
+    expect(categories.some((category) => category.label === "spatial_ref_sys")).toBe(false);
   });
 
   it("normalizes object storage percent from byte counts when needed", () => {

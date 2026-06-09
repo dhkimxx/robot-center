@@ -3,7 +3,6 @@ import {
   formatInteger,
   formatStorageByteCount,
   formatStoragePercent,
-  makeDatabaseTableLabel,
   makeRecorderRuntimeBlockingLabel,
   makeStorageChartColor
 } from "./systemViewModel.js";
@@ -72,7 +71,7 @@ export function DatabaseUsagePanel({ usage }) {
     );
   }
 
-  const topTables = usage.tables.slice(0, 5);
+  const categories = usage.categories ?? [];
   return (
     <div className="grid gap-3 rounded-lg border border-slate-500/20 bg-command-900/50 p-3">
       <div className="min-w-0">
@@ -83,17 +82,17 @@ export function DatabaseUsagePanel({ usage }) {
         <StorageMetric label="전체 크기" value={formatStorageByteCount(usage.databaseSizeBytes)} />
         <StorageMetric label="관리 테이블 크기" value={formatStorageByteCount(usage.trackedTableBytes)} />
       </div>
-      {topTables.length > 0 ? (
+      {categories.length > 0 ? (
         <div className="grid gap-1.5">
-          {topTables.map((table) => (
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-slate-500/15 bg-white/[0.025] px-3 py-2" key={table.tableName}>
+          {categories.map((category) => (
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-slate-500/15 bg-white/[0.025] px-3 py-2" key={category.id}>
               <div className="min-w-0">
-                <strong className="block truncate text-xs font-black text-slate-200">{makeDatabaseTableLabel(table.tableName)}</strong>
-                <span className="mt-0.5 block truncate text-[11px] font-bold text-slate-500">{table.tableName}</span>
+                <strong className="block truncate text-xs font-black text-slate-200">{category.label}</strong>
+                <span className="mt-0.5 block truncate text-[11px] font-bold text-slate-500">관련 항목 {formatInteger(category.tableCount)}개</span>
               </div>
               <div className="text-right">
-                <strong className="block text-xs font-black text-slate-100">{formatStorageByteCount(table.totalBytes)}</strong>
-                <span className="mt-0.5 block text-[11px] font-bold text-slate-500">추정 {formatInteger(table.rowCount)}건</span>
+                <strong className="block text-xs font-black text-slate-100">{formatStorageByteCount(category.totalBytes)}</strong>
+                <span className="mt-0.5 block text-[11px] font-bold text-slate-500">추정 {formatInteger(category.rowCount)}건</span>
               </div>
             </div>
           ))}
