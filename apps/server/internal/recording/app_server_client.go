@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -29,6 +30,21 @@ type AppServerClient interface {
 type HTTPAppServerClient struct {
 	baseURL    string
 	httpClient *http.Client
+}
+
+var errAppServerConflict = errors.New("app-server conflict")
+
+type appServerStatusError struct {
+	statusCode int
+	status     string
+}
+
+func (e appServerStatusError) Error() string {
+	return fmt.Sprintf("app-server returned %s", e.status)
+}
+
+func (e appServerStatusError) Is(target error) bool {
+	return target == errAppServerConflict && e.statusCode == http.StatusConflict
 }
 
 func NewHTTPAppServerClient(baseURL string, httpClient *http.Client) *HTTPAppServerClient {
@@ -150,7 +166,7 @@ func (c *HTTPAppServerClient) MarkRecordingFileUploaded(ctx context.Context, chu
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("app-server returned %s", response.Status)
+		return appServerStatusError{statusCode: response.StatusCode, status: response.Status}
 	}
 	return nil
 }
@@ -166,7 +182,7 @@ func (c *HTTPAppServerClient) MarkRecordingChunkUploaded(ctx context.Context, ch
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("app-server returned %s", response.Status)
+		return appServerStatusError{statusCode: response.StatusCode, status: response.Status}
 	}
 	return nil
 }

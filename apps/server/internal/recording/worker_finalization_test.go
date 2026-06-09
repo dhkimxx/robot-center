@@ -188,3 +188,69 @@ func TestWorkerTickRetriesFailedChunkFinalization(t *testing.T) {
 		t.Fatalf("pending finalizations = %d, want 0 after retry", len(worker.pendingFinalizations))
 	}
 }
+
+func TestWorkerDropsPendingFinalizationAfterAppServerConflict(t *testing.T) {
+	chunk := domain.RecordingChunk{
+		ID:                "chunk-001",
+		MissionCode:       "mission-001",
+		RobotCode:         "robot-001",
+		ManifestObjectKey: "missions/mission-001/robots/robot-001/chunk-001_manifest.json",
+		MediaObjectKeys:   map[string]string{},
+	}
+	mediaKey := recorderMediaKey(chunk.MissionCode, chunk.RobotCode)
+	mediaUploader := &fakeMediaUploader{err: errAppServerConflict}
+	worker := newWorkerWithCollaborators(
+		config.RecorderWorkerConfig{RecordingChunkDuration: 10 * time.Minute},
+		&fakeAppServerClient{},
+		&fakeObjectStorage{manifestSize: 42},
+	)
+	worker.mediaUploader = mediaUploader
+	worker.pendingFinalizations[recordingChunkFinalizationKey(mediaKey, chunk.ID)] = recordingChunkFinalization{
+		mediaKey: mediaKey,
+		chunk:    chunk,
+	}
+
+	worker.processPendingRecordingChunkFinalizations(context.Background())
+
+	if len(worker.pendingFinalizations) != 0 {
+		t.Fatalf("pending finalizations = %d, want 0 after conflict", len(worker.pendingFinalizations))
+	}
+	if len(mediaUploader.finalizedChunks) != 1 {
+		t.Fatalf("finalized chunks = %d, want 1", len(mediaUploader.finalizedChunks))
+	}
+}
+
+func TestWorkerRemovesPendingFinalizationWhenClaimedJobHandlesSameChunk(t *testing.T) {
+	chunk := domain.RecordingChunk{
+		ID:                "chunk-001",
+		MissionCode:       "mission-001",
+		RobotCode:         "robot-001",
+		ManifestObjectKey: "missions/mission-001/robots/robot-001/chunk-001_manifest.json",
+		MediaObjectKeys:   map[string]string{},
+	}
+	mediaKey := recorderMediaKey(chunk.MissionCode, chunk.RobotCode)
+	appServerClient := &fakeAppServerClient{
+		claimedJobs: []domain.RecordingFinalizationJob{
+			{ID: "job-001", RecordingChunkID: chunk.ID, Attempts: 2, Chunk: chunk},
+		},
+	}
+	worker := newWorkerWithCollaborators(
+		config.RecorderWorkerConfig{RecordingChunkDuration: 10 * time.Minute},
+		appServerClient,
+		&fakeObjectStorage{manifestSize: 42},
+	)
+	worker.mediaUploader = &fakeMediaUploader{}
+	worker.pendingFinalizations[recordingChunkFinalizationKey(mediaKey, chunk.ID)] = recordingChunkFinalization{
+		mediaKey: mediaKey,
+		chunk:    chunk,
+	}
+
+	worker.processClaimedRecordingFinalizationJobs(context.Background())
+
+	if len(worker.pendingFinalizations) != 0 {
+		t.Fatalf("pending finalizations = %d, want 0 after claimed job", len(worker.pendingFinalizations))
+	}
+	if appServerClient.completedJobID != "job-001" {
+		t.Fatalf("completed job id = %q, want job-001", appServerClient.completedJobID)
+	}
+}

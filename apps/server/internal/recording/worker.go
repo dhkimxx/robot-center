@@ -147,6 +147,17 @@ func (w *Worker) processPendingRecordingChunkFinalizations(ctx context.Context) 
 	pendingFinalizations := w.pendingRecordingChunkFinalizations()
 	for _, pendingFinalization := range pendingFinalizations {
 		if err := w.finalizeRecordingChunk(ctx, pendingFinalization.mediaKey, pendingFinalization.chunk, RecordingUploadContext{}); err != nil {
+			if errors.Is(err, errAppServerConflict) {
+				log.Printf(
+					"recorder-worker pending chunk finalization dropped after app-server conflict mission=%s robot=%s chunk=%s: %v",
+					pendingFinalization.chunk.MissionCode,
+					pendingFinalization.chunk.RobotCode,
+					pendingFinalization.chunk.ID,
+					err,
+				)
+				w.removePendingRecordingChunkFinalization(pendingFinalization.mediaKey, pendingFinalization.chunk.ID)
+				continue
+			}
 			log.Printf("recorder-worker chunk finalize failed chunk=%s: %v", pendingFinalization.chunk.ID, err)
 			continue
 		}
@@ -164,6 +175,7 @@ func (w *Worker) processClaimedRecordingFinalizationJobs(ctx context.Context) {
 		mediaKey := recorderMediaKey(job.Chunk.MissionCode, job.Chunk.RobotCode)
 		uploadContext := RecordingUploadContext{WorkerID: w.workerID, Attempt: job.Attempts}
 		err := w.finalizeRecordingChunk(ctx, mediaKey, job.Chunk, uploadContext)
+		w.removePendingRecordingChunkFinalization(mediaKey, job.Chunk.ID)
 		switch {
 		case err == nil:
 			if markErr := w.appServerClient.MarkRecordingFinalizationJobCompleted(ctx, job.ID, uploadContext); markErr != nil {

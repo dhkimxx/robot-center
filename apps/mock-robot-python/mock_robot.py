@@ -25,6 +25,14 @@ from aiortc.sdp import candidate_from_sdp
 
 INITIAL_RECONNECT_DELAY_SECONDS = 1
 MAX_RECONNECT_DELAY_SECONDS = 30
+DETECTION_BBOX_PATTERNS: tuple[dict[str, float], ...] = (
+    {"x": 0.50, "y": 0.50, "width": 0.04, "height": 0.04},
+    {"x": 0.22, "y": 0.24, "width": 0.18, "height": 0.18},
+    {"x": 0.05, "y": 0.12, "width": 0.80, "height": 0.14},
+    {"x": 0.43, "y": 0.06, "width": 0.14, "height": 0.82},
+    {"x": 0.12, "y": 0.12, "width": 0.70, "height": 0.64},
+    {"x": 0.72, "y": 0.68, "width": 0.28, "height": 0.32},
+)
 
 
 def utc_now_iso() -> str:
@@ -929,8 +937,7 @@ class MockRobot:
         def detection_snapshot_event(track_id: str, offset: int) -> dict[str, Any]:
             tick = sequence + offset
             class_name = ["person", "smoke", "vehicle"][tick % 3]
-            x = 0.12 + (tick % 5) * 0.08
-            y = 0.16 + (tick % 4) * 0.07
+            bbox = DETECTION_BBOX_PATTERNS[tick % len(DETECTION_BBOX_PATTERNS)]
             should_clear_snapshot = (track_id == "track.video_1" and sequence % 15 == 0) or (
                 track_id == "track.video_2" and sequence % 20 == 0
             )
@@ -939,10 +946,10 @@ class MockRobot:
                     "className": class_name,
                     "confidence": round(0.72 + (tick % 20) / 100, 2),
                     "bbox": {
-                        "x": round(x, 3),
-                        "y": round(y, 3),
-                        "width": 0.22,
-                        "height": 0.28,
+                        "x": bbox["x"],
+                        "y": bbox["y"],
+                        "width": bbox["width"],
+                        "height": bbox["height"],
                     },
                 }
             ]
