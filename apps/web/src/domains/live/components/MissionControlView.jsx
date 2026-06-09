@@ -1,8 +1,14 @@
+import { useCallback, useState } from "react";
 import Button from "../../../components/ui/Button.jsx";
 import EmptyState from "../../../components/ui/EmptyState.jsx";
 import Surface from "../../../components/ui/Surface.jsx";
 import { formatDateTimeFull } from "../../../utils/formatters.js";
 import { makeLiveRecordingTimingLabel, makeLiveStreamTimingLabel } from "../../missions/missionHelpers.js";
+import {
+  detectionOverlaySettingLimits,
+  readDetectionOverlaySettings,
+  writeDetectionOverlaySettings
+} from "../detectionOverlaySettings.js";
 import {
   connectedLiveConnectionStatuses,
   reconnectableLiveStatuses
@@ -32,6 +38,7 @@ export function MissionControlView({
   selectedMissionTargetKey,
   setSelectedMissionTargetKey
 }) {
+  const [detectionOverlaySettings, setDetectionOverlaySettings] = useState(readDetectionOverlaySettings);
   const selectedTarget = missionTargets.find((target) => target.key === selectedMissionTargetKey) ?? missionTargets[0] ?? null;
   const selectedSession = selectedTarget ? liveSessions[selectedTarget.key] ?? createEmptyLiveSession() : createEmptyLiveSession();
   const connectedCount = missionTargets.filter((target) => {
@@ -52,6 +59,13 @@ export function MissionControlView({
   const selectedRecordingTimingLabel = selectedTarget
     ? makeLiveRecordingTimingLabel(selectedTarget.liveStatus?.recording)
     : "";
+  const updateDetectionOverlaySetting = useCallback((field, value) => {
+    setDetectionOverlaySettings((current) => writeDetectionOverlaySettings({
+      ...current,
+      [field]: value
+    }));
+  }, []);
+  const detectionOverlayTtlMs = detectionOverlaySettings.ttlSeconds * 1000;
 
   return (
     <section className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)_336px] items-stretch gap-3.5 max-[1240px]:grid-cols-1">
@@ -90,6 +104,11 @@ export function MissionControlView({
                 {selectedStreamTimingLabel} · {selectedRecordingTimingLabel}
               </span>
             ) : null}
+            <DetectionOverlayControls
+              maxDetections={detectionOverlaySettings.maxDetections}
+              onChange={updateDetectionOverlaySetting}
+              ttlSeconds={detectionOverlaySettings.ttlSeconds}
+            />
           </Surface>
         </div>
 
@@ -100,27 +119,31 @@ export function MissionControlView({
         ) : (
           <Surface className="grid min-h-0 overflow-hidden p-0">
             <div className="grid min-h-0 grid-cols-2 grid-rows-2 gap-3 p-0 max-[900px]:grid-cols-1 max-[900px]:grid-rows-none">
-            <VideoPane
-              className="min-h-0"
-              detectionOverlay={selectedSession.detectionOverlays?.rgb}
-              label="RGB"
-              stream={selectedSession.videoStreams.rgb}
-            />
-            <VideoPane
-              className="min-h-0"
-              detectionOverlay={selectedSession.detectionOverlays?.thermal}
-              label="Thermal"
-              stream={selectedSession.videoStreams.thermal}
-              thermal
-            />
-            <RobotMap className="min-h-0" telemetry={latestTelemetry} />
-            <SensorPanel
-              className="min-h-0"
-              isRefreshing={isSensorSnapshotRefreshing}
-              onRefresh={onRefreshSensorSnapshot}
-              sensor={latestSensor}
-              sourceLabel={latestSensorSourceLabel}
-            />
+              <VideoPane
+                className="min-h-0"
+                detectionOverlay={selectedSession.detectionOverlays?.rgb}
+                detectionOverlayMaxCount={detectionOverlaySettings.maxDetections}
+                detectionOverlayTtlMs={detectionOverlayTtlMs}
+                label="RGB"
+                stream={selectedSession.videoStreams.rgb}
+              />
+              <VideoPane
+                className="min-h-0"
+                detectionOverlay={selectedSession.detectionOverlays?.thermal}
+                detectionOverlayMaxCount={detectionOverlaySettings.maxDetections}
+                detectionOverlayTtlMs={detectionOverlayTtlMs}
+                label="Thermal"
+                stream={selectedSession.videoStreams.thermal}
+                thermal
+              />
+              <RobotMap className="min-h-0" telemetry={latestTelemetry} />
+              <SensorPanel
+                className="min-h-0"
+                isRefreshing={isSensorSnapshotRefreshing}
+                onRefresh={onRefreshSensorSnapshot}
+                sensor={latestSensor}
+                sourceLabel={latestSensorSourceLabel}
+              />
             </div>
           </Surface>
         )}
@@ -132,5 +155,45 @@ export function MissionControlView({
         <EventPanel liveEvents={liveEvents} />
       </aside>
     </section>
+  );
+}
+
+function DetectionOverlayControls({ maxDetections, onChange, ttlSeconds }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 pl-[70px] max-[560px]:pl-0">
+      <NumberSetting
+        label="bbox 유지"
+        max={detectionOverlaySettingLimits.ttlSeconds.max}
+        min={detectionOverlaySettingLimits.ttlSeconds.min}
+        onChange={(value) => onChange("ttlSeconds", value)}
+        suffix="초"
+        value={ttlSeconds}
+      />
+      <NumberSetting
+        label="bbox 최대"
+        max={detectionOverlaySettingLimits.maxDetections.max}
+        min={detectionOverlaySettingLimits.maxDetections.min}
+        onChange={(value) => onChange("maxDetections", value)}
+        suffix="개"
+        value={maxDetections}
+      />
+    </div>
+  );
+}
+
+function NumberSetting({ label, max, min, onChange, suffix, value }) {
+  return (
+    <label className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-slate-500/20 bg-command-950/55 px-2 text-xs font-bold text-slate-400">
+      <span className="shrink-0">{label}</span>
+      <input
+        className="h-6 w-12 rounded-md border border-slate-600/60 bg-command-900 px-1.5 text-right text-xs font-black text-slate-100 outline-none focus:border-sapphire-400"
+        max={max}
+        min={min}
+        onChange={(event) => onChange(event.target.value)}
+        type="number"
+        value={value}
+      />
+      <span className="shrink-0 text-slate-500">{suffix}</span>
+    </label>
   );
 }

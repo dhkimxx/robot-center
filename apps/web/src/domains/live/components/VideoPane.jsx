@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { cn } from "../../../utils/cn.js";
-import { detectionOverlayTtlMs, getDetectionColor, isDetectionOverlayFresh } from "../liveEventStrategies.js";
+import { detectionOverlayTtlMs as defaultDetectionOverlayTtlMs, getDetectionColor, isDetectionOverlayFresh } from "../liveEventStrategies.js";
 import { stopMediaStreamTracks } from "../liveMediaCleanup.js";
 
 const emptyVideoMetrics = {
@@ -9,7 +9,16 @@ const emptyVideoMetrics = {
   fps: 0
 };
 
-export function VideoPane({ className = "", compact = false, detectionOverlay = null, label, stream, thermal = false }) {
+export function VideoPane({
+  className = "",
+  compact = false,
+  detectionOverlay = null,
+  detectionOverlayMaxCount = 10,
+  detectionOverlayTtlMs = defaultDetectionOverlayTtlMs,
+  label,
+  stream,
+  thermal = false
+}) {
   const containerRef = useRef(null);
   const videoRef = useRef(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -161,18 +170,21 @@ export function VideoPane({ className = "", compact = false, detectionOverlay = 
     }
     const now = Date.now();
     const measuredAt = Date.parse(detectionOverlay.receivedAt || detectionOverlay.timestamp || "");
+    const ttlMs = normalizeDetectionOverlayTtlMs(detectionOverlayTtlMs);
     const expiresInMs = Number.isFinite(measuredAt)
-      ? Math.max(0, detectionOverlayTtlMs - (now - measuredAt))
-      : detectionOverlayTtlMs;
+      ? Math.max(0, ttlMs - (now - measuredAt))
+      : ttlMs;
     setOverlayNow(now);
     const timeoutId = window.setTimeout(() => setOverlayNow(Date.now()), expiresInMs + 50);
     return () => window.clearTimeout(timeoutId);
-  }, [detectionOverlay]);
+  }, [detectionOverlay, detectionOverlayTtlMs]);
 
   const shouldShowLoading = !stream || !isVideoReady;
   const resolutionLabel = videoMetrics.width && videoMetrics.height ? `${videoMetrics.width}x${videoMetrics.height}` : "-";
   const fpsLabel = videoMetrics.fps > 0 ? `${videoMetrics.fps} fps` : "- fps";
-  const visibleDetections = isDetectionOverlayFresh(detectionOverlay, overlayNow) ? detectionOverlay.detections ?? [] : [];
+  const visibleDetections = isDetectionOverlayFresh(detectionOverlay, overlayNow, detectionOverlayTtlMs)
+    ? (detectionOverlay.detections ?? []).slice(0, normalizeDetectionOverlayMaxCount(detectionOverlayMaxCount))
+    : [];
   const videoRect = calculateVideoContentRect(containerSize, videoMetrics);
 
   return (
@@ -210,6 +222,22 @@ export function VideoPane({ className = "", compact = false, detectionOverlay = 
       </div>
     </div>
   );
+}
+
+function normalizeDetectionOverlayTtlMs(value) {
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue) || numberValue <= 0) {
+    return defaultDetectionOverlayTtlMs;
+  }
+  return numberValue;
+}
+
+function normalizeDetectionOverlayMaxCount(value) {
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue) || numberValue <= 0) {
+    return 10;
+  }
+  return Math.max(1, Math.round(numberValue));
 }
 
 function calculateVideoContentRect(containerSize, videoMetrics) {

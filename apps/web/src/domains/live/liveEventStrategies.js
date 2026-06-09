@@ -159,9 +159,10 @@ export function createEmptyDetectionOverlays() {
   };
 }
 
-export function isDetectionOverlayFresh(overlay, nowMs = Date.now()) {
+export function isDetectionOverlayFresh(overlay, nowMs = Date.now(), ttlMs = detectionOverlayTtlMs) {
   const measuredAt = Date.parse(overlay?.receivedAt || overlay?.timestamp || "");
-  return Number.isFinite(measuredAt) && nowMs - measuredAt <= detectionOverlayTtlMs;
+  const normalizedTtlMs = Math.max(0, Number(ttlMs) || detectionOverlayTtlMs);
+  return Number.isFinite(measuredAt) && nowMs - measuredAt <= normalizedTtlMs;
 }
 
 export function getDetectionColor(className) {

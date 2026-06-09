@@ -107,5 +107,6 @@ describe("createEventLiveProjection", () => {
 
     expect(isDetectionOverlayFresh(overlay, Date.parse("2026-06-08T01:00:02.500Z"))).toBe(true);
     expect(isDetectionOverlayFresh(overlay, Date.parse("2026-06-08T01:00:04.000Z"))).toBe(false);
+    expect(isDetectionOverlayFresh(overlay, Date.parse("2026-06-08T01:00:04.000Z"), 5000)).toBe(true);
   });
 });

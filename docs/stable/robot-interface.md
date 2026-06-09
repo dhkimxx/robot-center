@@ -38,6 +38,7 @@ history:
 - '2026-06-08 danya.kim <danya.kim@thundersoft.com>: document strict detection.object validation rules'
 - '2026-06-09 danya.kim <danya.kim@thundersoft.com>: clarify implemented channel.event type schemas'
 - '2026-06-09 danya.kim <danya.kim@thundersoft.com>: reduce mission.event v0 schema to minimal fields'
+- '2026-06-09 danya.kim <danya.kim@thundersoft.com>: document configurable detection overlay UI settings'
 ---
 
 # Robot Gateway Interface
@@ -505,7 +506,7 @@ Event item:
 
 관제 서버는 `detection.object`의 `values.trackId`, `values.detections`, `className`, `confidence`, `bbox` 필수값과 범위를 검증한다. 유효하지 않은 `detection.object`는 저장/overlay에 반영하지 않고 거절한다.
 
-Live UI는 track별 최신 snapshot만 표시한다. 새 snapshot이 오면 이전 bbox를 교체하고, `detections: []`가 오면 즉시 제거한다. 최신 snapshot은 약 3초 TTL 이후 자동 제거된다. 일반 이벤트 피드 기본 조회에서는 `detection.object`를 제외한다.
+Live UI는 track별 최신 snapshot만 표시한다. 새 snapshot이 오면 이전 bbox를 교체하고, `detections: []`가 오면 즉시 제거한다. overlay 유지 시간과 최대 bbox 표시 개수는 관제 UI 설정값이며 기본값은 약 3초, 10개다. 일반 이벤트 피드 기본 조회에서는 `detection.object`를 제외한다.
 
 #### `mission.event`
 
