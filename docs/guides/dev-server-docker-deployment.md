@@ -1,7 +1,7 @@
 ---
 title: "dev-server-docker-deployment"
 created: 2026-05-27
-updated: '2026-06-04'
+updated: '2026-06-09'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>"]
 type: "runbook"
@@ -16,6 +16,8 @@ history:
 - '2026-06-01 danya.kim <danya.kim@thundersoft.com>: update dev-server verification endpoints to role-based /api/v1 namespaces'
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: reorganize docs directories by document purpose'
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: absorb multi-robot SFU regression checks into deployment verification'
+- '2026-06-09 danya.kim <danya.kim@thundersoft.com>: standardize dev-server rsync deployment script'
+- '2026-06-09 danya.kim <danya.kim@thundersoft.com>: document deploy artifact exclusions and local runtime cleanup'
 ---
 
 # Dev Server Docker Deployment
@@ -65,19 +67,24 @@ mkdir -p /home/danya/robot-center-dev
 cd /home/danya/robot-center-dev
 ```
 
-코드는 `git clone`, `rsync`, archive upload 중 하나로 준비한다. 서버에는 Node/npm이 없으므로 web build는 다음 중 하나를 선택한다.
+현재 개발서버 배포는 로컬에서 web build 후 `rsync`로 서버 디렉터리를 동기화하는 방식을 표준으로 한다. 서버에는 Node/npm이 없으므로 web build는 로컬에서 수행한다.
 
-Option A: 로컬에서 `apps/web/dist`를 빌드한 뒤 서버로 복사한다.
+권장 배포 명령:
 
 ```bash
-cd /Users/dhkim/workspace/sst/robot-center/apps/web
-npm ci
-npm run build
+cd /Users/dhkim/workspace/sst/robot-center
+./scripts/deploy-dev-server.sh
 ```
 
-Option B: 서버에 Node/npm을 설치하고 서버에서 빌드한다.
+password 방식 SSH 환경에서는 다음처럼 실행할 수 있다.
 
-P0 임시 배포에서는 서버 패키지 설치를 줄이기 위해 Option A를 우선한다.
+```bash
+SSHPASS='...' ./scripts/deploy-dev-server.sh
+```
+
+수동 배포가 필요할 때만 로컬에서 `apps/web/dist`를 빌드한 뒤 서버에 복사한다.
+
+배포 동기화 대상에서는 git metadata, secret env, 로컬 runtime, Playwright 산출물, `node_modules`, Android build output을 제외한다. 개발서버에는 Docker 실행에 필요한 소스, 배포 설정, 빌드된 web static 파일만 올린다.
 
 ## 5. Env 파일
 
@@ -136,7 +143,7 @@ EOF
 
 ## 6. 서비스 기동
 
-`turn` service는 `docker-turn` profile에 묶여 있으므로 profile을 켠다.
+일반 배포는 `scripts/deploy-dev-server.sh`를 사용한다. `turn` service는 `docker-turn` profile에 묶여 있으므로 수동 기동 시에도 profile을 켠다.
 
 ```bash
 cd /home/danya/robot-center-dev
@@ -158,7 +165,23 @@ docker compose \
   ps
 ```
 
-## 7. Health 확인
+## 7. 로컬 산출물 정리
+
+로컬에서 WebRTC/녹화 테스트를 반복하면 `apps/server/.runtime/recordings`가 크게 늘어난다. 삭제 전 dry-run으로 대상을 확인한다.
+
+```bash
+./scripts/clean-local-runtime.sh
+```
+
+문제가 없으면 실제 삭제를 실행한다.
+
+```bash
+./scripts/clean-local-runtime.sh --apply
+```
+
+Python Mock Robot 가상환경까지 다시 만들고 싶을 때만 `--python-venv`를 추가한다.
+
+## 8. Health 확인
 
 서버 내부에서 확인:
 
@@ -184,7 +207,7 @@ TURN URL: turn:192.168.20.12:3478?transport=udp
 iceTransportPolicy: relay
 ```
 
-## 8. 로그 확인
+## 9. 로그 확인
 
 ```bash
 docker compose --env-file .env.dev-server -f deploy/docker-compose.yml --profile docker-turn logs -f app-server
@@ -192,7 +215,7 @@ docker compose --env-file .env.dev-server -f deploy/docker-compose.yml --profile
 docker compose --env-file .env.dev-server -f deploy/docker-compose.yml --profile docker-turn logs -f turn
 ```
 
-## 9. 관제 데이터 준비
+## 10. 관제 데이터 준비
 
 배포가 끝난 뒤 관제팀은 Web UI 또는 REST API로 테스트 robot과 mission을 준비한다.
 
@@ -228,7 +251,7 @@ curl -fsS -X POST http://127.0.0.1:18080/api/v1/operator/missions/mission-001/st
 
 로봇팀에는 `serverUrl`, `robotCode`, `robotToken`만 전달한다. token은 문서, git, 공개 채팅에 남기지 않는다.
 
-## 10. 종료와 초기화
+## 11. 종료와 초기화
 
 테스트 mission 종료:
 
@@ -257,7 +280,7 @@ docker compose \
   down -v
 ```
 
-## 11. 배포 완료 기준
+## 12. 배포 완료 기준
 
 - `app-server`, `recorder-worker`, `turn`, `postgres`, `minio` container가 running/healthy
 - `http://192.168.20.12:18080` UI 접속 가능
