@@ -19,6 +19,12 @@ SKIP_WEB_ROUTE_CHECK=0
 FORCE_ALL_CHECKS=0
 LOG_SINCE="${LOG_SINCE:-5m}"
 WEB_BUILD_RAN=0
+WEBRTC_SMOKE=0
+WEBRTC_SMOKE_MISSION_CODE="${WEBRTC_SMOKE_MISSION_CODE:-}"
+WEBRTC_SMOKE_ROBOT_CODE="${WEBRTC_SMOKE_ROBOT_CODE:-}"
+WEBRTC_SMOKE_MIN_ROBOTS="${WEBRTC_SMOKE_MIN_ROBOTS:-1}"
+WEBRTC_SMOKE_FRESHNESS_SECONDS="${WEBRTC_SMOKE_FRESHNESS_SECONDS:-120}"
+WEBRTC_SMOKE_REQUIRE_RECORDING=0
 
 usage() {
   cat <<'EOF'
@@ -36,6 +42,17 @@ Options:
   --skip-web-route-check   Skip the deployed /system route reachability check.
   --all-checks             Run backend and frontend checks even if changed files do not require them.
   --since DURATION         Remote log window for post-deploy scan. Default: 5m.
+  --webrtc-smoke           Verify at least one live WebRTC publisher through system/live APIs.
+  --webrtc-smoke-mission MISSION_CODE
+                           Limit WebRTC smoke verification to one mission.
+  --webrtc-smoke-robot ROBOT_CODE
+                           Limit WebRTC smoke verification to one robot.
+  --webrtc-smoke-min-robots COUNT
+                           Minimum passing WebRTC publishers. Default: 1.
+  --webrtc-smoke-freshness-seconds SECONDS
+                           Max age for media/data timestamps. Default: 120.
+  --webrtc-smoke-require-recording
+                           Also require live recording state to be recording.
   -h, --help               Show this help.
 
 Environment:
@@ -44,6 +61,10 @@ Environment:
   DEV_SERVER_PATH          Default: /home/danya/robot-center-dev
   DEV_SERVER_PUBLIC_URL    Default: http://192.168.20.12:18080
   DEV_SERVER_RECORDER_URL  Default: http://192.168.20.12:18082
+  WEBRTC_SMOKE_MISSION_CODE
+  WEBRTC_SMOKE_ROBOT_CODE
+  WEBRTC_SMOKE_MIN_ROBOTS
+  WEBRTC_SMOKE_FRESHNESS_SECONDS
 EOF
 }
 
@@ -88,6 +109,51 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       shift 2
+      ;;
+    --webrtc-smoke)
+      WEBRTC_SMOKE=1
+      shift
+      ;;
+    --webrtc-smoke-mission)
+      WEBRTC_SMOKE=1
+      WEBRTC_SMOKE_MISSION_CODE="${2:-}"
+      if [[ -z "$WEBRTC_SMOKE_MISSION_CODE" ]]; then
+        printf '%s\n' '--webrtc-smoke-mission requires a value' >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --webrtc-smoke-robot)
+      WEBRTC_SMOKE=1
+      WEBRTC_SMOKE_ROBOT_CODE="${2:-}"
+      if [[ -z "$WEBRTC_SMOKE_ROBOT_CODE" ]]; then
+        printf '%s\n' '--webrtc-smoke-robot requires a value' >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --webrtc-smoke-min-robots)
+      WEBRTC_SMOKE=1
+      WEBRTC_SMOKE_MIN_ROBOTS="${2:-}"
+      if [[ -z "$WEBRTC_SMOKE_MIN_ROBOTS" ]]; then
+        printf '%s\n' '--webrtc-smoke-min-robots requires a value' >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --webrtc-smoke-freshness-seconds)
+      WEBRTC_SMOKE=1
+      WEBRTC_SMOKE_FRESHNESS_SECONDS="${2:-}"
+      if [[ -z "$WEBRTC_SMOKE_FRESHNESS_SECONDS" ]]; then
+        printf '%s\n' '--webrtc-smoke-freshness-seconds requires a value' >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --webrtc-smoke-require-recording)
+      WEBRTC_SMOKE=1
+      WEBRTC_SMOKE_REQUIRE_RECORDING=1
+      shift
       ;;
     -h|--help)
       usage
@@ -149,7 +215,7 @@ run_local_checks() {
     should_check_server=1
     should_check_web=1
   else
-    if files_match '(^scripts/.*[.]sh$|^deploy/)'; then
+    if files_match '(^scripts/.*[.](sh|py)$|^deploy/)'; then
       should_check_scripts=1
     fi
     if files_match '(^apps/server/|^deploy/|^scripts/generate-server-swagger[.]sh$)'; then
@@ -166,6 +232,11 @@ run_local_checks() {
       [[ -n "$script_path" ]] || continue
       bash -n "$script_path"
     done < <(find "$ROOT_DIR/scripts" -maxdepth 1 -name '*.sh' -type f | sort)
+    require_command python3
+    while IFS= read -r script_path; do
+      [[ -n "$script_path" ]] || continue
+      python3 -m py_compile "$script_path"
+    done < <(find "$ROOT_DIR/scripts" -maxdepth 1 -name '*.py' -type f | sort)
   fi
 
   if [[ "$should_check_server" == "1" ]]; then
@@ -361,6 +432,33 @@ run_post_deploy_checks() {
   scan_remote_logs
 }
 
+run_webrtc_smoke_check() {
+  if [[ "$WEBRTC_SMOKE" != "1" ]]; then
+    return
+  fi
+
+  print_step "WebRTC smoke"
+  require_command python3
+
+  local args=(
+    "$ROOT_DIR/scripts/deploy-verify-webrtc-smoke.py"
+    --base-url "$DEV_SERVER_PUBLIC_URL"
+    --min-robots "$WEBRTC_SMOKE_MIN_ROBOTS"
+    --freshness-seconds "$WEBRTC_SMOKE_FRESHNESS_SECONDS"
+  )
+  if [[ -n "$WEBRTC_SMOKE_MISSION_CODE" ]]; then
+    args+=(--mission-code "$WEBRTC_SMOKE_MISSION_CODE")
+  fi
+  if [[ -n "$WEBRTC_SMOKE_ROBOT_CODE" ]]; then
+    args+=(--robot-code "$WEBRTC_SMOKE_ROBOT_CODE")
+  fi
+  if [[ "$WEBRTC_SMOKE_REQUIRE_RECORDING" == "1" ]]; then
+    args+=(--require-recording)
+  fi
+
+  python3 "${args[@]}"
+}
+
 require_command git
 CHANGED_FILES="$(changed_files)"
 
@@ -377,6 +475,7 @@ if [[ "$SKIP_POST_DEPLOY_CHECKS" == "1" ]]; then
 else
   run_post_deploy_checks
 fi
+run_webrtc_smoke_check
 
 printf '\nready\n'
 printf 'UI: %s\n' "$DEV_SERVER_PUBLIC_URL"

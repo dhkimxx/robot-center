@@ -235,6 +235,12 @@ Python Mock Robot
 ./scripts/deploy-verify.sh --no-commit
 ```
 
+WebRTC, SFU, live-status, recorder 연동에 영향을 주는 변경은 API 기반 smoke 확인을 추가한다.
+
+```bash
+./scripts/deploy-verify.sh --no-commit --webrtc-smoke --webrtc-smoke-mission mission-054
+```
+
 제한:
 
 - `배포검증`은 destructive git 명령, force push, production 배포, 데이터 삭제 권한을 포함하지 않는다.

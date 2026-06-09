@@ -19,6 +19,7 @@ history:
 - '2026-06-09 danya.kim <danya.kim@thundersoft.com>: standardize dev-server rsync deployment script'
 - '2026-06-09 danya.kim <danya.kim@thundersoft.com>: document deploy artifact exclusions and local runtime cleanup'
 - '2026-06-09 danya.kim <danya.kim@thundersoft.com>: document deploy verification harness'
+- '2026-06-09 danya.kim <danya.kim@thundersoft.com>: document WebRTC smoke option for deploy verification'
 ---
 
 # Dev Server Docker Deployment
@@ -117,7 +118,27 @@ SSHPASS='...' ./scripts/deploy-verify.sh --no-commit
 
 하네스는 secret을 저장하지 않는다. SSH password가 필요한 환경에서는 `SSHPASS` 환경변수로만 주입한다.
 
-WebRTC 영상 표시, 센서 갱신, 녹화 파일 재생, Android/Python/GStreamer Mock Robot 회귀 확인은 변경 성격에 따라 하네스 이후 별도로 수행한다.
+WebRTC 관련 변경은 API 기반 smoke 확인을 추가한다.
+
+```bash
+SSHPASS='...' ./scripts/deploy-verify.sh \
+  --no-commit \
+  --webrtc-smoke \
+  --webrtc-smoke-mission mission-054 \
+  --webrtc-smoke-min-robots 1
+```
+
+`--webrtc-smoke`는 개발서버의 `/api/v1/system/status`와 mission `live-status`를 읽어서 다음을 확인한다.
+
+- SFU publisher가 `publishing`이고 ICE state가 `connected` 또는 `completed`
+- `track.video_1`, `track.video_2`, `track.audio_1` 수신
+- `channel.telemetry`, `channel.spatial`, `channel.event`, `channel.control` open
+- telemetry message와 live media/data timestamp가 최근 값
+- live-status 기준 robot connection이 `online`, stream이 `streaming`
+
+녹화 상태까지 함께 확인하려면 `--webrtc-smoke-require-recording`을 추가한다.
+
+브라우저에서 실제 영상이 보이는지, 녹화 파일이 재생되는지, Android/Python/GStreamer Mock Robot을 새로 기동하는 회귀 확인은 변경 성격에 따라 하네스 이후 별도로 수행한다.
 
 ## 5. Env 파일
 
