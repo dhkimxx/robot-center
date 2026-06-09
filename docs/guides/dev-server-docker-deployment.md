@@ -20,6 +20,7 @@ history:
 - '2026-06-09 danya.kim <danya.kim@thundersoft.com>: document deploy artifact exclusions and local runtime cleanup'
 - '2026-06-09 danya.kim <danya.kim@thundersoft.com>: document deploy verification harness'
 - '2026-06-09 danya.kim <danya.kim@thundersoft.com>: document WebRTC smoke option for deploy verification'
+- '2026-06-09 danya.kim <danya.kim@thundersoft.com>: document deploy verification summary report'
 ---
 
 # Dev Server Docker Deployment
@@ -137,6 +138,38 @@ SSHPASS='...' ./scripts/deploy-verify.sh \
 - live-status 기준 robot connection이 `online`, stream이 `streaming`
 
 녹화 상태까지 함께 확인하려면 `--webrtc-smoke-require-recording`을 추가한다.
+
+하네스는 마지막에 요약 리포트를 한 번 출력한다. 성공 시에는 단계별 상태와 확인 URL, API/WebRTC 상세 결과가 남는다.
+
+```text
+==> deploy verification summary
+result:            ok
+branch:            main
+commit:            c0de684
+localChecks:       ok
+commitStep:        skipped
+pushStep:          skipped
+deploy:            skipped
+postDeploy:        skipped
+logScan:           skipped
+webrtcSmoke:       ok
+ui:                http://192.168.20.12:18080
+recorder:          http://192.168.20.12:18082/healthz
+details:
+  - webrtc smoke: mission=mission-054 passed robots=robot-042,robot-043,robot-045
+```
+
+실패 시에는 `result=failed`와 `failedStep`을 먼저 보고, 아래 `details`에서 실패 원인을 확인한다.
+
+```text
+==> deploy verification summary
+result:            failed
+failedStep:        WebRTC smoke
+webrtcSmoke:       failed
+details:
+  - WebRTC smoke: failed
+  - webrtc smoke failed: no SFU room found for mission-999
+```
 
 브라우저에서 실제 영상이 보이는지, 녹화 파일이 재생되는지, Android/Python/GStreamer Mock Robot을 새로 기동하는 회귀 확인은 변경 성격에 따라 하네스 이후 별도로 수행한다.
 

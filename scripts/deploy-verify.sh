@@ -26,6 +26,18 @@ WEBRTC_SMOKE_MIN_ROBOTS="${WEBRTC_SMOKE_MIN_ROBOTS:-1}"
 WEBRTC_SMOKE_FRESHNESS_SECONDS="${WEBRTC_SMOKE_FRESHNESS_SECONDS:-120}"
 WEBRTC_SMOKE_REQUIRE_RECORDING=0
 
+RUN_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+CURRENT_STEP="initialization"
+SUMMARY_PRINTED=0
+LOCAL_CHECKS_STATUS="pending"
+COMMIT_STATUS="pending"
+PUSH_STATUS="pending"
+DEPLOY_STATUS="pending"
+POST_DEPLOY_STATUS="pending"
+LOG_SCAN_STATUS="pending"
+WEBRTC_SMOKE_STATUS="not_requested"
+REPORT_LINES=()
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -181,7 +193,119 @@ require_command() {
 }
 
 print_step() {
+  CURRENT_STEP="$1"
   printf '\n==> %s\n' "$1"
+}
+
+append_report_line() {
+  REPORT_LINES+=("$1")
+}
+
+git_value() {
+  git "$@" 2>/dev/null || printf 'unknown'
+}
+
+mark_failed_status_for_current_step() {
+  case "$CURRENT_STEP" in
+    "local checks"|"script syntax checks"|"server checks"|"web checks")
+      if [[ "$LOCAL_CHECKS_STATUS" == "running" ]]; then
+        LOCAL_CHECKS_STATUS="failed"
+      fi
+      ;;
+    "commit")
+      if [[ "$COMMIT_STATUS" == "running" ]]; then
+        COMMIT_STATUS="failed"
+      fi
+      ;;
+    "push")
+      if [[ "$PUSH_STATUS" == "running" ]]; then
+        PUSH_STATUS="failed"
+      fi
+      ;;
+    "dev-server deploy")
+      if [[ "$DEPLOY_STATUS" == "running" ]]; then
+        DEPLOY_STATUS="failed"
+      fi
+      ;;
+    "post-deploy checks")
+      if [[ "$POST_DEPLOY_STATUS" == "running" ]]; then
+        POST_DEPLOY_STATUS="failed"
+      fi
+      ;;
+    "remote log scan")
+      if [[ "$LOG_SCAN_STATUS" == "running" ]]; then
+        LOG_SCAN_STATUS="failed"
+      fi
+      if [[ "$POST_DEPLOY_STATUS" == "running" ]]; then
+        POST_DEPLOY_STATUS="failed"
+      fi
+      ;;
+    "WebRTC smoke")
+      if [[ "$WEBRTC_SMOKE_STATUS" == "running" ]]; then
+        WEBRTC_SMOKE_STATUS="failed"
+      fi
+      ;;
+  esac
+  return 0
+}
+
+print_status_line() {
+  local label="$1"
+  local status="$2"
+  printf '%-18s %s\n' "$label:" "$status"
+}
+
+print_final_report() {
+  local exit_code="$1"
+  if [[ "$SUMMARY_PRINTED" == "1" ]]; then
+    return
+  fi
+  SUMMARY_PRINTED=1
+
+  if [[ "$exit_code" != "0" ]]; then
+    mark_failed_status_for_current_step
+  fi
+
+  local result="ok"
+  if [[ "$exit_code" != "0" ]]; then
+    result="failed"
+  fi
+
+  local branch_name commit_hash
+  branch_name="$(git_value rev-parse --abbrev-ref HEAD)"
+  commit_hash="$(git_value rev-parse --short HEAD)"
+
+  printf '\n==> deploy verification summary\n'
+  print_status_line "result" "$result"
+  print_status_line "startedAt" "$RUN_STARTED_AT"
+  print_status_line "branch" "$branch_name"
+  print_status_line "commit" "$commit_hash"
+  if [[ "$exit_code" != "0" ]]; then
+    print_status_line "failedStep" "$CURRENT_STEP"
+  fi
+  print_status_line "localChecks" "$LOCAL_CHECKS_STATUS"
+  print_status_line "commitStep" "$COMMIT_STATUS"
+  print_status_line "pushStep" "$PUSH_STATUS"
+  print_status_line "deploy" "$DEPLOY_STATUS"
+  print_status_line "postDeploy" "$POST_DEPLOY_STATUS"
+  print_status_line "logScan" "$LOG_SCAN_STATUS"
+  print_status_line "webrtcSmoke" "$WEBRTC_SMOKE_STATUS"
+  print_status_line "ui" "$DEV_SERVER_PUBLIC_URL"
+  print_status_line "recorder" "$DEV_SERVER_RECORDER_URL/healthz"
+
+  if [[ "${#REPORT_LINES[@]}" -gt 0 ]]; then
+    printf 'details:\n'
+    local line
+    for line in "${REPORT_LINES[@]}"; do
+      printf '  - %s\n' "$line"
+    done
+  fi
+}
+
+on_exit() {
+  local exit_code="$?"
+  print_final_report "$exit_code"
+  exit "$exit_code"
 }
 
 git_has_changes() {
@@ -202,6 +326,7 @@ files_match() {
 
 run_local_checks() {
   print_step "local checks"
+  LOCAL_CHECKS_STATUS="running"
   require_command git
   git diff --check
   git diff --cached --check
@@ -235,7 +360,15 @@ run_local_checks() {
     require_command python3
     while IFS= read -r script_path; do
       [[ -n "$script_path" ]] || continue
-      python3 -m py_compile "$script_path"
+      local py_compile_output
+      py_compile_output="$(mktemp)"
+      python3 - "$script_path" "$py_compile_output" <<'PY'
+import py_compile
+import sys
+
+py_compile.compile(sys.argv[1], cfile=sys.argv[2], doraise=True)
+PY
+      rm -f "$py_compile_output"
     done < <(find "$ROOT_DIR/scripts" -maxdepth 1 -name '*.py' -type f | sort)
   fi
 
@@ -265,7 +398,9 @@ run_local_checks() {
 
   if [[ "$should_check_scripts" != "1" && "$should_check_server" != "1" && "$should_check_web" != "1" ]]; then
     printf 'no backend/frontend/script checks required for current diff\n'
+    append_report_line "local checks: no backend/frontend/script checks required"
   fi
+  LOCAL_CHECKS_STATUS="ok"
 }
 
 commit_and_push_if_requested() {
@@ -281,16 +416,25 @@ commit_and_push_if_requested() {
     fi
     if [[ "$NO_COMMIT" == "1" ]]; then
       print_step "commit/push skipped"
+      COMMIT_STATUS="skipped"
+      PUSH_STATUS="skipped"
+    else
+      COMMIT_STATUS="not_requested"
+      PUSH_STATUS="not_requested"
     fi
     return
   fi
 
   print_step "commit"
+  COMMIT_STATUS="running"
   git add -A
   if git diff --cached --quiet; then
     printf 'no staged changes; commit skipped\n'
+    COMMIT_STATUS="skipped:no changes"
+    append_report_line "commit: skipped because there were no staged changes"
   else
     git commit -m "$COMMIT_MESSAGE"
+    COMMIT_STATUS="ok"
   fi
 
   local branch_name
@@ -301,30 +445,37 @@ commit_and_push_if_requested() {
   fi
 
   print_step "push"
+  PUSH_STATUS="running"
   git push origin "$branch_name"
+  PUSH_STATUS="ok"
 }
 
 run_deploy() {
   if [[ "$SKIP_DEPLOY" == "1" ]]; then
     print_step "deployment skipped"
+    DEPLOY_STATUS="skipped"
     return
   fi
 
   print_step "dev-server deploy"
+  DEPLOY_STATUS="running"
   if [[ "$WEB_BUILD_RAN" == "1" ]]; then
     SKIP_WEB_BUILD=1 "$ROOT_DIR/scripts/deploy-dev-server.sh"
+    DEPLOY_STATUS="ok"
     return
   fi
   "$ROOT_DIR/scripts/deploy-dev-server.sh"
+  DEPLOY_STATUS="ok"
 }
 
 fetch_json() {
   local url="$1"
   local label="$2"
   local tmp_file
+  local summary
   tmp_file="$(mktemp)"
   curl -fsS "$url" >"$tmp_file"
-  python3 - "$tmp_file" "$label" <<'PY'
+  summary="$(python3 - "$tmp_file" "$label" <<'PY'
 import json
 import sys
 
@@ -339,14 +490,18 @@ if status is None and isinstance(data.get("summary"), dict):
 
 print(f"{label}: json ok" + (f", status={status}" if status else ""))
 PY
+)"
+  printf '%s\n' "$summary"
+  append_report_line "$summary"
   rm -f "$tmp_file"
 }
 
 check_rtc_config() {
   local tmp_file
+  local summary
   tmp_file="$(mktemp)"
   curl -fsS "$DEV_SERVER_PUBLIC_URL/api/v1/operator/rtc-config" >"$tmp_file"
-  python3 - "$tmp_file" "$DEV_SERVER_PUBLIC_URL" <<'PY'
+  summary="$(python3 - "$tmp_file" "$DEV_SERVER_PUBLIC_URL" <<'PY'
 import json
 import sys
 from urllib.parse import urlparse
@@ -376,6 +531,9 @@ if public_host and not any(public_host in url for url in turn_urls):
 policy = data.get("iceTransportPolicy")
 print(f"rtc-config: public urls ok, iceTransportPolicy={policy}")
 PY
+)"
+  printf '%s\n' "$summary"
+  append_report_line "$summary"
   rm -f "$tmp_file"
 }
 
@@ -392,8 +550,21 @@ run_ssh_noninteractive() {
 
 scan_remote_logs() {
   print_step "remote log scan"
-  if ! run_ssh_noninteractive "true" >/dev/null 2>&1; then
-    printf 'remote log scan skipped: non-interactive SSH is not available\n'
+  LOG_SCAN_STATUS="running"
+  local ssh_probe_output
+  if ! ssh_probe_output="$(run_ssh_noninteractive "true" 2>&1)"; then
+    ssh_probe_output="$(printf '%s' "$ssh_probe_output" | tr '\n' ' ' | sed 's/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//')"
+    printf 'remote log scan skipped: SSH probe failed'
+    if [[ -n "$ssh_probe_output" ]]; then
+      printf ' (%s)' "$ssh_probe_output"
+    fi
+    printf '\n'
+    LOG_SCAN_STATUS="skipped:ssh unavailable"
+    if [[ -n "$ssh_probe_output" ]]; then
+      append_report_line "remote log scan: skipped because SSH probe failed ($ssh_probe_output)"
+    else
+      append_report_line "remote log scan: skipped because SSH probe failed"
+    fi
     return
   fi
 
@@ -408,13 +579,18 @@ docker compose $COMPOSE_ARGS logs --since '$LOG_SINCE' app-server recorder-worke
   if [[ -n "$suspicious" ]]; then
     printf '%s\n' "$suspicious" >&2
     printf '%s\n' 'remote logs contain suspicious entries' >&2
-    exit 1
+    LOG_SCAN_STATUS="failed"
+    append_report_line "remote log scan: suspicious entries found in last $LOG_SINCE"
+    return 1
   fi
   printf 'no suspicious app-server/recorder-worker logs in last %s\n' "$LOG_SINCE"
+  LOG_SCAN_STATUS="ok"
+  append_report_line "remote log scan: no suspicious app-server/recorder-worker logs in last $LOG_SINCE"
 }
 
 run_post_deploy_checks() {
   print_step "post-deploy checks"
+  POST_DEPLOY_STATUS="running"
   require_command curl
   require_command python3
 
@@ -427,9 +603,13 @@ run_post_deploy_checks() {
   if [[ "$SKIP_WEB_ROUTE_CHECK" != "1" ]]; then
     curl -fsS "$DEV_SERVER_PUBLIC_URL/system" >/dev/null
     printf 'web route: /system ok\n'
+    append_report_line "web route: /system ok"
+  else
+    append_report_line "web route: /system skipped"
   fi
 
   scan_remote_logs
+  POST_DEPLOY_STATUS="ok"
 }
 
 run_webrtc_smoke_check() {
@@ -438,6 +618,7 @@ run_webrtc_smoke_check() {
   fi
 
   print_step "WebRTC smoke"
+  WEBRTC_SMOKE_STATUS="running"
   require_command python3
 
   local args=(
@@ -456,8 +637,20 @@ run_webrtc_smoke_check() {
     args+=(--require-recording)
   fi
 
-  python3 "${args[@]}"
+  local smoke_output
+  if ! smoke_output="$(python3 "${args[@]}" 2>&1)"; then
+    printf '%s\n' "$smoke_output" >&2
+    WEBRTC_SMOKE_STATUS="failed"
+    append_report_line "WebRTC smoke: failed"
+    append_report_line "$smoke_output"
+    return 1
+  fi
+  printf '%s\n' "$smoke_output"
+  WEBRTC_SMOKE_STATUS="ok"
+  append_report_line "$smoke_output"
 }
+
+trap on_exit EXIT
 
 require_command git
 CHANGED_FILES="$(changed_files)"
@@ -466,17 +659,16 @@ if [[ "$SKIP_LOCAL_CHECKS" != "1" ]]; then
   run_local_checks
 else
   print_step "local checks skipped"
+  LOCAL_CHECKS_STATUS="skipped"
 fi
 
 commit_and_push_if_requested
 run_deploy
 if [[ "$SKIP_POST_DEPLOY_CHECKS" == "1" ]]; then
   print_step "post-deploy checks skipped"
+  POST_DEPLOY_STATUS="skipped"
+  LOG_SCAN_STATUS="skipped"
 else
   run_post_deploy_checks
 fi
 run_webrtc_smoke_check
-
-printf '\nready\n'
-printf 'UI: %s\n' "$DEV_SERVER_PUBLIC_URL"
-printf 'recorder health: %s/healthz\n' "$DEV_SERVER_RECORDER_URL"
