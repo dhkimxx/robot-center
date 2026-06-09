@@ -1,7 +1,7 @@
 ---
 title: "docs"
 created: 2026-06-04
-updated: '2026-06-08'
+updated: '2026-06-09'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>"]
 type: "guide"
@@ -19,6 +19,7 @@ history:
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: remove moved feature from examples'
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: replace root done with feature status directories'
 - '2026-06-08 danya.kim <danya.kim@thundersoft.com>: document monthly plan file convention'
+- '2026-06-09 danya.kim <danya.kim@thundersoft.com>: mention deploy verification harness in guide structure'
 ---
 
 # Docs
@@ -94,7 +95,7 @@ docs/plans/YYYY-MM-plan.md
 
 예:
 
-- 개발 서버 Docker 배포
+- 개발 서버 Docker 배포와 배포검증 하네스
 - 로봇팀 WebRTC 송신 테스트
 - multi-robot SFU 검증 checklist
 

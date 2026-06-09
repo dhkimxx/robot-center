@@ -206,3 +206,38 @@ Python Mock Robot
 ```
 
 따라서 WebRTC, 녹화, 위치, 센서, 로봇 등록을 건드리는 작업은 이 흐름 안에서 실제로 확인해야 한다.
+
+## 9. 배포검증 명령
+
+사용자가 `배포검증`이라고 요청하면 현재 의도된 변경사항에 대해 다음 플로우를 수행하라는 뜻이다. 이 요청은 해당 변경사항의 commit과 push 허가를 포함한다.
+
+기본 플로우:
+
+```text
+1. git status와 diff로 변경 범위 확인
+2. 변경 범위에 맞는 로컬 테스트/빌드/문서 생성 최신성 확인
+3. 의미 있는 commit message로 commit
+4. 현재 branch push
+5. 개발서버 Docker 배포
+6. 개발서버 health, system status, Swagger, UI route, 주요 로그 확인
+7. 사용자가 확인할 수 있는 URL과 남은 리스크 보고
+```
+
+반복 실행은 가능한 한 하네스를 사용한다.
+
+```bash
+./scripts/deploy-verify.sh --commit-message "Describe change"
+```
+
+이미 commit/push가 끝난 변경을 재검증할 때는 commit/push를 건너뛴다.
+
+```bash
+./scripts/deploy-verify.sh --no-commit
+```
+
+제한:
+
+- `배포검증`은 destructive git 명령, force push, production 배포, 데이터 삭제 권한을 포함하지 않는다.
+- SSH password 같은 secret은 `SSHPASS` 같은 환경변수로만 주입하고, 문서/코드/commit message에 남기지 않는다.
+- 하네스가 커버하지 못하는 WebRTC 영상, 센서, 녹화, Mock Robot 검증은 작업 성격에 맞게 별도로 수행한다.
+- 실패하면 즉시 멈추고 어느 단계에서 실패했는지 보고한다.

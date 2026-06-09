@@ -18,6 +18,7 @@ history:
 - '2026-06-04 danya.kim <danya.kim@thundersoft.com>: absorb multi-robot SFU regression checks into deployment verification'
 - '2026-06-09 danya.kim <danya.kim@thundersoft.com>: standardize dev-server rsync deployment script'
 - '2026-06-09 danya.kim <danya.kim@thundersoft.com>: document deploy artifact exclusions and local runtime cleanup'
+- '2026-06-09 danya.kim <danya.kim@thundersoft.com>: document deploy verification harness'
 ---
 
 # Dev Server Docker Deployment
@@ -85,6 +86,38 @@ SSHPASS='...' ./scripts/deploy-dev-server.sh
 수동 배포가 필요할 때만 로컬에서 `apps/web/dist`를 빌드한 뒤 서버에 복사한다.
 
 배포 동기화 대상에서는 git metadata, secret env, 로컬 runtime, Playwright 산출물, `node_modules`, Android build output을 제외한다. 개발서버에는 Docker 실행에 필요한 소스, 배포 설정, 빌드된 web static 파일만 올린다.
+
+### 4.1 배포검증 하네스
+
+반복 작업에서 사용하는 `배포검증`은 로컬 확인, commit/push, 개발서버 배포, 배포 후 상태 점검을 하나의 흐름으로 묶은 관제팀 내부 절차다.
+
+변경사항을 commit/push하고 개발서버까지 반영할 때:
+
+```bash
+cd /Users/dhkim/workspace/sst/robot-center
+SSHPASS='...' ./scripts/deploy-verify.sh --commit-message "Describe change"
+```
+
+이미 commit/push가 끝난 변경을 다시 배포하고 확인할 때:
+
+```bash
+cd /Users/dhkim/workspace/sst/robot-center
+SSHPASS='...' ./scripts/deploy-verify.sh --no-commit
+```
+
+`--no-commit`으로 실제 배포할 때는 작업 트리가 깨끗해야 한다. 미커밋 변경이 있으면 하네스가 배포를 중단한다.
+
+하네스가 수행하는 기본 확인:
+
+- `git diff --check`
+- 변경 범위에 따른 script syntax, server test, Swagger 최신성, web test/build
+- `scripts/deploy-dev-server.sh`를 통한 개발서버 Docker 배포
+- `healthz`, `/api/v1/system/status`, `/swagger/openapi.json`, `/api/v1/operator/rtc-config`, `/system` route 확인
+- 최근 `app-server`, `recorder-worker` 로그의 panic/fatal/error 계열 확인
+
+하네스는 secret을 저장하지 않는다. SSH password가 필요한 환경에서는 `SSHPASS` 환경변수로만 주입한다.
+
+WebRTC 영상 표시, 센서 갱신, 녹화 파일 재생, Android/Python/GStreamer Mock Robot 회귀 확인은 변경 성격에 따라 하네스 이후 별도로 수행한다.
 
 ## 5. Env 파일
 
