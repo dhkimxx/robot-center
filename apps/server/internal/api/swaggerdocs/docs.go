@@ -912,7 +912,7 @@ const docTemplate = `{
         },
         "/api/v1/recorder/events": {
             "post": {
-                "description": "recorder-worker가 channel.event envelope를 저장합니다. Live overlay는 별도 projection이고, 이 API는 append-only 이벤트 로그를 남깁니다. detection.object는 values.trackId가 track.video_1 또는 track.video_2여야 하며, values.detections[].className/confidence/bbox.x/y/width/height를 검증합니다.",
+                "description": "recorder-worker가 channel.event envelope를 저장합니다. Live overlay는 별도 projection이고, 이 API는 append-only 이벤트 로그를 남깁니다. detection.object는 values.trackId가 track.video_1 또는 track.video_2여야 하며, values.detections[].className/confidence/bbox.x/y/width/height를 검증합니다. mission.event는 values.title이 필수이고 values.severity는 info, warning, critical만 사용합니다.",
                 "consumes": [
                     "application/json"
                 ],

@@ -974,11 +974,9 @@ class MockRobot:
                     "eventType": "mission.event",
                     "timestamp": occurred_at,
                     "values": {
-                        "severity": "notice",
+                        "severity": "info",
                         "title": "Mock mission event",
                         "description": f"{self.robot_code} event sequence {sequence}",
-                        "category": "mock",
-                        "code": "mock.event",
                     },
                 }
             )

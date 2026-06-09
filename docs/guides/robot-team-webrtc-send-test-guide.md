@@ -48,6 +48,7 @@ history:
 - '2026-06-08 danya.kim <danya.kim@thundersoft.com>: align robot team channel.event guide with timestamp and values contract'
 - '2026-06-08 danya.kim <danya.kim@thundersoft.com>: document strict detection.object validation rules'
 - '2026-06-09 danya.kim <danya.kim@thundersoft.com>: clarify implemented channel.event type schemas'
+- '2026-06-09 danya.kim <danya.kim@thundersoft.com>: reduce mission.event v0 schema to minimal fields'
 ---
 
 # Robot Team WebRTC Send Test Guide
@@ -896,11 +897,9 @@ valid         -> sample.values.valid
       "eventType": "mission.event",
       "timestamp": "2026-06-08T10:03:12.000Z",
       "values": {
-        "severity": "notice",
+        "severity": "info",
         "title": "목표 지점 도착",
-        "description": "로봇이 waypoint-3에 도착했습니다.",
-        "category": "navigation",
-        "code": "waypoint.arrived"
+        "description": "로봇이 waypoint-3에 도착했습니다."
       }
     }
   ]
@@ -1004,11 +1003,9 @@ Event item common field:
       "eventType": "mission.event",
       "timestamp": "2026-06-08T10:03:12.000Z",
       "values": {
-        "severity": "notice",
+        "severity": "info",
         "title": "목표 지점 도착",
-        "description": "로봇이 waypoint-3에 도착했습니다.",
-        "category": "navigation",
-        "code": "waypoint.arrived"
+        "description": "로봇이 waypoint-3에 도착했습니다."
       }
     }
   ]
@@ -1021,13 +1018,11 @@ Event item common field:
 | --- | --- | --- | --- | --- |
 | `eventType` | string | Yes | `mission.event` | 이벤트 타입 |
 | `timestamp` | string(date-time) | Recommended | `2026-06-08T10:03:12.000Z` | 이벤트 발생 시각 |
-| `values.severity` | string | No | `info`, `notice`, `warning`, `critical` | 없거나 알 수 없는 값이면 `info`로 처리 |
-| `values.title` | string | Recommended | `목표 지점 도착` | 이벤트 패널 표시 제목 |
+| `values.severity` | string | No | `info`, `warning`, `critical` | 없거나 알 수 없는 값이면 `info`로 처리 |
+| `values.title` | string | Yes | `목표 지점 도착` | 이벤트 패널 표시 제목 |
 | `values.description` | string | No | `로봇이 waypoint-3에 도착했습니다.` | 상세 설명 |
-| `values.category` | string | No | `navigation`, `operation`, `diagnostic` | 이벤트 분류 |
-| `values.code` | string | No | `waypoint.arrived` | 기계 판독용 코드 |
 
-표시 제목은 `values.title`을 우선 사용하고, 없으면 `values.code`, 없으면 `eventType`을 사용한다. `mission.event`의 `values`는 JSON object여야 하며, 위 필드 외의 부가 필드는 관제 서버가 저장할 수 있지만 Live UI 기본 표시 계약은 위 표를 기준으로 한다.
+`mission.event`의 `values`는 위 표의 필드만 포함한다.
 
 ## 9. 통과 기준
 
@@ -1074,7 +1069,7 @@ SFU/WebRTC:
 | 영상은 보이나 센서 없음 | DataChannel label, open 상태, payload envelope |
 | 센서는 오나 위치 없음 | position sensorId/value shape |
 | detection overlay가 안 보임 | `channel.event` open 여부, `eventType=detection.object`, `values.trackId`, `values.detections[].bbox`의 `x/y/width/height` 0~1 범위 |
-| 이벤트 패널에 mission event가 안 보임 | `channel.event` open 여부, `eventType=mission.event`, `values.title` 또는 `values.code` |
+| 이벤트 패널에 mission event가 안 보임 | `channel.event` open 여부, `eventType=mission.event`, `values.title` |
 
 ## 11. 로봇팀이 관제팀에 공유할 로그
 

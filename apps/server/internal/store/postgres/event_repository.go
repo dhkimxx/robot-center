@@ -238,7 +238,7 @@ func normalizeEventCategory(eventType string, eventCategory string) string {
 
 func normalizeEventSeverity(severity string) string {
 	switch strings.TrimSpace(severity) {
-	case "notice", "warning", "critical":
+	case "warning", "critical":
 		return strings.TrimSpace(severity)
 	default:
 		return "info"

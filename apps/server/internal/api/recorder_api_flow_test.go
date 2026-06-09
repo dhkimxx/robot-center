@@ -163,13 +163,13 @@ func TestRecorderAPIFlow(t *testing.T) {
 				EventID:   "mission-waypoint",
 				EventType: "mission.event",
 				Timestamp: &eventTimestamp,
-				Values:    []byte(`{"severity":"notice","title":"목표 지점 도착","description":"waypoint-3 도착","category":"navigation","code":"waypoint.arrived"}`),
+				Values:    []byte(`{"severity":"info","title":"목표 지점 도착","description":"waypoint-3 도착"}`),
 			},
 			{
-				EventID:   "mission-code-only",
+				EventID:   "mission-battery",
 				EventType: "mission.event",
 				Timestamp: &eventTimestamp,
-				Values:    []byte(`{"severity":"WARNING","category":"diagnostic","code":"battery.low"}`),
+				Values:    []byte(`{"severity":"WARNING","title":"배터리 전압 낮음","description":"배터리 전압이 임계치에 근접했습니다."}`),
 			},
 		},
 	})
@@ -179,8 +179,8 @@ func TestRecorderAPIFlow(t *testing.T) {
 	if !eventListHasType(eventPayload.Events, "detection.object") || !eventListHasType(eventPayload.Events, "mission.event") {
 		t.Fatalf("expected detection and mission events, got %#v", eventPayload)
 	}
-	if !eventListHasTitleAndSeverity(eventPayload.Events, "battery.low", "warning") {
-		t.Fatalf("expected mission event title fallback to code and severity normalization, got %#v", eventPayload)
+	if !eventListHasTitleAndSeverity(eventPayload.Events, "배터리 전압 낮음", "warning") {
+		t.Fatalf("expected mission event title and severity normalization, got %#v", eventPayload)
 	}
 	if !eventListHasDetectionCount(eventPayload.Events, "track.video_1", 1) {
 		t.Fatalf("expected non-empty detection snapshot to persist with detectionCount=1, got %#v", eventPayload)
@@ -190,7 +190,7 @@ func TestRecorderAPIFlow(t *testing.T) {
 	}
 
 	operatorEventsPayload := requestJSON[dto.OperatorMissionEventsResponse](t, server.baseURL, http.MethodGet, "/api/v1/operator/missions/"+mission.code+"/events", "", nil)
-	if len(operatorEventsPayload.Events) != 2 || !eventListHasTitleAndSeverity(operatorEventsPayload.Events, "battery.low", "warning") {
+	if len(operatorEventsPayload.Events) != 2 || !eventListHasTitleAndSeverity(operatorEventsPayload.Events, "배터리 전압 낮음", "warning") {
 		t.Fatalf("expected default operator event feed to exclude detection.object, got %#v", operatorEventsPayload)
 	}
 	operatorDetectionsPayload := requestJSON[dto.OperatorMissionEventsResponse](t, server.baseURL, http.MethodGet, "/api/v1/operator/missions/"+mission.code+"/events?eventType=detection.object", "", nil)
@@ -212,6 +212,44 @@ func TestRecorderAPIFlow(t *testing.T) {
 	})
 	if missingEventValuesStatus != http.StatusBadRequest {
 		t.Fatalf("expected event without values to be rejected, got %d", missingEventValuesStatus)
+	}
+	missingMissionTitleStatus := requestStatus(t, server.baseURL, http.MethodPost, "/api/v1/recorder/events", "", map[string]any{
+		"messageId":   "event-missing-title",
+		"messageType": "event",
+		"channelRole": "channel.event",
+		"robotCode":   robot.code,
+		"missionId":   mission.id,
+		"events": []map[string]any{
+			{
+				"eventType": "mission.event",
+				"values": map[string]any{
+					"severity": "warning",
+				},
+			},
+		},
+	})
+	if missingMissionTitleStatus != http.StatusBadRequest {
+		t.Fatalf("expected mission.event without title to be rejected, got %d", missingMissionTitleStatus)
+	}
+	legacyMissionEventStatus := requestStatus(t, server.baseURL, http.MethodPost, "/api/v1/recorder/events", "", map[string]any{
+		"messageId":   "event-legacy-mission-values",
+		"messageType": "event",
+		"channelRole": "channel.event",
+		"robotCode":   robot.code,
+		"missionId":   mission.id,
+		"events": []map[string]any{
+			{
+				"eventType": "mission.event",
+				"values": map[string]any{
+					"title":    "레거시 이벤트",
+					"category": "legacy",
+					"code":     "legacy.event",
+				},
+			},
+		},
+	})
+	if legacyMissionEventStatus != http.StatusBadRequest {
+		t.Fatalf("expected mission.event category/code values to be rejected, got %d", legacyMissionEventStatus)
 	}
 
 	clearSensorPayload := requestJSON[dto.ClearSensorDataResponse](t, server.baseURL, http.MethodPost, "/api/v1/system/sensors/clear", "", dto.ClearSensorDataRequest{

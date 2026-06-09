@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -54,7 +55,7 @@ func (s *Server) handleListMissionEvents(w http.ResponseWriter, r *http.Request)
 }
 
 // @Summary recorder 이벤트 저장
-// @Description recorder-worker가 channel.event envelope를 저장합니다. Live overlay는 별도 projection이고, 이 API는 append-only 이벤트 로그를 남깁니다. detection.object는 values.trackId가 track.video_1 또는 track.video_2여야 하며, values.detections[].className/confidence/bbox.x/y/width/height를 검증합니다.
+// @Description recorder-worker가 channel.event envelope를 저장합니다. Live overlay는 별도 projection이고, 이 API는 append-only 이벤트 로그를 남깁니다. detection.object는 values.trackId가 track.video_1 또는 track.video_2여야 하며, values.detections[].className/confidence/bbox.x/y/width/height를 검증합니다. mission.event는 values.title이 필수이고 values.severity는 info, warning, critical만 사용합니다.
 // @Tags Recorder API
 // @Accept json
 // @Produce json
@@ -145,8 +146,11 @@ func missionEventFromRequest(item dto.EventItemRequest, envelope domain.MissionE
 	if err != nil {
 		return domain.MissionEvent{}, err
 	}
-	commonValues := parseEventCommonValues(values)
-	title := utils.FirstNonEmptyString(commonValues.Title, commonValues.Code, eventType)
+	commonValues, err := parseEventCommonValues(eventType, values)
+	if err != nil {
+		return domain.MissionEvent{}, err
+	}
+	title := utils.FirstNonEmptyString(commonValues.Title, eventType)
 	return domain.MissionEvent{
 		MissionID:      envelope.MissionID,
 		RobotCode:      envelope.RobotCode,
@@ -297,25 +301,42 @@ type eventCommonValues struct {
 	Severity    string `json:"severity"`
 	Title       string `json:"title"`
 	Description string `json:"description"`
-	Code        string `json:"code"`
 }
 
-func parseEventCommonValues(values json.RawMessage) eventCommonValues {
+func parseEventCommonValues(eventType string, values json.RawMessage) (eventCommonValues, error) {
+	if eventType == domain.EventTypeMissionEvent {
+		return parseMissionEventValues(values)
+	}
 	var request eventCommonValues
 	if err := json.Unmarshal(values, &request); err != nil {
-		return eventCommonValues{Severity: "info"}
+		return eventCommonValues{Severity: "info"}, nil
 	}
 	request.Severity = normalizeEventSeverity(request.Severity)
 	request.Title = strings.TrimSpace(request.Title)
 	request.Description = strings.TrimSpace(request.Description)
-	request.Code = strings.TrimSpace(request.Code)
-	return request
+	return request, nil
+}
+
+func parseMissionEventValues(values json.RawMessage) (eventCommonValues, error) {
+	var request eventCommonValues
+	decoder := json.NewDecoder(bytes.NewReader(values))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		return eventCommonValues{}, errors.New("mission.event values must only contain severity, title, and description")
+	}
+	request.Severity = normalizeEventSeverity(request.Severity)
+	request.Title = strings.TrimSpace(request.Title)
+	if request.Title == "" {
+		return eventCommonValues{}, errors.New("values.title is required for mission.event")
+	}
+	request.Description = strings.TrimSpace(request.Description)
+	return request, nil
 }
 
 func normalizeEventSeverity(severity string) string {
 	normalized := strings.ToLower(strings.TrimSpace(severity))
 	switch normalized {
-	case "notice", "warning", "critical":
+	case "warning", "critical":
 		return normalized
 	default:
 		return "info"

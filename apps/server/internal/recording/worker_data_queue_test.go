@@ -57,7 +57,7 @@ func TestWorkerQueuesRecorderEventDataChannelMessageForAppServerPost(t *testing.
 	})
 	worker.startRecorderDataQueueWorkers(ctx)
 
-	worker.enqueueRecorderDataChannelMessage(ctx, "mission-001", "channel.event", []byte(`{"messageType":"event","events":[{"eventType":"mission.event","values":{"code":"mock.ready"}}]}`))
+	worker.enqueueRecorderDataChannelMessage(ctx, "mission-001", "channel.event", []byte(`{"messageType":"event","events":[{"eventType":"mission.event","values":{"title":"Mock ready"}}]}`))
 
 	var payload []byte
 	select {
