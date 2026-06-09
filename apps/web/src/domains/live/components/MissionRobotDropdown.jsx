@@ -57,6 +57,7 @@ export function MissionRobotDropdown({
           "border-slate-500/20 bg-command-950/80 hover:border-sapphire-400/40 hover:bg-command-900/80 focus:border-sapphire-400 focus:ring-2 focus:ring-sapphire-500/20",
           disabled && "cursor-not-allowed opacity-60"
         )}
+        data-testid="mission-robot-dropdown-toggle"
         disabled={disabled}
         type="button"
         onClick={() => setOpen((current) => !current)}
@@ -86,6 +87,8 @@ export function MissionRobotDropdown({
                     "grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md px-3 py-2.5 text-left transition",
                     active ? "bg-sapphire-500/15 text-slate-50" : "text-slate-200 hover:bg-white/[0.055]"
                   )}
+                  data-robot-code={target.robotCode}
+                  data-testid="mission-robot-option"
                   key={target.key}
                   type="button"
                   onClick={() => selectTarget(target.key)}

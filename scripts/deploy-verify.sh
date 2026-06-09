@@ -25,6 +25,11 @@ WEBRTC_SMOKE_ROBOT_CODE="${WEBRTC_SMOKE_ROBOT_CODE:-}"
 WEBRTC_SMOKE_MIN_ROBOTS="${WEBRTC_SMOKE_MIN_ROBOTS:-1}"
 WEBRTC_SMOKE_FRESHNESS_SECONDS="${WEBRTC_SMOKE_FRESHNESS_SECONDS:-120}"
 WEBRTC_SMOKE_REQUIRE_RECORDING=0
+BROWSER_SMOKE=0
+BROWSER_SMOKE_MISSION_CODE="${BROWSER_SMOKE_MISSION_CODE:-}"
+BROWSER_SMOKE_ROBOT_CODE="${BROWSER_SMOKE_ROBOT_CODE:-}"
+BROWSER_SMOKE_TIMEOUT_SECONDS="${BROWSER_SMOKE_TIMEOUT_SECONDS:-60}"
+BROWSER_SMOKE_REQUIRE_RECORDING=0
 
 RUN_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 CURRENT_STEP="initialization"
@@ -36,6 +41,7 @@ DEPLOY_STATUS="pending"
 POST_DEPLOY_STATUS="pending"
 LOG_SCAN_STATUS="pending"
 WEBRTC_SMOKE_STATUS="not_requested"
+BROWSER_SMOKE_STATUS="not_requested"
 REPORT_LINES=()
 
 usage() {
@@ -65,6 +71,15 @@ Options:
                            Max age for media/data timestamps. Default: 120.
   --webrtc-smoke-require-recording
                            Also require live recording state to be recording.
+  --browser-smoke          Verify rendered mission control video elements through Playwright CLI.
+  --browser-smoke-mission MISSION_CODE
+                           Limit browser smoke verification to one mission.
+  --browser-smoke-robot ROBOT_CODE
+                           Select one robot in the mission control browser UI.
+  --browser-smoke-timeout-seconds SECONDS
+                           Max wait for rendered videos. Default: 60.
+  --browser-smoke-require-recording
+                           Also require recording status text in the browser UI.
   -h, --help               Show this help.
 
 Environment:
@@ -77,6 +92,9 @@ Environment:
   WEBRTC_SMOKE_ROBOT_CODE
   WEBRTC_SMOKE_MIN_ROBOTS
   WEBRTC_SMOKE_FRESHNESS_SECONDS
+  BROWSER_SMOKE_MISSION_CODE
+  BROWSER_SMOKE_ROBOT_CODE
+  BROWSER_SMOKE_TIMEOUT_SECONDS
 EOF
 }
 
@@ -167,6 +185,42 @@ while [[ $# -gt 0 ]]; do
       WEBRTC_SMOKE_REQUIRE_RECORDING=1
       shift
       ;;
+    --browser-smoke)
+      BROWSER_SMOKE=1
+      shift
+      ;;
+    --browser-smoke-mission)
+      BROWSER_SMOKE=1
+      BROWSER_SMOKE_MISSION_CODE="${2:-}"
+      if [[ -z "$BROWSER_SMOKE_MISSION_CODE" ]]; then
+        printf '%s\n' '--browser-smoke-mission requires a value' >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --browser-smoke-robot)
+      BROWSER_SMOKE=1
+      BROWSER_SMOKE_ROBOT_CODE="${2:-}"
+      if [[ -z "$BROWSER_SMOKE_ROBOT_CODE" ]]; then
+        printf '%s\n' '--browser-smoke-robot requires a value' >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --browser-smoke-timeout-seconds)
+      BROWSER_SMOKE=1
+      BROWSER_SMOKE_TIMEOUT_SECONDS="${2:-}"
+      if [[ -z "$BROWSER_SMOKE_TIMEOUT_SECONDS" ]]; then
+        printf '%s\n' '--browser-smoke-timeout-seconds requires a value' >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --browser-smoke-require-recording)
+      BROWSER_SMOKE=1
+      BROWSER_SMOKE_REQUIRE_RECORDING=1
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -245,6 +299,11 @@ mark_failed_status_for_current_step() {
         WEBRTC_SMOKE_STATUS="failed"
       fi
       ;;
+    "browser smoke")
+      if [[ "$BROWSER_SMOKE_STATUS" == "running" ]]; then
+        BROWSER_SMOKE_STATUS="failed"
+      fi
+      ;;
   esac
   return 0
 }
@@ -290,6 +349,7 @@ print_final_report() {
   print_status_line "postDeploy" "$POST_DEPLOY_STATUS"
   print_status_line "logScan" "$LOG_SCAN_STATUS"
   print_status_line "webrtcSmoke" "$WEBRTC_SMOKE_STATUS"
+  print_status_line "browserSmoke" "$BROWSER_SMOKE_STATUS"
   print_status_line "ui" "$DEV_SERVER_PUBLIC_URL"
   print_status_line "recorder" "$DEV_SERVER_RECORDER_URL/healthz"
 
@@ -650,6 +710,47 @@ run_webrtc_smoke_check() {
   append_report_line "$smoke_output"
 }
 
+run_browser_smoke_check() {
+  if [[ "$BROWSER_SMOKE" != "1" ]]; then
+    return
+  fi
+
+  print_step "browser smoke"
+  BROWSER_SMOKE_STATUS="running"
+  require_command npx
+
+  local args=(
+    "$ROOT_DIR/scripts/deploy-verify-browser-smoke.sh"
+    --base-url "$DEV_SERVER_PUBLIC_URL"
+    --timeout-seconds "$BROWSER_SMOKE_TIMEOUT_SECONDS"
+  )
+  if [[ -n "$BROWSER_SMOKE_MISSION_CODE" ]]; then
+    args+=(--mission-code "$BROWSER_SMOKE_MISSION_CODE")
+  elif [[ -n "$WEBRTC_SMOKE_MISSION_CODE" ]]; then
+    args+=(--mission-code "$WEBRTC_SMOKE_MISSION_CODE")
+  fi
+  if [[ -n "$BROWSER_SMOKE_ROBOT_CODE" ]]; then
+    args+=(--robot-code "$BROWSER_SMOKE_ROBOT_CODE")
+  elif [[ -n "$WEBRTC_SMOKE_ROBOT_CODE" ]]; then
+    args+=(--robot-code "$WEBRTC_SMOKE_ROBOT_CODE")
+  fi
+  if [[ "$BROWSER_SMOKE_REQUIRE_RECORDING" == "1" ]]; then
+    args+=(--require-recording)
+  fi
+
+  local browser_output
+  if ! browser_output="$("${args[@]}" 2>&1)"; then
+    printf '%s\n' "$browser_output" >&2
+    BROWSER_SMOKE_STATUS="failed"
+    append_report_line "browser smoke: failed"
+    append_report_line "$browser_output"
+    return 1
+  fi
+  printf '%s\n' "$browser_output"
+  BROWSER_SMOKE_STATUS="ok"
+  append_report_line "$browser_output"
+}
+
 trap on_exit EXIT
 
 require_command git
@@ -672,3 +773,4 @@ else
   run_post_deploy_checks
 fi
 run_webrtc_smoke_check
+run_browser_smoke_check

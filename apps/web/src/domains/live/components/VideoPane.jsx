@@ -180,6 +180,7 @@ export function VideoPane({
   }, [detectionOverlay, detectionOverlayTtlMs]);
 
   const shouldShowLoading = !stream || !isVideoReady;
+  const videoLabel = String(label ?? "").toLowerCase();
   const resolutionLabel = videoMetrics.width && videoMetrics.height ? `${videoMetrics.width}x${videoMetrics.height}` : "-";
   const fpsLabel = videoMetrics.fps > 0 ? `${videoMetrics.fps} fps` : "- fps";
   const visibleDetections = isDetectionOverlayFresh(detectionOverlay, overlayNow, detectionOverlayTtlMs)
@@ -196,8 +197,18 @@ export function VideoPane({
         compact && "min-h-[180px]",
         className
       )}
+      data-testid="live-video-pane"
+      data-video-label={videoLabel}
     >
-      <video className="absolute inset-0 h-full w-full object-contain" ref={videoRef} autoPlay playsInline muted={label !== "Audio"} />
+      <video
+        className="absolute inset-0 h-full w-full object-contain"
+        data-testid="live-video"
+        data-video-label={videoLabel}
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted={label !== "Audio"}
+      />
       {visibleDetections.length > 0 ? (
         <DetectionOverlay detections={visibleDetections} videoRect={videoRect} />
       ) : null}
