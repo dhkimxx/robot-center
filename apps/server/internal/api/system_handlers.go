@@ -93,14 +93,7 @@ func (s *Server) handleClearObjectStorage(w http.ResponseWriter, r *http.Request
 
 	result, err := s.services.Storage.ClearObjectStorage(r.Context(), request.Confirmation)
 	if err != nil {
-		switch {
-		case errors.Is(err, service.ErrSystemActionForbidden):
-			writeError(w, http.StatusForbidden, err)
-		case errors.Is(err, service.ErrSystemActionConfirmationRequired):
-			writeError(w, http.StatusBadRequest, err)
-		default:
-			writeError(w, http.StatusInternalServerError, err)
-		}
+		writeSystemActionError(w, err)
 		return
 	}
 
@@ -129,14 +122,7 @@ func (s *Server) handleClearSensorData(w http.ResponseWriter, r *http.Request) {
 
 	result, err := s.services.Sensors.ClearSensorData(r.Context(), s.config.Environment, request.Confirmation)
 	if err != nil {
-		switch {
-		case errors.Is(err, service.ErrSystemActionForbidden):
-			writeError(w, http.StatusForbidden, err)
-		case errors.Is(err, service.ErrSystemActionConfirmationRequired):
-			writeError(w, http.StatusBadRequest, err)
-		default:
-			writeError(w, http.StatusInternalServerError, err)
-		}
+		writeSystemActionError(w, err)
 		return
 	}
 
@@ -165,20 +151,56 @@ func (s *Server) handleClearEventData(w http.ResponseWriter, r *http.Request) {
 
 	result, err := s.services.Events.ClearEventData(r.Context(), s.config.Environment, request.Confirmation)
 	if err != nil {
-		switch {
-		case errors.Is(err, service.ErrSystemActionForbidden):
-			writeError(w, http.StatusForbidden, err)
-		case errors.Is(err, service.ErrSystemActionConfirmationRequired):
-			writeError(w, http.StatusBadRequest, err)
-		default:
-			writeError(w, http.StatusInternalServerError, err)
-		}
+		writeSystemActionError(w, err)
 		return
 	}
 
 	writeJSON(w, http.StatusOK, dto.ClearEventDataResponse{
 		EventData: result,
 	})
+}
+
+// @Summary Recorder Runtime 초기화
+// @Description 확인 문자열을 받은 뒤 녹화 서비스의 로컬 임시 파일을 정리합니다. active 녹화 상태가 있거나 production 환경이면 실행되지 않습니다.
+// @Tags 시스템 API
+// @Accept json
+// @Produce json
+// @Param request body dto.ClearRecorderRuntimeRequest true "Recorder Runtime 초기화 요청"
+// @Success 200 {object} dto.ClearRecorderRuntimeResponse
+// @Failure 400 {object} dto.ErrorResponse
+// @Failure 403 {object} dto.ErrorResponse
+// @Failure 409 {object} dto.ErrorResponse
+// @Failure 500 {object} dto.ErrorResponse
+// @Router /api/v1/system/recorder-runtime/clear [post]
+func (s *Server) handleClearRecorderRuntime(w http.ResponseWriter, r *http.Request) {
+	var request dto.ClearRecorderRuntimeRequest
+	if err := decodeJSON(r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	result, err := s.services.RecorderRuntime.ClearRecorderRuntime(r.Context(), request.Confirmation)
+	if err != nil {
+		writeSystemActionError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, dto.ClearRecorderRuntimeResponse{
+		RecorderRuntime: result,
+	})
+}
+
+func writeSystemActionError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, service.ErrSystemActionForbidden):
+		writeError(w, http.StatusForbidden, err)
+	case errors.Is(err, service.ErrSystemActionConfirmationRequired):
+		writeError(w, http.StatusBadRequest, err)
+	case errors.Is(err, service.ErrSystemActionConflict):
+		writeError(w, http.StatusConflict, err)
+	default:
+		writeError(w, http.StatusInternalServerError, err)
+	}
 }
 
 func (s *Server) componentHTTPStatus(ctx context.Context, targetURL string) string {

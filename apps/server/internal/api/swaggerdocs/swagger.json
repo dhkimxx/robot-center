@@ -1497,6 +1497,64 @@
                 }
             }
         },
+        "/api/v1/system/recorder-runtime/clear": {
+            "post": {
+                "description": "확인 문자열을 받은 뒤 녹화 서비스의 로컬 임시 파일을 정리합니다. active 녹화 상태가 있거나 production 환경이면 실행되지 않습니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "시스템 API"
+                ],
+                "summary": "Recorder Runtime 초기화",
+                "parameters": [
+                    {
+                        "description": "Recorder Runtime 초기화 요청",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.ClearRecorderRuntimeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.ClearRecorderRuntimeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/system/sensors/clear": {
             "post": {
                 "description": "확인 문자열을 받은 뒤 테스트용 sensor descriptor와 sample 데이터를 정리합니다. production 환경에서는 실행되지 않습니다.",
@@ -1626,6 +1684,22 @@
             "properties": {
                 "objectStorage": {
                     "$ref": "#/definitions/robot-center_apps_server_internal_service.ObjectStorageClearResult"
+                }
+            }
+        },
+        "robot-center_apps_server_internal_api_dto.ClearRecorderRuntimeRequest": {
+            "type": "object",
+            "properties": {
+                "confirmation": {
+                    "type": "string"
+                }
+            }
+        },
+        "robot-center_apps_server_internal_api_dto.ClearRecorderRuntimeResponse": {
+            "type": "object",
+            "properties": {
+                "recorderRuntime": {
+                    "$ref": "#/definitions/robot-center_apps_server_internal_domain.RecorderRuntimeClearResult"
                 }
             }
         },
@@ -3150,6 +3224,20 @@
                 },
                 "modelName": {
                     "type": "string"
+                }
+            }
+        },
+        "robot-center_apps_server_internal_domain.RecorderRuntimeClearResult": {
+            "type": "object",
+            "properties": {
+                "deletedBytes": {
+                    "type": "integer"
+                },
+                "filesDeleted": {
+                    "type": "integer"
+                },
+                "recordingDirectoriesDeleted": {
+                    "type": "integer"
                 }
             }
         },

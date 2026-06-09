@@ -88,6 +88,7 @@ func expectedRoleBasedAPIPaths() []string {
 		"/api/v1/system/object-storage/clear",
 		"/api/v1/system/sensors/clear",
 		"/api/v1/system/events/clear",
+		"/api/v1/system/recorder-runtime/clear",
 		"/api/v1/operator/rtc-config",
 		"/api/v1/operator/sensor-descriptors",
 		"/api/v1/operator/sensor-samples",

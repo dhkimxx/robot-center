@@ -1,6 +1,7 @@
 package dto
 
 import (
+	"robot-center/apps/server/internal/domain"
 	"robot-center/apps/server/internal/service"
 	"robot-center/apps/server/internal/sfu"
 	"robot-center/apps/server/internal/store"
@@ -107,6 +108,14 @@ type ClearEventDataRequest struct {
 
 type ClearEventDataResponse struct {
 	EventData store.EventDataClearResult `json:"eventData"`
+}
+
+type ClearRecorderRuntimeRequest struct {
+	Confirmation string `json:"confirmation"`
+}
+
+type ClearRecorderRuntimeResponse struct {
+	RecorderRuntime domain.RecorderRuntimeClearResult `json:"recorderRuntime"`
 }
 
 func SystemStatus(input SystemStatusInput) SystemStatusResponse {

@@ -29,7 +29,17 @@ func newAPIFlowTestServer(t *testing.T) apiFlowTestServer {
 	t.Helper()
 
 	postgresContainer := postgrestest.Start(t)
-	recorderHealth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	recorderHealth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && r.URL.Path == "/runtime/recordings/clear" {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"recorderRuntime": map[string]any{
+					"recordingDirectoriesDeleted": 2,
+					"filesDeleted":                4,
+					"deletedBytes":                4096,
+				},
+			})
+			return
+		}
 		writeJSON(w, http.StatusOK, map[string]any{"status": "ok"})
 	}))
 	t.Cleanup(recorderHealth.Close)

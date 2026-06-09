@@ -20,6 +20,16 @@ definitions:
       objectStorage:
         $ref: '#/definitions/robot-center_apps_server_internal_service.ObjectStorageClearResult'
     type: object
+  robot-center_apps_server_internal_api_dto.ClearRecorderRuntimeRequest:
+    properties:
+      confirmation:
+        type: string
+    type: object
+  robot-center_apps_server_internal_api_dto.ClearRecorderRuntimeResponse:
+    properties:
+      recorderRuntime:
+        $ref: '#/definitions/robot-center_apps_server_internal_domain.RecorderRuntimeClearResult'
+    type: object
   robot-center_apps_server_internal_api_dto.ClearSensorDataRequest:
     properties:
       confirmation:
@@ -1013,6 +1023,15 @@ definitions:
         type: string
       modelName:
         type: string
+    type: object
+  robot-center_apps_server_internal_domain.RecorderRuntimeClearResult:
+    properties:
+      deletedBytes:
+        type: integer
+      filesDeleted:
+        type: integer
+      recordingDirectoriesDeleted:
+        type: integer
     type: object
   robot-center_apps_server_internal_domain.RobotConnectionState:
     enum:
@@ -2146,6 +2165,45 @@ paths:
           schema:
             $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse'
       summary: Object Storage 초기화
+      tags:
+      - 시스템 API
+  /api/v1/system/recorder-runtime/clear:
+    post:
+      consumes:
+      - application/json
+      description: 확인 문자열을 받은 뒤 녹화 서비스의 로컬 임시 파일을 정리합니다. active 녹화 상태가 있거나 production
+        환경이면 실행되지 않습니다.
+      parameters:
+      - description: Recorder Runtime 초기화 요청
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ClearRecorderRuntimeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ClearRecorderRuntimeResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse'
+      summary: Recorder Runtime 초기화
       tags:
       - 시스템 API
   /api/v1/system/sensors/clear:

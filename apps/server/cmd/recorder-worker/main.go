@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -32,6 +33,33 @@ func main() {
 			"service":    "recorder-worker",
 			"startedAt":  started.Format(time.RFC3339),
 			"subscriber": worker.SubscriberStatus(),
+		})
+	})
+	mux.HandleFunc("POST /runtime/recordings/clear", func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			Confirmation string `json:"confirmation"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		result, err := worker.ClearRuntimeRecordings(r.Context(), request.Confirmation)
+		if err != nil {
+			switch {
+			case errors.Is(err, recording.ErrRecorderRuntimeClearForbidden):
+				http.Error(w, err.Error(), http.StatusForbidden)
+			case errors.Is(err, recording.ErrRecorderRuntimeClearConfirmationRequired):
+				http.Error(w, err.Error(), http.StatusBadRequest)
+			case errors.Is(err, recording.ErrRecorderRuntimeClearActive):
+				http.Error(w, err.Error(), http.StatusConflict)
+			default:
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"recorderRuntime": result,
 		})
 	})
 

@@ -30,6 +30,7 @@ func NewServerWithStore(cfg config.AppServerConfig, repository store.Store) *Ser
 		AccessKey:   cfg.MinIOAccessKey,
 		SecretKey:   cfg.MinIOSecretKey,
 	}, repository)
+	services.RecorderRuntime = service.NewRecorderRuntimeAdminService(cfg.Environment, cfg.RecorderWorkerInternalURL)
 	server := &Server{
 		config:   cfg,
 		services: services,

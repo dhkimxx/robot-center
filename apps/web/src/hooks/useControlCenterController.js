@@ -20,7 +20,7 @@ import {
   createTelemetryFromSensorLatest
 } from "../domains/live/sensorLatestMapper.js";
 import { useOperationStatuses } from "../domains/live/useOperationStatuses.js";
-import { clearEventData, clearObjectStorage, clearSensorData } from "../api/systemApi.js";
+import { clearEventData, clearObjectStorage, clearRecorderRuntime, clearSensorData } from "../api/systemApi.js";
 import { useControlCenterData } from "./useControlCenterData.js";
 import { useNotifications } from "./useNotifications.js";
 
@@ -181,6 +181,22 @@ export function useControlCenterController({
       return result;
     } catch (error) {
       showNotification(error instanceof Error ? error.message : "Event 데이터 정리 실패", "danger");
+      throw error;
+    }
+  }, [loadAll, showNotification]);
+
+  const clearSystemRecorderRuntime = useCallback(async () => {
+    try {
+      const payload = await clearRecorderRuntime();
+      const result = payload.recorderRuntime ?? {};
+      showNotification(
+        `녹화 런타임 ${formatByteCount(result.deletedBytes ?? 0)} / 파일 ${result.filesDeleted ?? 0}개 삭제 완료`,
+        "success"
+      );
+      await loadAll();
+      return result;
+    } catch (error) {
+      showNotification(error instanceof Error ? error.message : "녹화 런타임 정리 실패", "danger");
       throw error;
     }
   }, [loadAll, showNotification]);
@@ -399,6 +415,7 @@ export function useControlCenterController({
     systemRouteProps: {
       onClearEventData: clearSystemEventData,
       onClearObjectStorage: clearSystemObjectStorage,
+      onClearRecorderRuntime: clearSystemRecorderRuntime,
       onClearSensorData: clearSystemSensorData,
       dataLoadState,
       statusError,

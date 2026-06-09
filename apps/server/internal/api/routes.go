@@ -20,6 +20,7 @@ func (s *Server) registerSystemRoutes(group *gin.RouterGroup) {
 	group.POST("/object-storage/clear", ginHTTPHandler(s.handleClearObjectStorage))
 	group.POST("/sensors/clear", ginHTTPHandler(s.handleClearSensorData))
 	group.POST("/events/clear", ginHTTPHandler(s.handleClearEventData))
+	group.POST("/recorder-runtime/clear", ginHTTPHandler(s.handleClearRecorderRuntime))
 }
 
 func (s *Server) registerOperatorRoutes(group *gin.RouterGroup) {

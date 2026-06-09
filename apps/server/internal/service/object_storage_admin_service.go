@@ -19,6 +19,7 @@ const clearObjectStorageConfirmation = "CLEAR_OBJECT_STORAGE"
 var (
 	ErrSystemActionForbidden            = errors.New("system action is disabled in production")
 	ErrSystemActionConfirmationRequired = errors.New("confirmation is required")
+	ErrSystemActionConflict             = errors.New("system action is blocked by active state")
 )
 
 type ObjectStorageAdminConfig struct {

@@ -244,22 +244,6 @@ func validateMP4VideoStream(ctx context.Context, outputPath string, expectedVide
 	return nil
 }
 
-func recordingChunkDirectory(chunkID string) string {
-	return filepath.Join(".runtime", "recordings", utils.SafePathToken(chunkID))
-}
-
-func h264TrackPath(chunkID string, label string) string {
-	return filepath.Join(recordingChunkDirectory(chunkID), utils.SafePathToken(label)+".h264")
-}
-
-func opusTrackPath(chunkID string) string {
-	return filepath.Join(recordingChunkDirectory(chunkID), "audio.ogg")
-}
-
-func dataChannelPath(chunkID string, label string) string {
-	return filepath.Join(recordingChunkDirectory(chunkID), utils.SafePathToken(label)+".jsonl")
-}
-
 func h264ParameterSetKey(roomID string, label string) string {
 	return utils.SafePathToken(roomID) + "/" + utils.SafePathToken(label)
 }

@@ -12,13 +12,15 @@ import Surface from "../../components/ui/Surface.jsx";
 import { ListSkeleton, PanelSkeleton, SkeletonBlock } from "../../components/ui/Skeleton.jsx";
 import { cn } from "../../utils/cn.js";
 
-export default function SystemScreen({ dataLoadState, onClearEventData, onClearObjectStorage, onClearSensorData, statusError, systemStatus }) {
+export default function SystemScreen({ dataLoadState, onClearEventData, onClearObjectStorage, onClearRecorderRuntime, onClearSensorData, statusError, systemStatus }) {
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [sensorClearConfirmOpen, setSensorClearConfirmOpen] = useState(false);
   const [clearingSensors, setClearingSensors] = useState(false);
   const [eventClearConfirmOpen, setEventClearConfirmOpen] = useState(false);
   const [clearingEvents, setClearingEvents] = useState(false);
+  const [recorderRuntimeClearConfirmOpen, setRecorderRuntimeClearConfirmOpen] = useState(false);
+  const [clearingRecorderRuntime, setClearingRecorderRuntime] = useState(false);
   const isInitialLoading = Boolean(dataLoadState?.isInitialLoading);
   const components = systemStatus?.components ?? [];
   const rooms = systemStatus?.sfuRooms ?? [];
@@ -69,6 +71,19 @@ export default function SystemScreen({ dataLoadState, onClearEventData, onClearO
       setEventClearConfirmOpen(false);
     } finally {
       setClearingEvents(false);
+    }
+  }
+
+  async function confirmClearRecorderRuntime() {
+    if (!onClearRecorderRuntime || clearingRecorderRuntime) {
+      return;
+    }
+    setClearingRecorderRuntime(true);
+    try {
+      await onClearRecorderRuntime();
+      setRecorderRuntimeClearConfirmOpen(false);
+    } finally {
+      setClearingRecorderRuntime(false);
     }
   }
 
@@ -135,6 +150,13 @@ export default function SystemScreen({ dataLoadState, onClearEventData, onClearO
                 disabled={isProduction || !onClearEventData || clearingEvents}
                 onClick={() => setEventClearConfirmOpen(true)}
                 title="Event 데이터 전체 삭제"
+              />
+              <DangerActionPanel
+                busy={clearingRecorderRuntime}
+                description="녹화 서비스의 로컬 임시 파일을 정리합니다. active 녹화 상태가 있으면 실행되지 않습니다."
+                disabled={isProduction || !onClearRecorderRuntime || clearingRecorderRuntime}
+                onClick={() => setRecorderRuntimeClearConfirmOpen(true)}
+                title="녹화 런타임 파일 전체 삭제"
               />
             </div>
           </Surface>
@@ -243,6 +265,22 @@ export default function SystemScreen({ dataLoadState, onClearEventData, onClearO
           onConfirm={confirmClearEventData}
           subject="Event 데이터"
           title="Event 데이터 전체 삭제"
+          tone="danger"
+        />
+      ) : null}
+      {recorderRuntimeClearConfirmOpen ? (
+        <ConfirmDialog
+          cancelLabel="취소"
+          confirmLabel={clearingRecorderRuntime ? "삭제 중" : "전체 삭제"}
+          description="녹화 서비스의 로컬 임시 파일을 모두 삭제합니다. active 녹화 작업이 있으면 서버가 거부합니다."
+          onCancel={() => {
+            if (!clearingRecorderRuntime) {
+              setRecorderRuntimeClearConfirmOpen(false);
+            }
+          }}
+          onConfirm={confirmClearRecorderRuntime}
+          subject="녹화 런타임 파일"
+          title="녹화 런타임 파일 전체 삭제"
           tone="danger"
         />
       ) : null}

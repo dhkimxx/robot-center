@@ -274,6 +274,13 @@ func TestRecorderAPIFlow(t *testing.T) {
 		t.Fatalf("expected sensor latest to be empty after clear, got %#v", sensorLatestAfterClearPayload)
 	}
 
+	clearRecorderRuntimePayload := requestJSON[dto.ClearRecorderRuntimeResponse](t, server.baseURL, http.MethodPost, "/api/v1/system/recorder-runtime/clear", "", dto.ClearRecorderRuntimeRequest{
+		Confirmation: "CLEAR_RECORDER_RUNTIME",
+	})
+	if clearRecorderRuntimePayload.RecorderRuntime.FilesDeleted != 4 || clearRecorderRuntimePayload.RecorderRuntime.DeletedBytes != 4096 {
+		t.Fatalf("expected recorder runtime clear result, got %#v", clearRecorderRuntimePayload)
+	}
+
 	recordingTickPayload := requestJSON[dto.RecorderRecordingTickResponse](t, server.baseURL, http.MethodPost, "/api/v1/recorder/tick", "", dto.RecorderTickRequest{
 		MissionCode:          mission.code,
 		RobotCode:            robot.code,

@@ -27,3 +27,11 @@ export function clearEventData() {
     timeoutMs: 60000
   });
 }
+
+export function clearRecorderRuntime() {
+  return requestJson("/api/v1/system/recorder-runtime/clear", {
+    body: JSON.stringify({ confirmation: "CLEAR_RECORDER_RUNTIME" }),
+    method: "POST",
+    timeoutMs: 60000
+  });
+}

@@ -7,15 +7,16 @@ import (
 )
 
 type Services struct {
-	Robots    *RobotService
-	Missions  *MissionService
-	Sensors   *SensorService
-	Events    *EventService
-	Recording *RecordingService
-	Streams   *StreamSessionService
-	Live      *LiveStatusService
-	Storage   *ObjectStorageAdminService
-	System    *SystemService
+	Robots          *RobotService
+	Missions        *MissionService
+	Sensors         *SensorService
+	Events          *EventService
+	Recording       *RecordingService
+	Streams         *StreamSessionService
+	Live            *LiveStatusService
+	Storage         *ObjectStorageAdminService
+	System          *SystemService
+	RecorderRuntime *RecorderRuntimeAdminService
 
 	transactionRunner store.TransactionRunner
 }
