@@ -150,6 +150,39 @@ func (s *Store) ListMissionEvents(ctx context.Context, query repo.EventQuery) ([
 	return events, nil
 }
 
+func (s *Store) ClearEventData(ctx context.Context) (repo.EventDataClearResult, error) {
+	if s.sqlTx == nil {
+		tx, err := s.sqlDB.BeginTx(ctx, nil)
+		if err != nil {
+			return repo.EventDataClearResult{}, err
+		}
+		transactionalStore := *s
+		transactionalStore.sqlTx = tx
+		result, err := transactionalStore.ClearEventData(ctx)
+		if err != nil {
+			_ = tx.Rollback()
+			return repo.EventDataClearResult{}, err
+		}
+		if err := tx.Commit(); err != nil {
+			return repo.EventDataClearResult{}, err
+		}
+		return result, nil
+	}
+
+	runner := s.sqlRunner()
+	if _, err := runner.ExecContext(ctx, `LOCK TABLE events IN ACCESS EXCLUSIVE MODE`); err != nil {
+		return repo.EventDataClearResult{}, err
+	}
+	var eventsDeleted int64
+	if err := runner.QueryRowContext(ctx, `SELECT COUNT(*) FROM events`).Scan(&eventsDeleted); err != nil {
+		return repo.EventDataClearResult{}, err
+	}
+	if _, err := runner.ExecContext(ctx, `TRUNCATE TABLE events`); err != nil {
+		return repo.EventDataClearResult{}, err
+	}
+	return repo.EventDataClearResult{EventsDeleted: eventsDeleted}, nil
+}
+
 type eventQueryRow struct {
 	ID             string
 	MissionID      string

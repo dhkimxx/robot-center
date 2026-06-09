@@ -12,17 +12,20 @@ import Surface from "../../components/ui/Surface.jsx";
 import { ListSkeleton, PanelSkeleton, SkeletonBlock } from "../../components/ui/Skeleton.jsx";
 import { cn } from "../../utils/cn.js";
 
-export default function SystemScreen({ dataLoadState, onClearObjectStorage, onClearSensorData, statusError, systemStatus }) {
+export default function SystemScreen({ dataLoadState, onClearEventData, onClearObjectStorage, onClearSensorData, statusError, systemStatus }) {
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [sensorClearConfirmOpen, setSensorClearConfirmOpen] = useState(false);
   const [clearingSensors, setClearingSensors] = useState(false);
+  const [eventClearConfirmOpen, setEventClearConfirmOpen] = useState(false);
+  const [clearingEvents, setClearingEvents] = useState(false);
   const isInitialLoading = Boolean(dataLoadState?.isInitialLoading);
   const components = systemStatus?.components ?? [];
   const rooms = systemStatus?.sfuRooms ?? [];
   const environment = systemStatus?.config?.environment ?? "";
   const isProduction = environment === "production";
   const objectStorageUsage = normalizeObjectStorageUsage(systemStatus?.objectStorage);
+  const databaseUsage = normalizeDatabaseUsage(systemStatus?.database);
   const summaryItems = [
     ["등록 로봇", systemStatus?.summary?.robots ?? 0],
     ["전체 임무", systemStatus?.summary?.missions ?? 0],
@@ -53,6 +56,19 @@ export default function SystemScreen({ dataLoadState, onClearObjectStorage, onCl
       setSensorClearConfirmOpen(false);
     } finally {
       setClearingSensors(false);
+    }
+  }
+
+  async function confirmClearEventData() {
+    if (!onClearEventData || clearingEvents) {
+      return;
+    }
+    setClearingEvents(true);
+    try {
+      await onClearEventData();
+      setEventClearConfirmOpen(false);
+    } finally {
+      setClearingEvents(false);
     }
   }
 
@@ -98,40 +114,28 @@ export default function SystemScreen({ dataLoadState, onClearObjectStorage, onCl
             <SectionHeader title="테스트 관리" meta={environment || "environment unknown"} />
             <div className="grid gap-3">
               {isInitialLoading ? <PanelSkeleton rows={3} /> : <ObjectStorageUsagePanel usage={objectStorageUsage} />}
-              <div className="grid gap-3 rounded-lg border border-red-400/15 bg-red-400/[0.06] p-3">
-                <div>
-                  <strong className="block text-sm font-black text-red-100">Object Storage 전체 삭제</strong>
-                  <span className="mt-1 block text-xs font-semibold leading-relaxed text-red-100/70">
-                    MinIO bucket의 모든 object와 녹화 파일 availability metadata를 정리합니다.
-                  </span>
-                </div>
-                <Button
-                  className="justify-self-start"
-                  disabled={isProduction || !onClearObjectStorage || clearing}
-                  onClick={() => setClearConfirmOpen(true)}
-                  variant="danger"
-                >
-                  <RiDeleteBin6Line aria-hidden="true" />
-                  전체 삭제
-                </Button>
-              </div>
-              <div className="grid gap-3 rounded-lg border border-red-400/15 bg-red-400/[0.06] p-3">
-                <div>
-                  <strong className="block text-sm font-black text-red-100">Sensor 데이터 전체 삭제</strong>
-                  <span className="mt-1 block text-xs font-semibold leading-relaxed text-red-100/70">
-                    저장된 sensor descriptor와 sample을 정리합니다. 새 telemetry가 들어오면 다시 생성됩니다.
-                  </span>
-                </div>
-                <Button
-                  className="justify-self-start"
-                  disabled={isProduction || !onClearSensorData || clearingSensors}
-                  onClick={() => setSensorClearConfirmOpen(true)}
-                  variant="danger"
-                >
-                  <RiDeleteBin6Line aria-hidden="true" />
-                  전체 삭제
-                </Button>
-              </div>
+              {isInitialLoading ? <PanelSkeleton rows={3} /> : <DatabaseUsagePanel usage={databaseUsage} />}
+              <DangerActionPanel
+                busy={clearing}
+                description="MinIO bucket의 모든 object와 녹화 파일 availability metadata를 정리합니다."
+                disabled={isProduction || !onClearObjectStorage || clearing}
+                onClick={() => setClearConfirmOpen(true)}
+                title="Object Storage 전체 삭제"
+              />
+              <DangerActionPanel
+                busy={clearingSensors}
+                description="저장된 sensor descriptor와 sample을 정리합니다. 새 telemetry가 들어오면 다시 생성됩니다."
+                disabled={isProduction || !onClearSensorData || clearingSensors}
+                onClick={() => setSensorClearConfirmOpen(true)}
+                title="Sensor 데이터 전체 삭제"
+              />
+              <DangerActionPanel
+                busy={clearingEvents}
+                description="저장된 mission/event 로그와 detection snapshot을 정리합니다. 새 event가 들어오면 다시 생성됩니다."
+                disabled={isProduction || !onClearEventData || clearingEvents}
+                onClick={() => setEventClearConfirmOpen(true)}
+                title="Event 데이터 전체 삭제"
+              />
             </div>
           </Surface>
         </div>
@@ -223,6 +227,22 @@ export default function SystemScreen({ dataLoadState, onClearObjectStorage, onCl
           onConfirm={confirmClearSensorData}
           subject="Sensor 데이터"
           title="Sensor 데이터 전체 삭제"
+          tone="danger"
+        />
+      ) : null}
+      {eventClearConfirmOpen ? (
+        <ConfirmDialog
+          cancelLabel="취소"
+          confirmLabel={clearingEvents ? "삭제 중" : "전체 삭제"}
+          description="저장된 mission.event와 detection.object 이벤트를 모두 삭제합니다. active recorder가 event를 다시 받으면 데이터가 다시 생성됩니다."
+          onCancel={() => {
+            if (!clearingEvents) {
+              setEventClearConfirmOpen(false);
+            }
+          }}
+          onConfirm={confirmClearEventData}
+          subject="Event 데이터"
+          title="Event 데이터 전체 삭제"
           tone="danger"
         />
       ) : null}
@@ -379,6 +399,71 @@ function ObjectStorageUsagePanel({ usage }) {
   );
 }
 
+function DatabaseUsagePanel({ usage }) {
+  if (!usage || usage.status !== "ok") {
+    return (
+      <div className="rounded-lg border border-slate-500/20 bg-command-900/50 p-3">
+        <strong className="block text-sm font-black text-slate-100">Database 용량</strong>
+        <span className="mt-1 block text-xs font-semibold leading-relaxed text-slate-500">
+          DB 용량 정보를 불러오지 못했습니다.
+        </span>
+      </div>
+    );
+  }
+
+  const topTables = usage.tables.slice(0, 5);
+  return (
+    <div className="grid gap-3 rounded-lg border border-slate-500/20 bg-command-900/50 p-3">
+      <div className="min-w-0">
+        <strong className="block truncate text-sm font-black text-slate-50">{usage.databaseName || "Database"}</strong>
+        <span className="mt-1 block text-xs font-semibold text-slate-500">PostgreSQL 현재 사용량</span>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <StorageMetric label="DB 전체 크기" value={formatStorageByteCount(usage.databaseSizeBytes)} />
+        <StorageMetric label="추적 테이블 크기" value={formatStorageByteCount(usage.trackedTableBytes)} />
+      </div>
+      {topTables.length > 0 ? (
+        <div className="grid gap-1.5">
+          {topTables.map((table) => (
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-slate-500/15 bg-white/[0.025] px-3 py-2" key={table.tableName}>
+              <div className="min-w-0">
+                <strong className="block truncate text-xs font-black text-slate-200">{makeDatabaseTableLabel(table.tableName)}</strong>
+                <span className="mt-0.5 block truncate text-[11px] font-bold text-slate-500">{table.tableName}</span>
+              </div>
+              <div className="text-right">
+                <strong className="block text-xs font-black text-slate-100">{formatStorageByteCount(table.totalBytes)}</strong>
+                <span className="mt-0.5 block text-[11px] font-bold text-slate-500">추정 {formatInteger(table.rowCount)} rows</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function DangerActionPanel({ busy, description, disabled, onClick, title }) {
+  return (
+    <div className="grid gap-3 rounded-lg border border-red-400/15 bg-red-400/[0.06] p-3">
+      <div>
+        <strong className="block text-sm font-black text-red-100">{title}</strong>
+        <span className="mt-1 block text-xs font-semibold leading-relaxed text-red-100/70">
+          {description}
+        </span>
+      </div>
+      <Button
+        className="justify-self-start"
+        disabled={disabled}
+        onClick={onClick}
+        variant="danger"
+      >
+        <RiDeleteBin6Line aria-hidden="true" />
+        {busy ? "삭제 중" : "전체 삭제"}
+      </Button>
+    </div>
+  );
+}
+
 function StorageMetric({ label, value }) {
   return (
     <div className="min-w-0 rounded-lg border border-slate-500/20 bg-white/[0.035] px-3 py-2">
@@ -400,7 +485,7 @@ function makeSystemStatusLabel(status) {
   return labels[status] ?? status;
 }
 
-function normalizeObjectStorageUsage(rawUsage) {
+export function normalizeObjectStorageUsage(rawUsage) {
   if (!rawUsage) {
     return null;
   }
@@ -417,6 +502,23 @@ function normalizeObjectStorageUsage(rawUsage) {
     totalBytes,
     usedBytes,
     usedPercent: Number.isFinite(rawPercent) && rawPercent > 0 ? rawPercent : calculatedPercent
+  };
+}
+
+export function normalizeDatabaseUsage(rawUsage) {
+  if (!rawUsage) {
+    return null;
+  }
+  return {
+    databaseName: rawUsage.databaseName ?? "",
+    databaseSizeBytes: readStorageNumber(rawUsage.databaseSizeBytes),
+    status: rawUsage.status ?? "unavailable",
+    tables: (rawUsage.tables ?? []).map((table) => ({
+      rowCount: Math.max(0, Math.round(readStorageNumber(table.rowCount))),
+      tableName: table.tableName ?? "",
+      totalBytes: readStorageNumber(table.totalBytes)
+    })),
+    trackedTableBytes: readStorageNumber(rawUsage.trackedTableBytes)
   };
 }
 
@@ -444,7 +546,7 @@ function formatStoragePercent(value) {
   return `${percent.toFixed(1)}%`;
 }
 
-function formatStorageByteCount(value) {
+export function formatStorageByteCount(value) {
   const bytes = Math.max(0, readStorageNumber(value));
   if (bytes === 0) {
     return "0 B";
@@ -458,6 +560,23 @@ function formatStorageByteCount(value) {
   }
   const digits = unitIndex === 0 || amount >= 100 ? 0 : amount >= 10 ? 1 : 2;
   return `${amount.toFixed(digits)} ${units[unitIndex]}`;
+}
+
+function formatInteger(value) {
+  return Math.max(0, Math.round(readStorageNumber(value))).toLocaleString();
+}
+
+function makeDatabaseTableLabel(tableName) {
+  const labels = {
+    events: "Event 데이터",
+    recording_chunks: "녹화 청크",
+    recording_sessions: "녹화 세션",
+    sensor_descriptors: "Sensor descriptor",
+    sensor_latest_samples: "Sensor latest",
+    sensor_samples: "Sensor sample",
+    storage_objects: "Object metadata"
+  };
+  return labels[tableName] ?? tableName;
 }
 
 function makeStorageChartColor(percent) {

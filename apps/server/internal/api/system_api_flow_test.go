@@ -20,6 +20,9 @@ func TestSystemAPIFlow(t *testing.T) {
 	if !componentHasStatus(systemStatus.Components, "recorder-worker", "ok") {
 		t.Fatalf("expected recorder-worker component status ok, got %#v", systemStatus.Components)
 	}
+	if systemStatus.Database.Status != "ok" || systemStatus.Database.DatabaseSizeBytes == nil {
+		t.Fatalf("expected database usage status, got %#v", systemStatus.Database)
+	}
 
 	swaggerResponse, err := http.Get(server.baseURL + "/swagger/index.html")
 	if err != nil {

@@ -15,6 +15,7 @@ type Services struct {
 	Streams   *StreamSessionService
 	Live      *LiveStatusService
 	Storage   *ObjectStorageAdminService
+	System    *SystemService
 
 	transactionRunner store.TransactionRunner
 }
@@ -29,6 +30,7 @@ func NewServices(repository store.Store) *Services {
 		Recording:         &RecordingService{repository: repository, transactionRunner: transactionRunner},
 		Streams:           &StreamSessionService{repository: repository},
 		Live:              &LiveStatusService{},
+		System:            &SystemService{repository: repository},
 		transactionRunner: transactionRunner,
 	}
 }

@@ -46,6 +46,7 @@ func (s *Server) handleSystemStatus(w http.ResponseWriter, r *http.Request) {
 		MinIOBucket:               s.config.MinIOBucket,
 		RecorderWorkerStatus:      s.componentHTTPStatus(requestContext, s.config.RecorderWorkerInternalURL+"/healthz"),
 		ObjectStorage:             s.readObjectStorageStatus(requestContext),
+		Database:                  s.readDatabaseStatus(requestContext),
 		RobotCount:                len(robots),
 		MissionCount:              len(missions),
 		RecordingCount:            len(recordings),
@@ -62,6 +63,14 @@ func (s *Server) readObjectStorageStatus(ctx context.Context) dto.ObjectStorageS
 		return dto.ObjectStorageUnavailable(s.config.MinIOBucket, err)
 	}
 	return dto.ObjectStorageStatus(usage)
+}
+
+func (s *Server) readDatabaseStatus(ctx context.Context) dto.DatabaseStatusResponse {
+	usage, err := s.services.System.GetDatabaseUsage(ctx)
+	if err != nil {
+		return dto.DatabaseUnavailable(err)
+	}
+	return dto.DatabaseStatus(usage)
 }
 
 // @Summary Object Storage 초기화
@@ -133,6 +142,42 @@ func (s *Server) handleClearSensorData(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, dto.ClearSensorDataResponse{
 		SensorData: result,
+	})
+}
+
+// @Summary Event 데이터 초기화
+// @Description 확인 문자열을 받은 뒤 테스트용 mission/event 로그 데이터를 정리합니다. production 환경에서는 실행되지 않습니다.
+// @Tags 시스템 API
+// @Accept json
+// @Produce json
+// @Param request body dto.ClearEventDataRequest true "Event 데이터 초기화 요청"
+// @Success 200 {object} dto.ClearEventDataResponse
+// @Failure 400 {object} dto.ErrorResponse
+// @Failure 403 {object} dto.ErrorResponse
+// @Failure 500 {object} dto.ErrorResponse
+// @Router /api/v1/system/events/clear [post]
+func (s *Server) handleClearEventData(w http.ResponseWriter, r *http.Request) {
+	var request dto.ClearEventDataRequest
+	if err := decodeJSON(r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	result, err := s.services.Events.ClearEventData(r.Context(), s.config.Environment, request.Confirmation)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrSystemActionForbidden):
+			writeError(w, http.StatusForbidden, err)
+		case errors.Is(err, service.ErrSystemActionConfirmationRequired):
+			writeError(w, http.StatusBadRequest, err)
+		default:
+			writeError(w, http.StatusInternalServerError, err)
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, dto.ClearEventDataResponse{
+		EventData: result,
 	})
 }
 

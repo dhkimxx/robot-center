@@ -16,7 +16,12 @@ type EventQuery struct {
 	Limit             int
 }
 
+type EventDataClearResult struct {
+	EventsDeleted int64 `json:"eventsDeleted"`
+}
+
 type EventStore interface {
 	SaveMissionEventEnvelope(ctx context.Context, envelope domain.MissionEventEnvelope) ([]domain.MissionEvent, error)
 	ListMissionEvents(ctx context.Context, query EventQuery) ([]domain.MissionEvent, error)
+	ClearEventData(ctx context.Context) (EventDataClearResult, error)
 }

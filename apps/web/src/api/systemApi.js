@@ -19,3 +19,11 @@ export function clearSensorData() {
     timeoutMs: 60000
   });
 }
+
+export function clearEventData() {
+  return requestJson("/api/v1/system/events/clear", {
+    body: JSON.stringify({ confirmation: "CLEAR_EVENT_DATA" }),
+    method: "POST",
+    timeoutMs: 60000
+  });
+}

@@ -252,6 +252,17 @@ func TestRecorderAPIFlow(t *testing.T) {
 		t.Fatalf("expected mission.event category/code values to be rejected, got %d", legacyMissionEventStatus)
 	}
 
+	clearEventPayload := requestJSON[dto.ClearEventDataResponse](t, server.baseURL, http.MethodPost, "/api/v1/system/events/clear", "", dto.ClearEventDataRequest{
+		Confirmation: "CLEAR_EVENT_DATA",
+	})
+	if clearEventPayload.EventData.EventsDeleted != 4 {
+		t.Fatalf("expected four events deleted, got %#v", clearEventPayload)
+	}
+	operatorEventsAfterClearPayload := requestJSON[dto.OperatorMissionEventsResponse](t, server.baseURL, http.MethodGet, "/api/v1/operator/missions/"+mission.code+"/events?includeDetections=true", "", nil)
+	if len(operatorEventsAfterClearPayload.Events) != 0 {
+		t.Fatalf("expected events to be empty after clear, got %#v", operatorEventsAfterClearPayload)
+	}
+
 	clearSensorPayload := requestJSON[dto.ClearSensorDataResponse](t, server.baseURL, http.MethodPost, "/api/v1/system/sensors/clear", "", dto.ClearSensorDataRequest{
 		Confirmation: "CLEAR_SENSOR_DATA",
 	})

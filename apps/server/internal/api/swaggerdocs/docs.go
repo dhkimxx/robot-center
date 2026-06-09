@@ -1400,6 +1400,58 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/system/events/clear": {
+            "post": {
+                "description": "확인 문자열을 받은 뒤 테스트용 mission/event 로그 데이터를 정리합니다. production 환경에서는 실행되지 않습니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "시스템 API"
+                ],
+                "summary": "Event 데이터 초기화",
+                "parameters": [
+                    {
+                        "description": "Event 데이터 초기화 요청",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.ClearEventDataRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.ClearEventDataResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/system/object-storage/clear": {
             "post": {
                 "description": "확인 문자열을 받은 뒤 테스트용 object storage 데이터를 정리합니다. production 환경에서는 실행되지 않습니다.",
@@ -1552,6 +1604,22 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "robot-center_apps_server_internal_api_dto.ClearEventDataRequest": {
+            "type": "object",
+            "properties": {
+                "confirmation": {
+                    "type": "string"
+                }
+            }
+        },
+        "robot-center_apps_server_internal_api_dto.ClearEventDataResponse": {
+            "type": "object",
+            "properties": {
+                "eventData": {
+                    "$ref": "#/definitions/robot-center_apps_server_internal_store.EventDataClearResult"
+                }
+            }
+        },
         "robot-center_apps_server_internal_api_dto.ClearObjectStorageRequest": {
             "type": "object",
             "properties": {
@@ -1626,6 +1694,46 @@ const docTemplate = `{
                 },
                 "robot": {
                     "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.RobotResponse"
+                }
+            }
+        },
+        "robot-center_apps_server_internal_api_dto.DatabaseStatusResponse": {
+            "type": "object",
+            "properties": {
+                "databaseName": {
+                    "type": "string"
+                },
+                "databaseSizeBytes": {
+                    "type": "integer"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "tables": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.DatabaseTableUsageResponse"
+                    }
+                },
+                "trackedTableBytes": {
+                    "type": "integer"
+                }
+            }
+        },
+        "robot-center_apps_server_internal_api_dto.DatabaseTableUsageResponse": {
+            "type": "object",
+            "properties": {
+                "rowCount": {
+                    "type": "integer"
+                },
+                "tableName": {
+                    "type": "string"
+                },
+                "totalBytes": {
+                    "type": "integer"
                 }
             }
         },
@@ -3001,6 +3109,9 @@ const docTemplate = `{
                 "config": {
                     "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.SystemConfigResponse"
                 },
+                "database": {
+                    "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.DatabaseStatusResponse"
+                },
                 "objectStorage": {
                     "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.ObjectStorageStatusResponse"
                 },
@@ -3238,6 +3349,14 @@ const docTemplate = `{
                 },
                 "roomId": {
                     "type": "string"
+                }
+            }
+        },
+        "robot-center_apps_server_internal_store.EventDataClearResult": {
+            "type": "object",
+            "properties": {
+                "eventsDeleted": {
+                    "type": "integer"
                 }
             }
         },

@@ -12,6 +12,7 @@ type SystemStatusResponse struct {
 	Components    []SystemComponentStatus     `json:"components"`
 	Config        SystemConfigResponse        `json:"config"`
 	ObjectStorage ObjectStorageStatusResponse `json:"objectStorage"`
+	Database      DatabaseStatusResponse      `json:"database"`
 	Summary       SystemSummaryResponse       `json:"summary"`
 	SFURooms      []sfu.RoomSummary           `json:"sfuRooms"`
 }
@@ -25,6 +26,7 @@ type SystemStatusInput struct {
 	MinIOBucket               string
 	RecorderWorkerStatus      string
 	ObjectStorage             ObjectStorageStatusResponse
+	Database                  DatabaseStatusResponse
 	RobotCount                int
 	MissionCount              int
 	RecordingCount            int
@@ -68,6 +70,21 @@ type ObjectStorageStatusResponse struct {
 	Error              string   `json:"error,omitempty"`
 }
 
+type DatabaseStatusResponse struct {
+	Status            string                       `json:"status"`
+	DatabaseName      string                       `json:"databaseName,omitempty"`
+	DatabaseSizeBytes *int64                       `json:"databaseSizeBytes,omitempty"`
+	TrackedTableBytes *int64                       `json:"trackedTableBytes,omitempty"`
+	Tables            []DatabaseTableUsageResponse `json:"tables,omitempty"`
+	Error             string                       `json:"error,omitempty"`
+}
+
+type DatabaseTableUsageResponse struct {
+	TableName  string `json:"tableName"`
+	RowCount   int64  `json:"rowCount"`
+	TotalBytes int64  `json:"totalBytes"`
+}
+
 type ClearObjectStorageRequest struct {
 	Confirmation string `json:"confirmation"`
 }
@@ -82,6 +99,14 @@ type ClearSensorDataRequest struct {
 
 type ClearSensorDataResponse struct {
 	SensorData store.SensorDataClearResult `json:"sensorData"`
+}
+
+type ClearEventDataRequest struct {
+	Confirmation string `json:"confirmation"`
+}
+
+type ClearEventDataResponse struct {
+	EventData store.EventDataClearResult `json:"eventData"`
 }
 
 func SystemStatus(input SystemStatusInput) SystemStatusResponse {
@@ -104,6 +129,7 @@ func SystemStatus(input SystemStatusInput) SystemStatusResponse {
 			MinIOBucket:               input.MinIOBucket,
 		},
 		ObjectStorage: input.ObjectStorage,
+		Database:      input.Database,
 		Summary: SystemSummaryResponse{
 			Robots:     input.RobotCount,
 			Missions:   input.MissionCount,
@@ -112,6 +138,36 @@ func SystemStatus(input SystemStatusInput) SystemStatusResponse {
 		},
 		SFURooms: input.SFURooms,
 	}
+}
+
+func DatabaseStatus(usage store.DatabaseUsageResult) DatabaseStatusResponse {
+	return DatabaseStatusResponse{
+		Status:            usage.Status,
+		DatabaseName:      usage.DatabaseName,
+		DatabaseSizeBytes: int64Ptr(usage.DatabaseSizeBytes),
+		TrackedTableBytes: int64Ptr(usage.TrackedTableBytes),
+		Tables:            DatabaseTableUsage(usage.Tables),
+	}
+}
+
+func DatabaseUnavailable(err error) DatabaseStatusResponse {
+	response := DatabaseStatusResponse{Status: "unavailable"}
+	if err != nil {
+		response.Error = err.Error()
+	}
+	return response
+}
+
+func DatabaseTableUsage(tables []store.DatabaseTableUsage) []DatabaseTableUsageResponse {
+	response := make([]DatabaseTableUsageResponse, 0, len(tables))
+	for _, table := range tables {
+		response = append(response, DatabaseTableUsageResponse{
+			TableName:  table.TableName,
+			RowCount:   table.RowCount,
+			TotalBytes: table.TotalBytes,
+		})
+	}
+	return response
 }
 
 func ObjectStorageStatus(usage service.ObjectStorageUsageResult) ObjectStorageStatusResponse {

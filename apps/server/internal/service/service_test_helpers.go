@@ -254,6 +254,10 @@ func (s *recordingStoreSpy) ListMissionEvents(_ context.Context, _ store.EventQu
 	return nil, nil
 }
 
+func (s *recordingStoreSpy) ClearEventData(_ context.Context) (store.EventDataClearResult, error) {
+	return store.EventDataClearResult{}, nil
+}
+
 func (s *recordingStoreSpy) StartRobotStreamSession(_ context.Context, _ store.StartRobotStreamSessionInput) (domain.RobotStreamSession, error) {
 	return domain.RobotStreamSession{}, nil
 }
@@ -272,6 +276,10 @@ func (s *recordingStoreSpy) ListRobotStreamSessionsForMission(_ context.Context,
 
 func (s *recordingStoreSpy) ResetObjectStorageMetadata(_ context.Context) (store.StorageMetadataResetResult, error) {
 	return store.StorageMetadataResetResult{}, nil
+}
+
+func (s *recordingStoreSpy) GetDatabaseUsage(_ context.Context) (store.DatabaseUsageResult, error) {
+	return store.DatabaseUsageResult{}, nil
 }
 
 type recordingTransactionRunnerSpy struct {

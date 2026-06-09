@@ -1,5 +1,15 @@
 basePath: /
 definitions:
+  robot-center_apps_server_internal_api_dto.ClearEventDataRequest:
+    properties:
+      confirmation:
+        type: string
+    type: object
+  robot-center_apps_server_internal_api_dto.ClearEventDataResponse:
+    properties:
+      eventData:
+        $ref: '#/definitions/robot-center_apps_server_internal_store.EventDataClearResult'
+    type: object
   robot-center_apps_server_internal_api_dto.ClearObjectStorageRequest:
     properties:
       confirmation:
@@ -48,6 +58,32 @@ definitions:
         $ref: '#/definitions/robot-center_apps_server_internal_api_dto.RobotConnectionInfoResponse'
       robot:
         $ref: '#/definitions/robot-center_apps_server_internal_api_dto.RobotResponse'
+    type: object
+  robot-center_apps_server_internal_api_dto.DatabaseStatusResponse:
+    properties:
+      databaseName:
+        type: string
+      databaseSizeBytes:
+        type: integer
+      error:
+        type: string
+      status:
+        type: string
+      tables:
+        items:
+          $ref: '#/definitions/robot-center_apps_server_internal_api_dto.DatabaseTableUsageResponse'
+        type: array
+      trackedTableBytes:
+        type: integer
+    type: object
+  robot-center_apps_server_internal_api_dto.DatabaseTableUsageResponse:
+    properties:
+      rowCount:
+        type: integer
+      tableName:
+        type: string
+      totalBytes:
+        type: integer
     type: object
   robot-center_apps_server_internal_api_dto.ErrorResponse:
     properties:
@@ -945,6 +981,8 @@ definitions:
         type: array
       config:
         $ref: '#/definitions/robot-center_apps_server_internal_api_dto.SystemConfigResponse'
+      database:
+        $ref: '#/definitions/robot-center_apps_server_internal_api_dto.DatabaseStatusResponse'
       objectStorage:
         $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ObjectStorageStatusResponse'
       service:
@@ -1104,6 +1142,11 @@ definitions:
         type: integer
       roomId:
         type: string
+    type: object
+  robot-center_apps_server_internal_store.EventDataClearResult:
+    properties:
+      eventsDeleted:
+        type: integer
     type: object
   robot-center_apps_server_internal_store.SensorDataClearResult:
     properties:
@@ -2035,6 +2078,41 @@ paths:
       summary: Robot SFU WebSocket 연결
       tags:
       - Robot API
+  /api/v1/system/events/clear:
+    post:
+      consumes:
+      - application/json
+      description: 확인 문자열을 받은 뒤 테스트용 mission/event 로그 데이터를 정리합니다. production 환경에서는
+        실행되지 않습니다.
+      parameters:
+      - description: Event 데이터 초기화 요청
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ClearEventDataRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ClearEventDataResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse'
+      summary: Event 데이터 초기화
+      tags:
+      - 시스템 API
   /api/v1/system/object-storage/clear:
     post:
       consumes:

@@ -16,6 +16,7 @@ type EventStore = port.EventStore
 type RecordingStore = port.RecordingStore
 type StreamSessionStore = port.StreamSessionStore
 type StorageAdminStore = port.StorageAdminStore
+type SystemStore = port.SystemStore
 
 type RobotRepository = port.RobotStore
 type MissionRepository = port.MissionStore
@@ -24,6 +25,7 @@ type EventRepository = port.EventStore
 type RecordingRepository = port.RecordingStore
 type StreamSessionRepository = port.StreamSessionStore
 type StorageAdminRepository = port.StorageAdminStore
+type SystemRepository = port.SystemStore
 type TransactionRunner = port.TransactionRunner
 
 type MissionStartConflict = port.MissionStartConflict
@@ -48,6 +50,9 @@ type TouchRobotStreamSessionInput = port.TouchRobotStreamSessionInput
 type EndRobotStreamSessionInput = port.EndRobotStreamSessionInput
 type StorageMetadataResetResult = port.StorageMetadataResetResult
 type SensorDataClearResult = port.SensorDataClearResult
+type EventDataClearResult = port.EventDataClearResult
+type DatabaseUsageResult = port.DatabaseUsageResult
+type DatabaseTableUsage = port.DatabaseTableUsage
 type EventQuery = port.EventQuery
 
 type PostgresConfig = postgresstore.Config

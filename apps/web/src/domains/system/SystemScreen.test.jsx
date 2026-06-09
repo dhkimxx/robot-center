@@ -3,6 +3,9 @@ import {
   countRoomPublishedTracks,
   countRoomRobotPublishers,
   createRoomPeerSummaries,
+  formatStorageByteCount,
+  normalizeDatabaseUsage,
+  normalizeObjectStorageUsage,
   makeRoomStreamingState
 } from "./SystemScreen.jsx";
 
@@ -52,5 +55,49 @@ describe("SystemScreen room summaries", () => {
     };
 
     expect(countRoomPublishedTracks(room)).toBe(1);
+  });
+});
+
+describe("SystemScreen usage summaries", () => {
+  it("normalizes database usage for display", () => {
+    const usage = normalizeDatabaseUsage({
+      databaseName: "robot_center",
+      databaseSizeBytes: "10485760",
+      trackedTableBytes: "8388608",
+      status: "ok",
+      tables: [
+        { tableName: "events", rowCount: "100036", totalBytes: "7340032" },
+        { tableName: "sensor_samples", rowCount: null, totalBytes: "1048576" }
+      ]
+    });
+
+    expect(usage).toEqual({
+      databaseName: "robot_center",
+      databaseSizeBytes: 10485760,
+      status: "ok",
+      tables: [
+        { tableName: "events", rowCount: 100036, totalBytes: 7340032 },
+        { tableName: "sensor_samples", rowCount: 0, totalBytes: 1048576 }
+      ],
+      trackedTableBytes: 8388608
+    });
+  });
+
+  it("normalizes object storage percent from byte counts when needed", () => {
+    const usage = normalizeObjectStorageUsage({
+      bucket: "robot-center",
+      status: "ok",
+      totalBytes: 1000,
+      usedBytes: 250,
+      usedPercent: 0
+    });
+
+    expect(usage.usedPercent).toBe(25);
+  });
+
+  it("formats byte counts with stable units", () => {
+    expect(formatStorageByteCount(0)).toBe("0 B");
+    expect(formatStorageByteCount(1024)).toBe("1.00 KB");
+    expect(formatStorageByteCount(1536 * 1024)).toBe("1.50 MB");
   });
 });

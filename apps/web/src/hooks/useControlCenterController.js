@@ -20,7 +20,7 @@ import {
   createTelemetryFromSensorLatest
 } from "../domains/live/sensorLatestMapper.js";
 import { useOperationStatuses } from "../domains/live/useOperationStatuses.js";
-import { clearObjectStorage, clearSensorData } from "../api/systemApi.js";
+import { clearEventData, clearObjectStorage, clearSensorData } from "../api/systemApi.js";
 import { useControlCenterData } from "./useControlCenterData.js";
 import { useNotifications } from "./useNotifications.js";
 
@@ -168,6 +168,22 @@ export function useControlCenterController({
       throw error;
     }
   }, [loadAll, refreshSensorSnapshot, showNotification]);
+
+  const clearSystemEventData = useCallback(async () => {
+    try {
+      const payload = await clearEventData();
+      const result = payload.eventData ?? {};
+      showNotification(
+        `Event 데이터 ${result.eventsDeleted ?? 0}개 삭제 완료`,
+        "success"
+      );
+      await loadAll();
+      return result;
+    } catch (error) {
+      showNotification(error instanceof Error ? error.message : "Event 데이터 정리 실패", "danger");
+      throw error;
+    }
+  }, [loadAll, showNotification]);
 
   useEffect(() => {
     const previousMissionCode = previousRouteMissionControlCodeRef.current;
@@ -381,6 +397,7 @@ export function useControlCenterController({
       selectedRobot: robotController.selectedRobot
     },
     systemRouteProps: {
+      onClearEventData: clearSystemEventData,
       onClearObjectStorage: clearSystemObjectStorage,
       onClearSensorData: clearSystemSensorData,
       dataLoadState,
