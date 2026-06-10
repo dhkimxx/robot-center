@@ -73,7 +73,7 @@ export function MissionReplayScreen({
   }
 
   return (
-    <Surface className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden p-3">
+    <Surface className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden p-3" data-testid="mission-replay-screen">
       <MissionReplayHeader
         mission={mission}
         onBackToMissionList={onBackToMissionList}

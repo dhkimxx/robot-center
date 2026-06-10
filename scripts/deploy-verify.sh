@@ -30,6 +30,11 @@ BROWSER_SMOKE_MISSION_CODE="${BROWSER_SMOKE_MISSION_CODE:-}"
 BROWSER_SMOKE_ROBOT_CODE="${BROWSER_SMOKE_ROBOT_CODE:-}"
 BROWSER_SMOKE_TIMEOUT_SECONDS="${BROWSER_SMOKE_TIMEOUT_SECONDS:-60}"
 BROWSER_SMOKE_REQUIRE_RECORDING=0
+REPLAY_SMOKE=0
+REPLAY_SMOKE_MISSION_CODE="${REPLAY_SMOKE_MISSION_CODE:-}"
+REPLAY_SMOKE_ROBOT_CODE="${REPLAY_SMOKE_ROBOT_CODE:-}"
+REPLAY_SMOKE_FILE_TYPES="${REPLAY_SMOKE_FILE_TYPES:-rgb_audio_mp4,thermal_mp4}"
+REPLAY_SMOKE_TIMEOUT_SECONDS="${REPLAY_SMOKE_TIMEOUT_SECONDS:-60}"
 
 RUN_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 CURRENT_STEP="initialization"
@@ -42,6 +47,7 @@ POST_DEPLOY_STATUS="pending"
 LOG_SCAN_STATUS="pending"
 WEBRTC_SMOKE_STATUS="not_requested"
 BROWSER_SMOKE_STATUS="not_requested"
+REPLAY_SMOKE_STATUS="not_requested"
 REPORT_LINES=()
 
 usage() {
@@ -80,6 +86,15 @@ Options:
                            Max wait for rendered videos. Default: 60.
   --browser-smoke-require-recording
                            Also require recording status text in the browser UI.
+  --replay-smoke           Verify mission replay video playback through Playwright CLI.
+  --replay-smoke-mission MISSION_CODE
+                           Limit replay smoke verification to one mission.
+  --replay-smoke-robot ROBOT_CODE
+                           Limit replay smoke verification to one robot.
+  --replay-smoke-file-types TYPES
+                           Comma-separated video file types. Default: rgb_audio_mp4,thermal_mp4.
+  --replay-smoke-timeout-seconds SECONDS
+                           Max wait for replay videos. Default: 60.
   -h, --help               Show this help.
 
 Environment:
@@ -95,6 +110,10 @@ Environment:
   BROWSER_SMOKE_MISSION_CODE
   BROWSER_SMOKE_ROBOT_CODE
   BROWSER_SMOKE_TIMEOUT_SECONDS
+  REPLAY_SMOKE_MISSION_CODE
+  REPLAY_SMOKE_ROBOT_CODE
+  REPLAY_SMOKE_FILE_TYPES
+  REPLAY_SMOKE_TIMEOUT_SECONDS
 EOF
 }
 
@@ -221,6 +240,46 @@ while [[ $# -gt 0 ]]; do
       BROWSER_SMOKE_REQUIRE_RECORDING=1
       shift
       ;;
+    --replay-smoke)
+      REPLAY_SMOKE=1
+      shift
+      ;;
+    --replay-smoke-mission)
+      REPLAY_SMOKE=1
+      REPLAY_SMOKE_MISSION_CODE="${2:-}"
+      if [[ -z "$REPLAY_SMOKE_MISSION_CODE" ]]; then
+        printf '%s\n' '--replay-smoke-mission requires a value' >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --replay-smoke-robot)
+      REPLAY_SMOKE=1
+      REPLAY_SMOKE_ROBOT_CODE="${2:-}"
+      if [[ -z "$REPLAY_SMOKE_ROBOT_CODE" ]]; then
+        printf '%s\n' '--replay-smoke-robot requires a value' >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --replay-smoke-file-types)
+      REPLAY_SMOKE=1
+      REPLAY_SMOKE_FILE_TYPES="${2:-}"
+      if [[ -z "$REPLAY_SMOKE_FILE_TYPES" ]]; then
+        printf '%s\n' '--replay-smoke-file-types requires a value' >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --replay-smoke-timeout-seconds)
+      REPLAY_SMOKE=1
+      REPLAY_SMOKE_TIMEOUT_SECONDS="${2:-}"
+      if [[ -z "$REPLAY_SMOKE_TIMEOUT_SECONDS" ]]; then
+        printf '%s\n' '--replay-smoke-timeout-seconds requires a value' >&2
+        exit 1
+      fi
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -304,6 +363,11 @@ mark_failed_status_for_current_step() {
         BROWSER_SMOKE_STATUS="failed"
       fi
       ;;
+    "replay smoke")
+      if [[ "$REPLAY_SMOKE_STATUS" == "running" ]]; then
+        REPLAY_SMOKE_STATUS="failed"
+      fi
+      ;;
   esac
   return 0
 }
@@ -350,6 +414,7 @@ print_final_report() {
   print_status_line "logScan" "$LOG_SCAN_STATUS"
   print_status_line "webrtcSmoke" "$WEBRTC_SMOKE_STATUS"
   print_status_line "browserSmoke" "$BROWSER_SMOKE_STATUS"
+  print_status_line "replaySmoke" "$REPLAY_SMOKE_STATUS"
   print_status_line "ui" "$DEV_SERVER_PUBLIC_URL"
   print_status_line "recorder" "$DEV_SERVER_RECORDER_URL/healthz"
 
@@ -751,6 +816,49 @@ run_browser_smoke_check() {
   append_report_line "$browser_output"
 }
 
+run_replay_smoke_check() {
+  if [[ "$REPLAY_SMOKE" != "1" ]]; then
+    return
+  fi
+
+  print_step "replay smoke"
+  REPLAY_SMOKE_STATUS="running"
+  require_command npx
+
+  local args=(
+    "$ROOT_DIR/scripts/deploy-verify-replay-smoke.sh"
+    --base-url "$DEV_SERVER_PUBLIC_URL"
+    --file-types "$REPLAY_SMOKE_FILE_TYPES"
+    --timeout-seconds "$REPLAY_SMOKE_TIMEOUT_SECONDS"
+  )
+  if [[ -n "$REPLAY_SMOKE_MISSION_CODE" ]]; then
+    args+=(--mission-code "$REPLAY_SMOKE_MISSION_CODE")
+  elif [[ -n "$BROWSER_SMOKE_MISSION_CODE" ]]; then
+    args+=(--mission-code "$BROWSER_SMOKE_MISSION_CODE")
+  elif [[ -n "$WEBRTC_SMOKE_MISSION_CODE" ]]; then
+    args+=(--mission-code "$WEBRTC_SMOKE_MISSION_CODE")
+  fi
+  if [[ -n "$REPLAY_SMOKE_ROBOT_CODE" ]]; then
+    args+=(--robot-code "$REPLAY_SMOKE_ROBOT_CODE")
+  elif [[ -n "$BROWSER_SMOKE_ROBOT_CODE" ]]; then
+    args+=(--robot-code "$BROWSER_SMOKE_ROBOT_CODE")
+  elif [[ -n "$WEBRTC_SMOKE_ROBOT_CODE" ]]; then
+    args+=(--robot-code "$WEBRTC_SMOKE_ROBOT_CODE")
+  fi
+
+  local replay_output
+  if ! replay_output="$("${args[@]}" 2>&1)"; then
+    printf '%s\n' "$replay_output" >&2
+    REPLAY_SMOKE_STATUS="failed"
+    append_report_line "replay smoke: failed"
+    append_report_line "$replay_output"
+    return 1
+  fi
+  printf '%s\n' "$replay_output"
+  REPLAY_SMOKE_STATUS="ok"
+  append_report_line "$replay_output"
+}
+
 trap on_exit EXIT
 
 require_command git
@@ -774,3 +882,4 @@ else
 fi
 run_webrtc_smoke_check
 run_browser_smoke_check
+run_replay_smoke_check

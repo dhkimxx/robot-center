@@ -26,6 +26,8 @@ export function MissionReplayRobotList({
               "grid min-h-24 w-full gap-2 rounded-lg border border-slate-500/20 bg-white/[0.045] px-3 py-2.5 text-left transition hover:border-sapphire-500/[0.45] hover:bg-sapphire-500/[0.12]",
               isSelected && "border-sapphire-500/55 bg-sapphire-500/[0.10] shadow-[inset_3px_0_0_var(--color-sapphire)]"
             )}
+            data-robot-code={robotSummary.robotCode}
+            data-testid="mission-replay-robot-option"
             key={robotSummary.robotCode}
             type="button"
             onClick={() => onSelectRobot(robotSummary.robotCode)}

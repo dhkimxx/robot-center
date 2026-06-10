@@ -22,6 +22,7 @@ history:
 - '2026-06-09 danya.kim <danya.kim@thundersoft.com>: document WebRTC smoke option for deploy verification'
 - '2026-06-09 danya.kim <danya.kim@thundersoft.com>: document deploy verification summary report'
 - '2026-06-09 danya.kim <danya.kim@thundersoft.com>: document browser smoke option for deploy verification'
+- '2026-06-09 danya.kim <danya.kim@thundersoft.com>: document replay smoke option for deploy verification'
 ---
 
 # Dev Server Docker Deployment
@@ -158,6 +159,23 @@ SSHPASS='...' ./scripts/deploy-verify.sh \
 - 센서 패널과 연결 상태가 화면에 표시됨
 - `--browser-smoke-require-recording` 지정 시 녹화 중 상태가 화면에 표시됨
 
+녹화 리플레이 경로를 바꾼 경우에는 replay smoke 확인을 추가한다.
+
+```bash
+SSHPASS='...' ./scripts/deploy-verify.sh \
+  --no-commit \
+  --replay-smoke \
+  --replay-smoke-mission mission-054 \
+  --replay-smoke-robot robot-042
+```
+
+`--replay-smoke`는 Playwright CLI로 mission replay 화면을 열고 다음을 확인한다.
+
+- 재생 가능한 최신 녹화 청크와 요청한 로봇이 일치
+- 기본 기준인 `rgb_audio_mp4`, `thermal_mp4` 재생 버튼을 각각 열 수 있음
+- playback modal의 `<video>`가 URL, 해상도, duration, `readyState`를 정상으로 가짐
+- 필요하면 `--replay-smoke-file-types rgb_audio_mp4`처럼 확인할 파일 타입을 좁힐 수 있음
+
 하네스는 마지막에 요약 리포트를 한 번 출력한다. 성공 시에는 단계별 상태와 확인 URL, API/WebRTC 상세 결과가 남는다.
 
 ```text
@@ -173,11 +191,13 @@ postDeploy:        skipped
 logScan:           skipped
 webrtcSmoke:       ok
 browserSmoke:      ok
+replaySmoke:       ok
 ui:                http://192.168.20.12:18080
 recorder:          http://192.168.20.12:18082/healthz
 details:
   - webrtc smoke: mission=mission-054 passed robots=robot-042,robot-043,robot-045
   - browser smoke: mission=mission-054 robot=robot-042 rgb=640x360 readyState=4; thermal=640x360 readyState=4
+  - replay smoke: mission=mission-054 robot=robot-042 rgb_audio_mp4=640x360 duration=600.16 readyState=4; thermal_mp4=640x360 duration=600.18 readyState=4
 ```
 
 실패 시에는 `result=failed`와 `failedStep`을 먼저 보고, 아래 `details`에서 실패 원인을 확인한다.

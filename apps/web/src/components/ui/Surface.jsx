@@ -17,10 +17,11 @@ export default function Surface({
   children,
   className,
   padding = "md",
-  variant = "panel"
+  variant = "panel",
+  ...props
 }) {
   return (
-    <Component className={cn("rounded-xl border shadow-none", surfaceVariants[variant], surfacePadding[padding], className)}>
+    <Component className={cn("rounded-xl border shadow-none", surfaceVariants[variant], surfacePadding[padding], className)} {...props}>
       {children}
     </Component>
   );

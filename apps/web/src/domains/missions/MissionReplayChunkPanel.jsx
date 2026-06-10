@@ -109,7 +109,11 @@ function MissionReplayChunkHeader({
 
 function MissionReplaySessionGroup({ onOpenPlaybackFile, session }) {
   return (
-    <section className="grid gap-3 rounded-xl border border-slate-500/20 bg-white/[0.045] p-3">
+    <section
+      className="grid gap-3 rounded-xl border border-slate-500/20 bg-white/[0.045] p-3"
+      data-recording-session-id={session.id}
+      data-testid="mission-replay-session"
+    >
       <div className="flex items-start justify-between gap-4 max-[900px]:flex-col">
         <div className="min-w-0">
           <strong className="block truncate text-base font-bold text-slate-50">{session.missionCode}</strong>
@@ -123,7 +127,14 @@ function MissionReplaySessionGroup({ onOpenPlaybackFile, session }) {
       </div>
       <div className="grid gap-2">
         {session.chunks.map((recording) => (
-          <div className="grid gap-3 rounded-lg border border-slate-500/20 bg-white/[0.045] p-3" key={recording.id}>
+          <div
+            className="grid gap-3 rounded-lg border border-slate-500/20 bg-white/[0.045] p-3"
+            data-chunk-index={recording.chunkIndex}
+            data-recording-id={recording.id}
+            data-recording-session-id={recording.recordingSessionId}
+            data-testid="mission-replay-chunk"
+            key={recording.id}
+          >
             <div className="grid gap-1">
               <strong className="text-sm font-bold text-slate-50">청크 #{recording.chunkIndex}</strong>
               <span className="text-xs font-semibold leading-relaxed text-slate-400">

@@ -13,6 +13,9 @@ export function RecordingPlaybackModal({ file, onClose }) {
     }}>
       <section
         className="grid max-h-[calc(100vh-48px)] w-[min(1100px,calc(100vw-48px))] grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-2xl border border-slate-500/20 bg-command-950 shadow-command max-[820px]:max-h-[calc(100vh-24px)] max-[820px]:w-[calc(100vw-24px)]"
+        data-file-type={file.type ?? ""}
+        data-robot-code={file.robotCode ?? ""}
+        data-testid="recording-playback-modal"
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
@@ -30,7 +33,16 @@ export function RecordingPlaybackModal({ file, onClose }) {
           </div>
         </header>
         <div className="grid min-h-[360px] bg-command-950">
-          <video className="block h-[min(72vh,760px)] w-full bg-command-950 object-contain" key={file.url} src={file.url} controls playsInline />
+          <video
+            className="block h-[min(72vh,760px)] w-full bg-command-950 object-contain"
+            data-file-type={file.type ?? ""}
+            data-robot-code={file.robotCode ?? ""}
+            data-testid="recording-playback-video"
+            key={file.url}
+            src={file.url}
+            controls
+            playsInline
+          />
         </div>
       </section>
     </div>
