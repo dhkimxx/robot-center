@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 BASE_URL="${DEV_SERVER_PUBLIC_URL:-http://192.168.20.12:18080}"
 MISSION_CODE="${BROWSER_SMOKE_MISSION_CODE:-}"
 ROBOT_CODE="${BROWSER_SMOKE_ROBOT_CODE:-}"
@@ -8,8 +10,9 @@ TIMEOUT_SECONDS="${BROWSER_SMOKE_TIMEOUT_SECONDS:-60}"
 REQUIRE_RECORDING="${BROWSER_SMOKE_REQUIRE_RECORDING:-0}"
 SESSION_NAME="${BROWSER_SMOKE_SESSION:-bs-$$-$RANDOM}"
 KEEP_OPEN=0
-PWCLI_COMMAND=(npx -y --package @playwright/cli playwright-cli --session "$SESSION_NAME")
-TEMP_FILES=()
+
+source "$SCRIPT_DIR/deploy-verify-playwright-common.sh"
+configure_playwright_cli "$SESSION_NAME"
 
 usage() {
   cat <<'EOF'
@@ -57,7 +60,7 @@ while [[ $# -gt 0 ]]; do
     --session)
       SESSION_NAME="${2:-}"
       [[ -n "$SESSION_NAME" ]] || { printf '%s\n' '--session requires a value' >&2; exit 1; }
-      PWCLI_COMMAND=(npx -y --package @playwright/cli playwright-cli --session "$SESSION_NAME")
+      configure_playwright_cli "$SESSION_NAME"
       shift 2
       ;;
     --keep-open)
@@ -78,43 +81,10 @@ done
 
 BASE_URL="${BASE_URL%/}"
 
-require_command() {
-  local command_name="$1"
-  if ! command -v "$command_name" >/dev/null 2>&1; then
-    printf '%s command not found\n' "$command_name" >&2
-    exit 1
-  fi
-}
-
-json_string() {
-  python3 -c 'import json, sys; print(json.dumps(sys.argv[1]))' "$1"
-}
-
-pwcli() {
-  "${PWCLI_COMMAND[@]}" "$@"
-}
-
-close_browser() {
-  if [[ "$KEEP_OPEN" == "1" ]]; then
-    return
-  fi
-  pwcli close >/dev/null 2>&1 || true
-}
-
-cleanup() {
-  local file_path
-  for file_path in "${TEMP_FILES[@]}"; do
-    [[ -n "$file_path" ]] || continue
-    rm -f "$file_path"
-  done
-  close_browser
-}
-
 select_target_from_status() {
   local system_status_file live_status_file
-  system_status_file="$(mktemp)"
-  live_status_file="$(mktemp)"
-  TEMP_FILES+=("$system_status_file" "$live_status_file")
+  system_status_file="$(make_temp_file)"
+  live_status_file="$(make_temp_file)"
 
   curl -fsS "$BASE_URL/api/v1/system/status" >"$system_status_file"
   if [[ -z "$MISSION_CODE" ]]; then
@@ -157,11 +127,6 @@ PY
     printf 'browser smoke failed: no streaming robot found for %s\n' "$MISSION_CODE" >&2
     return 1
   fi
-}
-
-evaluate_raw() {
-  local expression="$1"
-  pwcli --raw eval "$expression"
 }
 
 click_robot_option() {
@@ -284,7 +249,7 @@ require_command curl
 require_command npx
 require_command python3
 
-trap cleanup EXIT
+trap cleanup_playwright_smoke EXIT
 
 select_target_from_status
 
@@ -296,8 +261,7 @@ pwcli goto "$control_url" >/dev/null
 select_robot_in_browser
 
 deadline=$((SECONDS + TIMEOUT_SECONDS))
-last_status_file="$(mktemp)"
-TEMP_FILES+=("$last_status_file")
+last_status_file="$(make_temp_file)"
 summary="not evaluated"
 while (( SECONDS <= deadline )); do
   read_browser_status >"$last_status_file"

@@ -3,6 +3,7 @@ import argparse
 import asyncio
 import json
 import math
+import os
 import signal
 from datetime import datetime, timezone
 from fractions import Fraction
@@ -1066,7 +1067,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Robot Center Python Mock Robot")
     parser.add_argument("--server-url", required=True)
     parser.add_argument("--robot-code", required=True)
-    parser.add_argument("--robot-token", required=True)
+    parser.add_argument("--robot-token", default=os.environ.get("ROBOT_TOKEN"))
     parser.add_argument("--rgb-width", type=int, default=1280)
     parser.add_argument("--rgb-height", type=int, default=720)
     parser.add_argument("--thermal-width", type=int, default=640)
@@ -1079,7 +1080,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--turn-url", default="")
     parser.add_argument("--turn-username", default="")
     parser.add_argument("--turn-password", default="")
-    return parser.parse_args()
+    args = parser.parse_args()
+    if not args.robot_token:
+        parser.error("--robot-token or ROBOT_TOKEN is required")
+    return args
 
 
 async def main() -> None:

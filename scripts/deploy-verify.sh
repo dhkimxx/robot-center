@@ -17,8 +17,13 @@ SKIP_DEPLOY=0
 SKIP_POST_DEPLOY_CHECKS=0
 SKIP_WEB_ROUTE_CHECK=0
 FORCE_ALL_CHECKS=0
-LOG_SINCE="${LOG_SINCE:-5m}"
+LOG_SINCE="${LOG_SINCE:-}"
+LOG_SINCE_WAS_PROVIDED=0
 WEB_BUILD_RAN=0
+SMOKE_MISSION_CODE="${SMOKE_MISSION_CODE:-}"
+SMOKE_ROBOT_CODE="${SMOKE_ROBOT_CODE:-}"
+SMOKE_READY_TIMEOUT_SECONDS="${SMOKE_READY_TIMEOUT_SECONDS:-90}"
+ENSURE_PYTHON_MOCK=0
 WEBRTC_SMOKE=0
 WEBRTC_SMOKE_MISSION_CODE="${WEBRTC_SMOKE_MISSION_CODE:-}"
 WEBRTC_SMOKE_ROBOT_CODE="${WEBRTC_SMOKE_ROBOT_CODE:-}"
@@ -37,6 +42,9 @@ REPLAY_SMOKE_FILE_TYPES="${REPLAY_SMOKE_FILE_TYPES:-rgb_audio_mp4,thermal_mp4}"
 REPLAY_SMOKE_TIMEOUT_SECONDS="${REPLAY_SMOKE_TIMEOUT_SECONDS:-60}"
 
 RUN_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+if [[ -z "$LOG_SINCE" ]]; then
+  LOG_SINCE="$RUN_STARTED_AT"
+fi
 CURRENT_STEP="initialization"
 SUMMARY_PRINTED=0
 LOCAL_CHECKS_STATUS="pending"
@@ -65,7 +73,14 @@ Options:
                            Skip deployed API/UI/log checks. Use only for harness dry-runs.
   --skip-web-route-check   Skip the deployed /system route reachability check.
   --all-checks             Run backend and frontend checks even if changed files do not require them.
-  --since DURATION         Remote log window for post-deploy scan. Default: 5m.
+  --since DURATION         Remote log window for post-deploy scan. Default: current run start.
+  --full-smoke             Run WebRTC, browser, and replay smoke checks with recording required.
+  --smoke-mission MISSION_CODE
+                           Shared mission for all smoke checks.
+  --smoke-robot ROBOT_CODE Shared robot for all smoke checks.
+  --smoke-ready-timeout-seconds SECONDS
+                           Max wait for the smoke target to become online/streaming. Default: 90.
+  --ensure-python-mock     Restart the dev-server Python mock for --smoke-robot before smoke checks.
   --webrtc-smoke           Verify at least one live WebRTC publisher through system/live APIs.
   --webrtc-smoke-mission MISSION_CODE
                            Limit WebRTC smoke verification to one mission.
@@ -103,6 +118,9 @@ Environment:
   DEV_SERVER_PATH          Default: /home/danya/robot-center-dev
   DEV_SERVER_PUBLIC_URL    Default: http://192.168.20.12:18080
   DEV_SERVER_RECORDER_URL  Default: http://192.168.20.12:18082
+  SMOKE_MISSION_CODE
+  SMOKE_ROBOT_CODE
+  SMOKE_READY_TIMEOUT_SECONDS
   WEBRTC_SMOKE_MISSION_CODE
   WEBRTC_SMOKE_ROBOT_CODE
   WEBRTC_SMOKE_MIN_ROBOTS
@@ -157,7 +175,44 @@ while [[ $# -gt 0 ]]; do
         printf '%s\n' '--since requires a value' >&2
         exit 1
       fi
+      LOG_SINCE_WAS_PROVIDED=1
       shift 2
+      ;;
+    --full-smoke)
+      WEBRTC_SMOKE=1
+      BROWSER_SMOKE=1
+      REPLAY_SMOKE=1
+      WEBRTC_SMOKE_REQUIRE_RECORDING=1
+      BROWSER_SMOKE_REQUIRE_RECORDING=1
+      shift
+      ;;
+    --smoke-mission)
+      SMOKE_MISSION_CODE="${2:-}"
+      if [[ -z "$SMOKE_MISSION_CODE" ]]; then
+        printf '%s\n' '--smoke-mission requires a value' >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --smoke-robot)
+      SMOKE_ROBOT_CODE="${2:-}"
+      if [[ -z "$SMOKE_ROBOT_CODE" ]]; then
+        printf '%s\n' '--smoke-robot requires a value' >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --smoke-ready-timeout-seconds)
+      SMOKE_READY_TIMEOUT_SECONDS="${2:-}"
+      if [[ -z "$SMOKE_READY_TIMEOUT_SECONDS" ]]; then
+        printf '%s\n' '--smoke-ready-timeout-seconds requires a value' >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --ensure-python-mock)
+      ENSURE_PYTHON_MOCK=1
+      shift
       ;;
     --webrtc-smoke)
       WEBRTC_SMOKE=1
@@ -673,6 +728,94 @@ run_ssh_noninteractive() {
   ssh $SSH_OPTS -o BatchMode=yes "$DEV_SERVER_SSH" "$@"
 }
 
+resolve_smoke_mission_code() {
+  local explicit_mission_code="$1"
+  if [[ -n "$explicit_mission_code" ]]; then
+    printf '%s\n' "$explicit_mission_code"
+  elif [[ -n "$SMOKE_MISSION_CODE" ]]; then
+    printf '%s\n' "$SMOKE_MISSION_CODE"
+  fi
+}
+
+resolve_smoke_robot_code() {
+  local explicit_robot_code="$1"
+  if [[ -n "$explicit_robot_code" ]]; then
+    printf '%s\n' "$explicit_robot_code"
+  elif [[ -n "$SMOKE_ROBOT_CODE" ]]; then
+    printf '%s\n' "$SMOKE_ROBOT_CODE"
+  fi
+}
+
+run_ensure_python_mock() {
+  if [[ "$ENSURE_PYTHON_MOCK" != "1" ]]; then
+    return
+  fi
+
+  print_step "ensure python mock"
+  local mission_code robot_code
+  mission_code="$(resolve_smoke_mission_code "$WEBRTC_SMOKE_MISSION_CODE")"
+  robot_code="$(resolve_smoke_robot_code "$WEBRTC_SMOKE_ROBOT_CODE")"
+  if [[ -z "$mission_code" || -z "$robot_code" ]]; then
+    printf '%s\n' '--ensure-python-mock requires --smoke-mission and --smoke-robot, or WebRTC smoke mission/robot' >&2
+    return 1
+  fi
+
+  require_command ssh
+  local helper_path="$ROOT_DIR/scripts/deploy-ensure-python-mock.sh"
+  local ensure_output
+  if ! ensure_output="$(run_ssh_noninteractive "bash -s -- '$DEV_SERVER_PATH' '$DEV_SERVER_PUBLIC_URL' '$mission_code' '$robot_code'" < "$helper_path" 2>&1)"; then
+    printf '%s\n' "$ensure_output" >&2
+    append_report_line "python mock ensure: failed"
+    return 1
+  fi
+  printf '%s\n' "$ensure_output"
+  append_report_line "$ensure_output"
+}
+
+reset_log_scan_window_after_python_mock_ensure() {
+  if [[ "$ENSURE_PYTHON_MOCK" != "1" || "$LOG_SINCE_WAS_PROVIDED" == "1" ]]; then
+    return
+  fi
+  LOG_SINCE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  append_report_line "remote log scan window reset after python mock ensure: since $LOG_SINCE"
+}
+
+wait_for_smoke_target_ready() {
+  local mission_code robot_code
+  mission_code="$(resolve_smoke_mission_code "$WEBRTC_SMOKE_MISSION_CODE")"
+  robot_code="$(resolve_smoke_robot_code "$WEBRTC_SMOKE_ROBOT_CODE")"
+  if [[ -z "$mission_code" || -z "$robot_code" ]]; then
+    return
+  fi
+  if [[ "$WEBRTC_SMOKE" != "1" && "$BROWSER_SMOKE" != "1" ]]; then
+    return
+  fi
+
+  print_step "smoke readiness wait"
+  require_command python3
+
+  local args=(
+    "$ROOT_DIR/scripts/deploy-verify-smoke-readiness.py"
+    --base-url "$DEV_SERVER_PUBLIC_URL"
+    --mission-code "$mission_code"
+    --robot-code "$robot_code"
+    --timeout-seconds "$SMOKE_READY_TIMEOUT_SECONDS"
+  )
+  if [[ "$WEBRTC_SMOKE_REQUIRE_RECORDING" == "1" || "$BROWSER_SMOKE_REQUIRE_RECORDING" == "1" ]]; then
+    args+=(--require-recording)
+  fi
+
+  local readiness_output
+  if ! readiness_output="$(python3 "${args[@]}" 2>&1)"; then
+    printf '%s\n' "$readiness_output" >&2
+    append_report_line "smoke readiness: failed"
+    append_report_line "$readiness_output"
+    return 1
+  fi
+  printf '%s\n' "$readiness_output"
+  append_report_line "$readiness_output"
+}
+
 scan_remote_logs() {
   print_step "remote log scan"
   LOG_SCAN_STATUS="running"
@@ -693,24 +836,37 @@ scan_remote_logs() {
     return
   fi
 
-  local log_output
-  log_output="$(run_ssh_noninteractive "set -euo pipefail
-cd '$DEV_SERVER_PATH'
-docker compose $COMPOSE_ARGS logs --since '$LOG_SINCE' app-server recorder-worker
-" 2>&1 || true)"
-
-  local suspicious
-  suspicious="$(printf '%s\n' "$log_output" | grep -Ei '(^|[^[:alpha:]])(panic|fatal|error|failed|timeout|refused|denied)([^[:alpha:]]|$)' || true)"
-  if [[ -n "$suspicious" ]]; then
-    printf '%s\n' "$suspicious" >&2
-    printf '%s\n' 'remote logs contain suspicious entries' >&2
+  local helper_path="$ROOT_DIR/scripts/deploy-verify-remote-log-scan.sh"
+  local log_output log_exit
+  set +e
+  log_output="$(run_ssh_noninteractive "bash -s -- '$DEV_SERVER_PATH' '$COMPOSE_ARGS' '$LOG_SINCE'" < "$helper_path" 2>&1)"
+  log_exit=$?
+  set -e
+  if [[ "$log_exit" == "2" ]]; then
+    printf '%s\n' "$log_output" >&2
     LOG_SCAN_STATUS="failed"
-    append_report_line "remote log scan: suspicious entries found in last $LOG_SINCE"
+    append_report_line "remote log scan: suspicious entries found since $LOG_SINCE"
     return 1
   fi
-  printf 'no suspicious app-server/recorder-worker logs in last %s\n' "$LOG_SINCE"
+  if [[ "$log_exit" != "0" ]]; then
+    log_output="$(printf '%s' "$log_output" | tr '\n' ' ' | sed 's/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//')"
+    printf 'remote log scan skipped: docker log command failed'
+    if [[ -n "$log_output" ]]; then
+      printf ' (%s)' "$log_output"
+    fi
+    printf '\n'
+    LOG_SCAN_STATUS="skipped:logs unavailable"
+    if [[ -n "$log_output" ]]; then
+      append_report_line "remote log scan: skipped because docker log command failed ($log_output)"
+    else
+      append_report_line "remote log scan: skipped because docker log command failed"
+    fi
+    return
+  fi
+
+  printf '%s\n' "$log_output"
   LOG_SCAN_STATUS="ok"
-  append_report_line "remote log scan: no suspicious app-server/recorder-worker logs in last $LOG_SINCE"
+  append_report_line "$log_output"
 }
 
 run_post_deploy_checks() {
@@ -733,7 +889,6 @@ run_post_deploy_checks() {
     append_report_line "web route: /system skipped"
   fi
 
-  scan_remote_logs
   POST_DEPLOY_STATUS="ok"
 }
 
@@ -752,11 +907,14 @@ run_webrtc_smoke_check() {
     --min-robots "$WEBRTC_SMOKE_MIN_ROBOTS"
     --freshness-seconds "$WEBRTC_SMOKE_FRESHNESS_SECONDS"
   )
-  if [[ -n "$WEBRTC_SMOKE_MISSION_CODE" ]]; then
-    args+=(--mission-code "$WEBRTC_SMOKE_MISSION_CODE")
+  local mission_code robot_code
+  mission_code="$(resolve_smoke_mission_code "$WEBRTC_SMOKE_MISSION_CODE")"
+  robot_code="$(resolve_smoke_robot_code "$WEBRTC_SMOKE_ROBOT_CODE")"
+  if [[ -n "$mission_code" ]]; then
+    args+=(--mission-code "$mission_code")
   fi
-  if [[ -n "$WEBRTC_SMOKE_ROBOT_CODE" ]]; then
-    args+=(--robot-code "$WEBRTC_SMOKE_ROBOT_CODE")
+  if [[ -n "$robot_code" ]]; then
+    args+=(--robot-code "$robot_code")
   fi
   if [[ "$WEBRTC_SMOKE_REQUIRE_RECORDING" == "1" ]]; then
     args+=(--require-recording)
@@ -789,15 +947,14 @@ run_browser_smoke_check() {
     --base-url "$DEV_SERVER_PUBLIC_URL"
     --timeout-seconds "$BROWSER_SMOKE_TIMEOUT_SECONDS"
   )
-  if [[ -n "$BROWSER_SMOKE_MISSION_CODE" ]]; then
-    args+=(--mission-code "$BROWSER_SMOKE_MISSION_CODE")
-  elif [[ -n "$WEBRTC_SMOKE_MISSION_CODE" ]]; then
-    args+=(--mission-code "$WEBRTC_SMOKE_MISSION_CODE")
+  local mission_code robot_code
+  mission_code="$(resolve_smoke_mission_code "$BROWSER_SMOKE_MISSION_CODE")"
+  robot_code="$(resolve_smoke_robot_code "$BROWSER_SMOKE_ROBOT_CODE")"
+  if [[ -n "$mission_code" ]]; then
+    args+=(--mission-code "$mission_code")
   fi
-  if [[ -n "$BROWSER_SMOKE_ROBOT_CODE" ]]; then
-    args+=(--robot-code "$BROWSER_SMOKE_ROBOT_CODE")
-  elif [[ -n "$WEBRTC_SMOKE_ROBOT_CODE" ]]; then
-    args+=(--robot-code "$WEBRTC_SMOKE_ROBOT_CODE")
+  if [[ -n "$robot_code" ]]; then
+    args+=(--robot-code "$robot_code")
   fi
   if [[ "$BROWSER_SMOKE_REQUIRE_RECORDING" == "1" ]]; then
     args+=(--require-recording)
@@ -831,19 +988,14 @@ run_replay_smoke_check() {
     --file-types "$REPLAY_SMOKE_FILE_TYPES"
     --timeout-seconds "$REPLAY_SMOKE_TIMEOUT_SECONDS"
   )
-  if [[ -n "$REPLAY_SMOKE_MISSION_CODE" ]]; then
-    args+=(--mission-code "$REPLAY_SMOKE_MISSION_CODE")
-  elif [[ -n "$BROWSER_SMOKE_MISSION_CODE" ]]; then
-    args+=(--mission-code "$BROWSER_SMOKE_MISSION_CODE")
-  elif [[ -n "$WEBRTC_SMOKE_MISSION_CODE" ]]; then
-    args+=(--mission-code "$WEBRTC_SMOKE_MISSION_CODE")
+  local mission_code robot_code
+  mission_code="$(resolve_smoke_mission_code "$REPLAY_SMOKE_MISSION_CODE")"
+  robot_code="$(resolve_smoke_robot_code "$REPLAY_SMOKE_ROBOT_CODE")"
+  if [[ -n "$mission_code" ]]; then
+    args+=(--mission-code "$mission_code")
   fi
-  if [[ -n "$REPLAY_SMOKE_ROBOT_CODE" ]]; then
-    args+=(--robot-code "$REPLAY_SMOKE_ROBOT_CODE")
-  elif [[ -n "$BROWSER_SMOKE_ROBOT_CODE" ]]; then
-    args+=(--robot-code "$BROWSER_SMOKE_ROBOT_CODE")
-  elif [[ -n "$WEBRTC_SMOKE_ROBOT_CODE" ]]; then
-    args+=(--robot-code "$WEBRTC_SMOKE_ROBOT_CODE")
+  if [[ -n "$robot_code" ]]; then
+    args+=(--robot-code "$robot_code")
   fi
 
   local replay_output
@@ -880,6 +1032,12 @@ if [[ "$SKIP_POST_DEPLOY_CHECKS" == "1" ]]; then
 else
   run_post_deploy_checks
 fi
+run_ensure_python_mock
+reset_log_scan_window_after_python_mock_ensure
+if [[ "$SKIP_POST_DEPLOY_CHECKS" != "1" ]]; then
+  scan_remote_logs
+fi
+wait_for_smoke_target_ready
 run_webrtc_smoke_check
 run_browser_smoke_check
 run_replay_smoke_check

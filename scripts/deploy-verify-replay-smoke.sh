@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 BASE_URL="${DEV_SERVER_PUBLIC_URL:-http://192.168.20.12:18080}"
 MISSION_CODE="${REPLAY_SMOKE_MISSION_CODE:-}"
 ROBOT_CODE="${REPLAY_SMOKE_ROBOT_CODE:-}"
@@ -8,8 +10,9 @@ FILE_TYPES="${REPLAY_SMOKE_FILE_TYPES:-rgb_audio_mp4,thermal_mp4}"
 TIMEOUT_SECONDS="${REPLAY_SMOKE_TIMEOUT_SECONDS:-60}"
 SESSION_NAME="${REPLAY_SMOKE_SESSION:-rs-$$-$RANDOM}"
 KEEP_OPEN=0
-PWCLI_COMMAND=(npx -y --package @playwright/cli playwright-cli --session "$SESSION_NAME")
-TEMP_FILES=()
+
+source "$SCRIPT_DIR/deploy-verify-playwright-common.sh"
+configure_playwright_cli "$SESSION_NAME"
 
 usage() {
   cat <<'EOF'
@@ -58,7 +61,7 @@ while [[ $# -gt 0 ]]; do
     --session)
       SESSION_NAME="${2:-}"
       [[ -n "$SESSION_NAME" ]] || { printf '%s\n' '--session requires a value' >&2; exit 1; }
-      PWCLI_COMMAND=(npx -y --package @playwright/cli playwright-cli --session "$SESSION_NAME")
+      configure_playwright_cli "$SESSION_NAME"
       shift 2
       ;;
     --keep-open)
@@ -78,38 +81,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 BASE_URL="${BASE_URL%/}"
-
-require_command() {
-  local command_name="$1"
-  if ! command -v "$command_name" >/dev/null 2>&1; then
-    printf '%s command not found\n' "$command_name" >&2
-    exit 1
-  fi
-}
-
-json_string() {
-  python3 -c 'import json, sys; print(json.dumps(sys.argv[1]))' "$1"
-}
-
-pwcli() {
-  "${PWCLI_COMMAND[@]}" "$@"
-}
-
-close_browser() {
-  if [[ "$KEEP_OPEN" == "1" ]]; then
-    return
-  fi
-  pwcli close >/dev/null 2>&1 || true
-}
-
-cleanup() {
-  local file_path
-  for file_path in "${TEMP_FILES[@]}"; do
-    [[ -n "$file_path" ]] || continue
-    rm -f "$file_path"
-  done
-  close_browser
-}
 
 select_replay_target() {
   local target_file="$1"
@@ -217,11 +188,6 @@ payload = json.load(open(sys.argv[1], encoding="utf-8"))
 for file_type in payload.get("fileTypes", []):
     print(file_type)
 PY
-}
-
-evaluate_raw() {
-  local expression="$1"
-  pwcli --raw eval "$expression"
 }
 
 select_robot_in_browser() {
@@ -371,8 +337,7 @@ verify_file_type() {
   local target_file="$1"
   local file_type="$2"
   local deadline last_status_file summary
-  last_status_file="$(mktemp)"
-  TEMP_FILES+=("$last_status_file")
+  last_status_file="$(make_temp_file)"
 
   click_playback_file "$target_file" "$file_type"
 
@@ -396,10 +361,9 @@ verify_file_type() {
 require_command npx
 require_command python3
 
-trap cleanup EXIT
+trap cleanup_playwright_smoke EXIT
 
-target_file="$(mktemp)"
-TEMP_FILES+=("$target_file")
+target_file="$(make_temp_file)"
 select_replay_target "$target_file"
 
 MISSION_CODE="$(target_value "$target_file" "missionCode")"

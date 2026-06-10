@@ -1,7 +1,7 @@
 ---
 title: "dev-server-docker-deployment"
 created: 2026-05-27
-updated: '2026-06-09'
+updated: '2026-06-10'
 author: "danya.kim <danya.kim@thundersoft.com>"
 editors: ["danya.kim <danya.kim@thundersoft.com>"]
 type: "runbook"
@@ -23,6 +23,11 @@ history:
 - '2026-06-09 danya.kim <danya.kim@thundersoft.com>: document deploy verification summary report'
 - '2026-06-09 danya.kim <danya.kim@thundersoft.com>: document browser smoke option for deploy verification'
 - '2026-06-09 danya.kim <danya.kim@thundersoft.com>: document replay smoke option for deploy verification'
+- '2026-06-10 danya.kim <danya.kim@thundersoft.com>: document full smoke and python mock ensure options'
+- '2026-06-10 danya.kim <danya.kim@thundersoft.com>: document deploy verification log scan window'
+- '2026-06-10 danya.kim <danya.kim@thundersoft.com>: document python mock ensure helper script'
+- '2026-06-10 danya.kim <danya.kim@thundersoft.com>: document log scan reset after python mock ensure'
+- '2026-06-10 danya.kim <danya.kim@thundersoft.com>: document deploy verify helper split'
 ---
 
 # Dev Server Docker Deployment
@@ -117,7 +122,7 @@ SSHPASS='...' ./scripts/deploy-verify.sh --no-commit
 - 변경 범위에 따른 script syntax, server test, Swagger 최신성, web test/build
 - `scripts/deploy-dev-server.sh`를 통한 개발서버 Docker 배포
 - `healthz`, `/api/v1/system/status`, `/swagger/openapi.json`, `/api/v1/operator/rtc-config`, `/system` route 확인
-- 최근 `app-server`, `recorder-worker` 로그의 panic/fatal/error 계열 확인
+- 배포검증 실행 이후 `app-server`, `recorder-worker` 로그의 panic/fatal/error 계열 확인
 
 하네스는 secret을 저장하지 않는다. SSH password가 필요한 환경에서는 `SSHPASS` 환경변수로만 주입한다.
 
@@ -176,6 +181,23 @@ SSHPASS='...' ./scripts/deploy-verify.sh \
 - playback modal의 `<video>`가 URL, 해상도, duration, `readyState`를 정상으로 가짐
 - 필요하면 `--replay-smoke-file-types rgb_audio_mp4`처럼 확인할 파일 타입을 좁힐 수 있음
 
+개발서버 재시작 후 mock publisher까지 하네스가 직접 보장해야 하면 full smoke를 사용한다.
+
+```bash
+SSHPASS='...' ./scripts/deploy-verify.sh \
+  --no-commit \
+  --ensure-python-mock \
+  --full-smoke \
+  --smoke-mission mission-054 \
+  --smoke-robot robot-042
+```
+
+`--full-smoke`는 WebRTC, browser, replay smoke를 함께 실행하고 recording 상태를 요구한다. `--ensure-python-mock`은 `scripts/deploy-ensure-python-mock.sh`를 개발서버에서 실행해 지정한 `--smoke-robot`의 Python mock을 재시작한 뒤 `scripts/deploy-verify-smoke-readiness.py`로 smoke readiness를 기다린다. 로봇팀의 실제 송출 테스트를 방해하지 않도록 자동 기본값으로 켜지지는 않는다.
+
+`--ensure-python-mock`을 함께 쓰면 기본 remote log scan 기준시각은 Python mock 재시작 이후로 다시 잡는다. mock 교체 과정에서 발생하는 이전 연결 종료 로그를 이번 검증 실패로 오판하지 않기 위해서다.
+
+remote log scan 판정은 `scripts/deploy-verify-remote-log-scan.sh`에 분리되어 있으며, `deploy-verify.sh`는 실행 순서와 요약 리포트만 관리한다.
+
 하네스는 마지막에 요약 리포트를 한 번 출력한다. 성공 시에는 단계별 상태와 확인 URL, API/WebRTC 상세 결과가 남는다.
 
 ```text
@@ -195,6 +217,8 @@ replaySmoke:       ok
 ui:                http://192.168.20.12:18080
 recorder:          http://192.168.20.12:18082/healthz
 details:
+  - python mock ensured: mission=mission-054 robot=robot-042 session=robot-center-pyrobot-042
+  - smoke target ready: mission=mission-054 robot=robot-042 trackCount=3 dataChannelCount=4 recording=recording
   - webrtc smoke: mission=mission-054 passed robots=robot-042,robot-043,robot-045
   - browser smoke: mission=mission-054 robot=robot-042 rgb=640x360 readyState=4; thermal=640x360 readyState=4
   - replay smoke: mission=mission-054 robot=robot-042 rgb_audio_mp4=640x360 duration=600.16 readyState=4; thermal_mp4=640x360 duration=600.18 readyState=4
