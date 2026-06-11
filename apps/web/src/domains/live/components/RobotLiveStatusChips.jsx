@@ -1,35 +1,4 @@
 import { cn } from "../../../utils/cn.js";
-import { makeLiveStatusLabel } from "../../../utils/formatters.js";
-import { createEmptyLiveSession, formatMediaChannelCount, formatStreamingSubscriberCount } from "../liveHelpers.js";
-
-export function getRobotLiveStatusSummary({ liveSessions = {}, target }) {
-  if (!target) {
-    return {
-      channelLabel: "",
-      connectionLabel: "연결 대기",
-      recordingLabel: "녹화 대기",
-      recordingState: { isActive: false, label: "녹화 대기", tone: "idle" },
-      session: createEmptyLiveSession(),
-      streamLabel: "송출 대기"
-    };
-  }
-  const session = liveSessions[target.key] ?? createEmptyLiveSession();
-  const recordingState = makeRecordingStateFromLiveStatus(target.liveStatus?.recording);
-  const connectionLabel = target.liveStatus?.connection
-    ? makeConnectionLabelFromLiveStatus(target.liveStatus.connection)
-    : makeLiveStatusLabel(session.status);
-  const streamSource = target.liveStatus?.stream;
-  return {
-    channelLabel: target.isStreaming
-      ? `${formatMediaChannelCount(streamSource)} / ${formatStreamingSubscriberCount(streamSource)}`
-      : "",
-    connectionLabel,
-    recordingLabel: recordingState.label,
-    recordingState,
-    session,
-    streamLabel: makeStreamLabelFromLiveStatus(target.liveStatus?.stream, target)
-  };
-}
 
 export function RobotLiveStatusChips({ className = "", summary, target }) {
   if (!target || !summary) {
@@ -51,52 +20,6 @@ export function RobotLiveStatusChips({ className = "", summary, target }) {
       ) : null}
     </div>
   );
-}
-
-function makeStreamLabelFromLiveStatus(stream, target) {
-  switch (stream?.state) {
-    case "streaming":
-      return "송출 중";
-    case "ended":
-      return "임무 종료";
-    case "waiting":
-      return "송출 대기";
-    default:
-      return target.isStreaming ? "송출 중" : target.liveLabel;
-  }
-}
-
-function makeConnectionLabelFromLiveStatus(connection) {
-  switch (connection?.state) {
-    case "online":
-      return "연결됨";
-    case "fault":
-      return "장애";
-    case "disconnected":
-      return "연결 끊김";
-    case "offline":
-      return "오프라인";
-    default:
-      return "연결 대기";
-  }
-}
-
-function makeRecordingStateFromLiveStatus(recording) {
-  switch (recording?.state) {
-    case "recording":
-      return { isActive: true, label: "녹화 중", tone: "recording" };
-    case "uploaded":
-      return { isActive: false, label: "저장 완료", tone: "available" };
-    case "failed":
-      return { isActive: false, label: "녹화 오류", tone: "danger" };
-    case "stale":
-      return { isActive: false, label: "녹화 확인 필요", tone: "idle" };
-    case "unknown":
-      return { isActive: false, label: "녹화 확인 중", tone: "idle" };
-    case "idle":
-    default:
-      return { isActive: false, label: "녹화 대기", tone: "idle" };
-  }
 }
 
 function StateChip({ active = false, children, tone }) {

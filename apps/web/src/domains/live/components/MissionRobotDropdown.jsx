@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LuCheck, LuChevronDown } from "react-icons/lu";
 import { cn } from "../../../utils/cn.js";
-import { getRobotLiveStatusSummary, RobotLiveStatusChips } from "./RobotLiveStatusChips.jsx";
+import { getRobotLiveStatusSummary } from "../liveDiagnostics.js";
+import { RobotLiveStatusChips } from "./RobotLiveStatusChips.jsx";
 
 export function MissionRobotDropdown({
   liveSessions,

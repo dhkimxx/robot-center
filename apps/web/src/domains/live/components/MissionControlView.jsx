@@ -17,6 +17,7 @@ import { createEmptyLiveSession } from "../liveHelpers.js";
 import { AudioSink } from "./AudioSink.jsx";
 import { ConnectionStatusPanel } from "./ConnectionStatusPanel.jsx";
 import { EventPanel } from "./EventPanel.jsx";
+import { LiveRobotDiagnosticsPanel } from "./LiveRobotDiagnosticsPanel.jsx";
 import { MissionRobotDropdown } from "./MissionRobotDropdown.jsx";
 import { RobotMap } from "./RobotMap.jsx";
 import { SensorPanel } from "./SensorPanel.jsx";
@@ -150,7 +151,8 @@ export function MissionControlView({
         <AudioSink stream={selectedSession.videoStreams.audio} />
       </div>
 
-      <aside className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden">
+      <aside className="grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] gap-3 overflow-hidden">
+        <LiveRobotDiagnosticsPanel session={selectedSession} target={selectedTarget} />
         <ConnectionStatusPanel statuses={operationStatuses} />
         <EventPanel liveEvents={liveEvents} />
       </aside>
