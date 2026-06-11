@@ -6,6 +6,7 @@ import DefinitionList from "../../components/ui/DefinitionList.jsx";
 import EmptyState from "../../components/ui/EmptyState.jsx";
 import ListFilterInput from "../../components/ui/ListFilterInput.jsx";
 import PaginationControls from "../../components/ui/PaginationControls.jsx";
+import ResizableSplitPane from "../../components/ui/ResizableSplitPane.jsx";
 import SegmentedControl from "../../components/ui/SegmentedControl.jsx";
 import SectionHeader from "../../components/ui/SectionHeader.jsx";
 import StatusBadge from "../../components/ui/StatusBadge.jsx";
@@ -83,106 +84,112 @@ export default function RobotsScreen({
   }
 
   return (
-    <section className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)_420px] items-stretch gap-3 max-[1180px]:grid-cols-1">
-      <Surface className="grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] overflow-hidden">
-        <SectionHeader
-          action={(
-            <SegmentedControl
-              onChange={setActiveAvailability}
-              options={[
-                { count: onlineRobots.length, label: "온라인", value: "online" },
-                { count: offlineRobots.length, label: "오프라인", value: "offline" }
-              ]}
-              value={activeAvailability}
-            />
-          )}
-          meta={`${listView.filteredItems.length}/${visibleRobots.length}대`}
-          title="등록 로봇"
-        />
-        <ListFilterInput
-          className="mb-2 w-full"
-          placeholder="로봇명, 코드, 모델 검색"
-          value={filterText}
-          onChange={setFilterText}
-        />
-        <div className="min-h-0 overflow-auto pr-1">
-          {isInitialLoading ? (
-            <ListSkeleton count={5} />
-          ) : robots.length === 0 ? (
-            <EmptyState>등록된 로봇이 없습니다.</EmptyState>
-          ) : (
-            <RobotManagementRows
-              missions={missions}
-              robots={listView.page.pageItems}
-              selectedRobot={selectedRobot}
-              sortDirection={sortDirection}
-              sortKey={sortKey}
-              onSelectRobot={onSelectRobot}
-              onSortChange={handleSortChange}
-            />
-          )}
-        </div>
-        {!isInitialLoading && robots.length > 0 ? (
-          <PaginationControls
-            className="mt-2"
-            page={listView.page}
-            onPageChange={setPageIndex}
+    <ResizableSplitPane
+      left={(
+        <Surface className="grid min-h-0 min-w-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] overflow-hidden">
+          <SectionHeader
+            action={(
+              <SegmentedControl
+                onChange={setActiveAvailability}
+                options={[
+                  { count: onlineRobots.length, label: "온라인", value: "online" },
+                  { count: offlineRobots.length, label: "오프라인", value: "offline" }
+                ]}
+                value={activeAvailability}
+              />
+            )}
+            meta={`${listView.filteredItems.length}/${visibleRobots.length}대`}
+            title="등록 로봇"
           />
-        ) : null}
-      </Surface>
-
-      <Surface className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden" padding="none">
-        <div className="border-b border-slate-700/70 px-4 pt-4">
-          <SectionHeader meta={detailRobot?.robotCode ?? "선택 없음"} title="로봇 상세" />
-        </div>
-        <div className="min-h-0 overflow-auto p-4">
-          {isInitialLoading ? (
-            <PanelSkeleton rows={5} />
-          ) : !detailRobot ? (
-            <EmptyState>로봇을 선택하세요.</EmptyState>
-          ) : (
-            <div className="grid gap-4">
-              <div className="flex min-w-0 items-start justify-between gap-4 max-[760px]:grid">
-                <div className="min-w-0">
-                  <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <strong className="truncate text-lg font-bold leading-tight text-slate-50">{detailRobot.displayName}</strong>
-                    <StatusBadge tone={makeRobotStatusTone(detailRobot.status)}>{makeStatusLabel(detailRobot.status)}</StatusBadge>
+          <ListFilterInput
+            className="mb-2 w-full"
+            placeholder="로봇명, 코드, 모델 검색"
+            value={filterText}
+            onChange={setFilterText}
+          />
+          <div className="min-h-0 overflow-auto pr-1">
+            {isInitialLoading ? (
+              <ListSkeleton count={5} />
+            ) : robots.length === 0 ? (
+              <EmptyState>등록된 로봇이 없습니다.</EmptyState>
+            ) : (
+              <RobotManagementRows
+                missions={missions}
+                robots={listView.page.pageItems}
+                selectedRobot={selectedRobot}
+                sortDirection={sortDirection}
+                sortKey={sortKey}
+                onSelectRobot={onSelectRobot}
+                onSortChange={handleSortChange}
+              />
+            )}
+          </div>
+          {!isInitialLoading && robots.length > 0 ? (
+            <PaginationControls
+              className="mt-2"
+              page={listView.page}
+              onPageChange={setPageIndex}
+            />
+          ) : null}
+        </Surface>
+      )}
+      leftMinWidth={560}
+      right={(
+        <Surface className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden" padding="none">
+          <div className="border-b border-slate-700/70 px-4 pt-4">
+            <SectionHeader meta={detailRobot?.robotCode ?? "선택 없음"} title="로봇 상세" />
+          </div>
+          <div className="min-h-0 overflow-auto p-4">
+            {isInitialLoading ? (
+              <PanelSkeleton rows={5} />
+            ) : !detailRobot ? (
+              <EmptyState>로봇을 선택하세요.</EmptyState>
+            ) : (
+              <div className="grid gap-4">
+                <div className="flex min-w-0 items-start justify-between gap-4 max-[760px]:grid">
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <strong className="truncate text-lg font-bold leading-tight text-slate-50">{detailRobot.displayName}</strong>
+                      <StatusBadge tone={makeRobotStatusTone(detailRobot.status)}>{makeStatusLabel(detailRobot.status)}</StatusBadge>
+                    </div>
+                    <span className="mt-1 block truncate text-sm font-semibold text-slate-400">{detailRobot.modelName || "모델 미지정"}</span>
                   </div>
-                  <span className="mt-1 block truncate text-sm font-semibold text-slate-400">{detailRobot.modelName || "모델 미지정"}</span>
+                  <div className="flex shrink-0 flex-wrap justify-end gap-2 max-[760px]:justify-start">
+                    <Button variant="primary" onClick={onOpenEditRobotModal}>수정</Button>
+                    <Button onClick={() => onLoadConnectionInfo(detailRobot.robotCode)}>연결 정보</Button>
+                    <Button
+                      variant="danger"
+                      disabled={detailRobotHasOpenMission}
+                      onClick={() => onArchiveRobot(detailRobot.robotCode)}
+                    >
+                      삭제
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex shrink-0 flex-wrap justify-end gap-2 max-[760px]:justify-start">
-                  <Button variant="primary" onClick={onOpenEditRobotModal}>수정</Button>
-                  <Button onClick={() => onLoadConnectionInfo(detailRobot.robotCode)}>연결 정보</Button>
-                  <Button
-                    variant="danger"
-                    disabled={detailRobotHasOpenMission}
-                    onClick={() => onArchiveRobot(detailRobot.robotCode)}
-                  >
-                    삭제
-                  </Button>
-                </div>
-              </div>
 
-              <Surface className="grid gap-3" padding="sm" variant="section">
-                <h3 className="text-xs font-bold uppercase tracking-normal text-slate-500">로봇 개요</h3>
-                <DefinitionList
-                  items={[
-                    { label: "상태", value: makeStatusLabel(detailRobot.status) },
-                    { label: "최근 연결", value: formatDateTime(detailRobot.lastSeenAt) },
-                    { label: "현재 임무", value: detailRobotOpenMission?.missionCode ?? "-" }
-                  ]}
-                />
-                {detailRobotHasOpenMission ? (
-                  <span className="rounded-lg border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-sm font-semibold text-amber-200">
-                    삭제 불가: 진행/대기 임무 배정
-                  </span>
-                ) : null}
-              </Surface>
-            </div>
-          )}
-        </div>
-      </Surface>
-    </section>
+                <Surface className="grid gap-3" padding="sm" variant="section">
+                  <h3 className="text-xs font-bold uppercase tracking-normal text-slate-500">로봇 개요</h3>
+                  <DefinitionList
+                    items={[
+                      { label: "상태", value: makeStatusLabel(detailRobot.status) },
+                      { label: "최근 연결", value: formatDateTime(detailRobot.lastSeenAt) },
+                      { label: "현재 임무", value: detailRobotOpenMission?.missionCode ?? "-" }
+                    ]}
+                  />
+                  {detailRobotHasOpenMission ? (
+                    <span className="rounded-lg border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-sm font-semibold text-amber-200">
+                      삭제 불가: 진행/대기 임무 배정
+                    </span>
+                  ) : null}
+                </Surface>
+              </div>
+            )}
+          </div>
+        </Surface>
+      )}
+      rightMinWidth={340}
+      storageKey="robot-management-split"
+    />
   );
 }
 

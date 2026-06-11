@@ -69,7 +69,7 @@ export function MissionListPanel({
   }
 
   return (
-    <Surface className="grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] overflow-hidden p-3">
+    <Surface className="grid min-h-0 min-w-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] overflow-hidden p-3">
       <SectionHeader
         action={(
           <SegmentedControl
