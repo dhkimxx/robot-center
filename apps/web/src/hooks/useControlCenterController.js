@@ -141,7 +141,7 @@ export function useControlCenterController({
       const payload = await clearObjectStorage();
       const result = payload.objectStorage ?? {};
       showNotification(
-        `Object storage ${formatByteCount(result.deletedBytes ?? 0)} / ${result.deletedObjectCount ?? 0}개 삭제 완료`,
+        `객체 스토리지 파일 ${result.deletedObjectCount ?? 0}개, ${formatByteCount(result.deletedBytes ?? 0)} 삭제 완료`,
         "success"
       );
       await loadAll();
@@ -157,7 +157,7 @@ export function useControlCenterController({
       const payload = await clearSensorData();
       const result = payload.sensorData ?? {};
       showNotification(
-        `Sensor 데이터 sample ${result.sensorSamplesDeleted ?? 0}개 / descriptor ${result.sensorDescriptorsDeleted ?? 0}개 삭제 완료`,
+        `센서 데이터 샘플 ${result.sensorSamplesDeleted ?? 0}개, 정의 ${result.sensorDescriptorsDeleted ?? 0}개 삭제 완료`,
         "success"
       );
       await loadAll();
@@ -174,7 +174,7 @@ export function useControlCenterController({
       const payload = await clearEventData();
       const result = payload.eventData ?? {};
       showNotification(
-        `Event 데이터 ${result.eventsDeleted ?? 0}개 삭제 완료`,
+        `이벤트 데이터 ${result.eventsDeleted ?? 0}건 삭제 완료`,
         "success"
       );
       await loadAll();
@@ -190,7 +190,7 @@ export function useControlCenterController({
       const payload = await clearRecorderRuntime();
       const result = payload.recorderRuntime ?? {};
       showNotification(
-        `녹화 런타임 ${formatByteCount(result.deletedBytes ?? 0)} / 파일 ${result.filesDeleted ?? 0}개 삭제 완료`,
+        `녹화 런타임 파일 ${result.filesDeleted ?? 0}개, ${formatByteCount(result.deletedBytes ?? 0)} 삭제 완료`,
         "success"
       );
       await loadAll();

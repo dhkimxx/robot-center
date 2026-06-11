@@ -157,6 +157,91 @@ export function makeObjectStorageDisabledReason({ isProduction, recorderRuntimeS
   return "";
 }
 
+export function createSystemClearActions({
+  canClearEventData = false,
+  canClearObjectStorage = false,
+  canClearRecorderRuntime = false,
+  canClearSensorData = false,
+  clearingActionID = "",
+  databaseUsage,
+  isProduction = false,
+  objectStorageUsage,
+  recorderRuntimeStatus,
+  statusReady = true
+} = {}) {
+  const sensorCategory = findDatabaseCategory(databaseUsage, "sensors");
+  const eventCategory = findDatabaseCategory(databaseUsage, "events");
+  const storageObjectsTable = findDatabaseTable(databaseUsage, "storage_objects");
+  const statusDisabledReason = statusReady ? "" : "시스템 상태를 확인한 뒤 삭제를 실행할 수 있습니다.";
+  const objectStorageDisabledReason = makeObjectStorageDisabledReason({ isProduction, recorderRuntimeStatus });
+  const recorderRuntimeDisabledReason = makeRecorderRuntimeDisabledReason({ isProduction, recorderRuntimeStatus });
+  const productionSensorDisabledReason = isProduction ? "운영 환경에서는 센서 데이터 정리를 실행할 수 없습니다." : "";
+  const productionEventDisabledReason = isProduction ? "운영 환경에서는 이벤트 데이터 정리를 실행할 수 없습니다." : "";
+
+  return [
+    createSystemClearAction({
+      canRun: canClearObjectStorage,
+      clearingActionID,
+      description: "녹화 파일과 파일 상태 메타데이터를 정리합니다.",
+      disabledReason: statusDisabledReason || objectStorageDisabledReason,
+      id: "objectStorage",
+      impact: "녹화 파일은 복구할 수 없습니다. 진행 중인 녹화가 있으면 실행하지 않습니다.",
+      subject: "녹화 파일 저장소",
+      targetMetrics: [
+        { label: "삭제 대상", value: `${formatInteger(objectStorageUsage?.objectCount)}개 파일` },
+        { label: "파일 용량", value: formatStorageByteCount(objectStorageUsage?.bucketUsedBytes) },
+        { label: "파일 메타데이터", value: `${formatInteger(storageObjectsTable?.rowCount)}건` }
+      ],
+      title: "객체 스토리지 전체 삭제"
+    }),
+    createSystemClearAction({
+      canRun: canClearSensorData,
+      clearingActionID,
+      description: "센서 정의, 최신 센서값, 센서 샘플을 정리합니다.",
+      disabledReason: statusDisabledReason || productionSensorDisabledReason,
+      id: "sensorData",
+      impact: "새 telemetry가 들어오면 센서 데이터는 다시 생성됩니다.",
+      subject: "telemetry 저장 데이터",
+      targetMetrics: [
+        { label: "삭제 대상", value: `${formatInteger(sensorCategory?.rowCount)}건` },
+        { label: "DB 사용량", value: formatStorageByteCount(sensorCategory?.totalBytes) },
+        { label: "관련 테이블", value: `${formatInteger(sensorCategory?.tableCount)}개` }
+      ],
+      title: "센서 데이터 전체 삭제"
+    }),
+    createSystemClearAction({
+      canRun: canClearEventData,
+      clearingActionID,
+      description: "저장된 임무 이벤트와 객체 탐지 이벤트를 정리합니다.",
+      disabledReason: statusDisabledReason || productionEventDisabledReason,
+      id: "eventData",
+      impact: "새 event가 들어오면 이벤트 데이터는 다시 생성됩니다.",
+      subject: "mission.event / detection.object",
+      targetMetrics: [
+        { label: "삭제 대상", value: `${formatInteger(eventCategory?.rowCount)}건` },
+        { label: "DB 사용량", value: formatStorageByteCount(eventCategory?.totalBytes) },
+        { label: "관련 테이블", value: `${formatInteger(eventCategory?.tableCount)}개` }
+      ],
+      title: "이벤트 데이터 전체 삭제"
+    }),
+    createSystemClearAction({
+      canRun: canClearRecorderRuntime,
+      clearingActionID,
+      description: "녹화 서비스가 로컬에 임시로 만든 런타임 파일을 정리합니다.",
+      disabledReason: statusDisabledReason || recorderRuntimeDisabledReason,
+      id: "recorderRuntime",
+      impact: "진행 중인 녹화 작업이 있으면 실행하지 않습니다. 저장 완료된 객체 스토리지 파일은 삭제하지 않습니다.",
+      subject: "녹화 런타임 파일",
+      targetMetrics: [
+        { label: "삭제 대상", value: `${formatInteger(recorderRuntimeStatus?.files)}개 파일` },
+        { label: "파일 용량", value: formatStorageByteCount(recorderRuntimeStatus?.usedBytes) },
+        { label: "청크 디렉터리", value: `${formatInteger(recorderRuntimeStatus?.recordingDirectories)}개` }
+      ],
+      title: "녹화 런타임 파일 전체 삭제"
+    })
+  ];
+}
+
 export function makeRecorderRuntimeBlockingLabel(reason) {
   const labels = {
     "active audio writer": "녹화 오디오 파일 작성 중이라 정리를 실행할 수 없습니다.",
@@ -288,6 +373,40 @@ export function createDatabaseTopTables(tables, limit = 5) {
       ...table,
       label: databaseTableLabels[table.tableName] ?? table.tableName
     }));
+}
+
+function createSystemClearAction({
+  canRun,
+  clearingActionID,
+  description,
+  disabledReason,
+  id,
+  impact,
+  subject,
+  targetMetrics,
+  title
+}) {
+  const handlerDisabledReason = canRun ? "" : "삭제 기능이 현재 화면에 연결되지 않았습니다.";
+  const resolvedDisabledReason = disabledReason || handlerDisabledReason;
+  return {
+    busy: clearingActionID === id,
+    description,
+    disabled: Boolean(resolvedDisabledReason) || clearingActionID === id,
+    disabledReason: resolvedDisabledReason,
+    id,
+    impact,
+    subject,
+    targetMetrics,
+    title
+  };
+}
+
+function findDatabaseCategory(databaseUsage, categoryID) {
+  return (databaseUsage?.categories ?? []).find((category) => category.id === categoryID);
+}
+
+function findDatabaseTable(databaseUsage, tableName) {
+  return (databaseUsage?.tables ?? []).find((table) => table.tableName === tableName);
 }
 
 function resolveDatabaseUsageCategory(tableName) {

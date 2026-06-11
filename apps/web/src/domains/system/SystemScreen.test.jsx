@@ -5,6 +5,7 @@ import {
   createDatabaseUsageCategories,
   createDatabaseTopTables,
   createRoomPeerSummaries,
+  createSystemClearActions,
   formatStorageByteCount,
   makeObjectStorageDisabledReason,
   normalizeDatabaseUsage,
@@ -188,5 +189,72 @@ describe("SystemScreen usage summaries", () => {
         status: "ok"
       }
     })).toBe("진행 중인 녹화 대상이 있어 정리를 실행할 수 없습니다.");
+  });
+
+  it("creates clear actions with target metrics and blocking reasons", () => {
+    const databaseUsage = normalizeDatabaseUsage({
+      status: "ok",
+      tables: [
+        { tableName: "sensor_samples", rowCount: 1200, totalBytes: 3 * 1024 * 1024 },
+        { tableName: "sensor_descriptors", rowCount: 4, totalBytes: 4096 },
+        { tableName: "events", rowCount: 77, totalBytes: 512 * 1024 },
+        { tableName: "storage_objects", rowCount: 9, totalBytes: 4096 }
+      ]
+    });
+
+    const actions = createSystemClearActions({
+      canClearEventData: true,
+      canClearObjectStorage: true,
+      canClearRecorderRuntime: true,
+      canClearSensorData: true,
+      databaseUsage,
+      objectStorageUsage: {
+        bucketUsedBytes: 8 * 1024 * 1024,
+        objectCount: 9,
+        usedBytes: 12 * 1024 * 1024
+      },
+      recorderRuntimeStatus: {
+        clearable: false,
+        blockingReason: "active recording target",
+        files: 20,
+        status: "ok",
+        usedBytes: 10 * 1024 * 1024
+      }
+    });
+
+    expect(actions.find((action) => action.id === "objectStorage")).toMatchObject({
+      disabled: true,
+      disabledReason: "진행 중인 녹화 대상이 있어 정리를 실행할 수 없습니다.",
+      targetMetrics: [
+        { label: "삭제 대상", value: "9개 파일" },
+        { label: "파일 용량", value: "8.00 MB" },
+        { label: "파일 메타데이터", value: "9건" }
+      ]
+    });
+    expect(actions.find((action) => action.id === "sensorData").targetMetrics).toEqual([
+      { label: "삭제 대상", value: "1,204건" },
+      { label: "DB 사용량", value: "3.00 MB" },
+      { label: "관련 테이블", value: "2개" }
+    ]);
+    expect(actions.find((action) => action.id === "eventData").targetMetrics).toEqual([
+      { label: "삭제 대상", value: "77건" },
+      { label: "DB 사용량", value: "512 KB" },
+      { label: "관련 테이블", value: "1개" }
+    ]);
+  });
+
+  it("blocks every clear action until system status is loaded", () => {
+    const actions = createSystemClearActions({
+      canClearEventData: true,
+      canClearObjectStorage: true,
+      canClearRecorderRuntime: true,
+      canClearSensorData: true,
+      statusReady: false
+    });
+
+    expect(actions.every((action) => action.disabled)).toBe(true);
+    expect(new Set(actions.map((action) => action.disabledReason))).toEqual(new Set([
+      "시스템 상태를 확인한 뒤 삭제를 실행할 수 있습니다."
+    ]));
   });
 });

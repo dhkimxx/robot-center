@@ -7,11 +7,13 @@ export default function ConfirmDialog({
   cancelLabel = "취소",
   confirmLabel = "확인",
   description,
+  details = [],
   onCancel,
   onConfirm,
   subject,
   title,
-  tone = "default"
+  tone = "default",
+  warning
 }) {
   const dialogRef = useDialogLifecycle(onCancel);
 
@@ -51,6 +53,17 @@ export default function ConfirmDialog({
           </button>
         </header>
         {description ? <p className="px-5 pt-4 text-sm font-medium leading-relaxed text-slate-400">{description}</p> : null}
+        {details.length > 0 ? (
+          <dl className="mx-5 mt-4 grid gap-2 rounded-lg border border-slate-500/15 bg-command-950/35 p-3">
+            {details.map((detail) => (
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3" key={detail.label}>
+                <dt className="min-w-0 truncate text-xs font-bold text-slate-500">{detail.label}</dt>
+                <dd className="text-right text-xs font-black text-slate-100">{detail.value}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : null}
+        {warning ? <p className="mx-5 mt-3 rounded-lg border border-red-400/20 bg-red-400/10 px-3 py-2 text-xs font-bold leading-relaxed text-red-100">{warning}</p> : null}
         <footer className="flex justify-end gap-2 px-5 py-5">
           <Button onClick={onCancel}>{cancelLabel}</Button>
           <Button variant={tone === "danger" ? "danger" : "primary"} onClick={() => void onConfirm()}>

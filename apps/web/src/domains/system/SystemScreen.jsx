@@ -11,8 +11,7 @@ import { ListSkeleton, SkeletonBlock } from "../../components/ui/Skeleton.jsx";
 import SystemMaintenanceSection from "./SystemMaintenanceSection.jsx";
 import SystemRealtimeConnections from "./SystemRealtimeConnections.jsx";
 import {
-  makeRecorderRuntimeDisabledReason,
-  makeObjectStorageDisabledReason,
+  createSystemClearActions,
   makeSystemStatusLabel,
   makeSystemStatusTone,
   normalizeDatabaseUsage,
@@ -21,14 +20,8 @@ import {
 } from "./systemViewModel.js";
 
 export default function SystemScreen({ dataLoadState, onClearEventData, onClearObjectStorage, onClearRecorderRuntime, onClearSensorData, statusError, systemStatus }) {
-  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
-  const [clearing, setClearing] = useState(false);
-  const [sensorClearConfirmOpen, setSensorClearConfirmOpen] = useState(false);
-  const [clearingSensors, setClearingSensors] = useState(false);
-  const [eventClearConfirmOpen, setEventClearConfirmOpen] = useState(false);
-  const [clearingEvents, setClearingEvents] = useState(false);
-  const [recorderRuntimeClearConfirmOpen, setRecorderRuntimeClearConfirmOpen] = useState(false);
-  const [clearingRecorderRuntime, setClearingRecorderRuntime] = useState(false);
+  const [activeClearActionID, setActiveClearActionID] = useState("");
+  const [clearingActionID, setClearingActionID] = useState("");
   const isInitialLoading = Boolean(dataLoadState?.isInitialLoading);
   const components = systemStatus?.components ?? [];
   const rooms = systemStatus?.sfuRooms ?? [];
@@ -37,8 +30,25 @@ export default function SystemScreen({ dataLoadState, onClearEventData, onClearO
   const objectStorageUsage = normalizeObjectStorageUsage(systemStatus?.objectStorage);
   const databaseUsage = normalizeDatabaseUsage(systemStatus?.database);
   const recorderRuntimeStatus = normalizeRecorderRuntimeStatus(systemStatus?.recorderRuntime);
-  const objectStorageDisabledReason = makeObjectStorageDisabledReason({ isProduction, recorderRuntimeStatus });
-  const recorderRuntimeDisabledReason = makeRecorderRuntimeDisabledReason({ isProduction, recorderRuntimeStatus });
+  const clearActionHandlers = {
+    eventData: onClearEventData,
+    objectStorage: onClearObjectStorage,
+    recorderRuntime: onClearRecorderRuntime,
+    sensorData: onClearSensorData
+  };
+  const clearActions = createSystemClearActions({
+    canClearEventData: Boolean(onClearEventData),
+    canClearObjectStorage: Boolean(onClearObjectStorage),
+    canClearRecorderRuntime: Boolean(onClearRecorderRuntime),
+    canClearSensorData: Boolean(onClearSensorData),
+    clearingActionID,
+    databaseUsage,
+    isProduction,
+    objectStorageUsage,
+    recorderRuntimeStatus,
+    statusReady: !isInitialLoading && !statusError && Boolean(systemStatus)
+  });
+  const activeClearAction = clearActions.find((action) => action.id === activeClearActionID);
   const summaryItems = [
     ["등록 로봇", systemStatus?.summary?.robots ?? 0],
     ["전체 임무", systemStatus?.summary?.missions ?? 0],
@@ -46,55 +56,20 @@ export default function SystemScreen({ dataLoadState, onClearEventData, onClearO
     ["실시간 연결", systemStatus?.summary?.sfuRooms ?? rooms.length]
   ];
 
-  async function confirmClearObjectStorage() {
-    if (!onClearObjectStorage || clearing) {
+  async function confirmClearAction() {
+    if (!activeClearAction || activeClearAction.disabled || clearingActionID) {
       return;
     }
-    setClearing(true);
-    try {
-      await onClearObjectStorage();
-      setClearConfirmOpen(false);
-    } finally {
-      setClearing(false);
-    }
-  }
-
-  async function confirmClearSensorData() {
-    if (!onClearSensorData || clearingSensors) {
+    const clearActionHandler = clearActionHandlers[activeClearAction.id];
+    if (!clearActionHandler) {
       return;
     }
-    setClearingSensors(true);
+    setClearingActionID(activeClearAction.id);
     try {
-      await onClearSensorData();
-      setSensorClearConfirmOpen(false);
+      await clearActionHandler();
+      setActiveClearActionID("");
     } finally {
-      setClearingSensors(false);
-    }
-  }
-
-  async function confirmClearEventData() {
-    if (!onClearEventData || clearingEvents) {
-      return;
-    }
-    setClearingEvents(true);
-    try {
-      await onClearEventData();
-      setEventClearConfirmOpen(false);
-    } finally {
-      setClearingEvents(false);
-    }
-  }
-
-  async function confirmClearRecorderRuntime() {
-    if (!onClearRecorderRuntime || clearingRecorderRuntime) {
-      return;
-    }
-    setClearingRecorderRuntime(true);
-    try {
-      await onClearRecorderRuntime();
-      setRecorderRuntimeClearConfirmOpen(false);
-    } finally {
-      setClearingRecorderRuntime(false);
+      setClearingActionID("");
     }
   }
 
@@ -137,93 +112,34 @@ export default function SystemScreen({ dataLoadState, onClearEventData, onClearO
           </Surface>
 
           <SystemMaintenanceSection
-            canClearEventData={Boolean(onClearEventData)}
-            canClearObjectStorage={Boolean(onClearObjectStorage)}
-            canClearRecorderRuntime={Boolean(onClearRecorderRuntime)}
-            canClearSensorData={Boolean(onClearSensorData)}
-            clearingEvents={clearingEvents}
-            clearingObjectStorage={clearing}
-            clearingRecorderRuntime={clearingRecorderRuntime}
-            clearingSensors={clearingSensors}
+            clearActions={clearActions}
             databaseUsage={databaseUsage}
             environment={environment}
             isInitialLoading={isInitialLoading}
-            isProduction={isProduction}
             objectStorageUsage={objectStorageUsage}
-            objectStorageDisabledReason={objectStorageDisabledReason}
-            onRequestClearEventData={() => setEventClearConfirmOpen(true)}
-            onRequestClearObjectStorage={() => setClearConfirmOpen(true)}
-            onRequestClearRecorderRuntime={() => setRecorderRuntimeClearConfirmOpen(true)}
-            onRequestClearSensorData={() => setSensorClearConfirmOpen(true)}
-            recorderRuntimeDisabledReason={recorderRuntimeDisabledReason}
+            onRequestClearAction={setActiveClearActionID}
             recorderRuntimeStatus={recorderRuntimeStatus}
           />
         </div>
 
         <SystemRealtimeConnections isInitialLoading={isInitialLoading} rooms={rooms} />
       </section>
-      {clearConfirmOpen ? (
+      {activeClearAction ? (
         <ConfirmDialog
           cancelLabel="취소"
-          confirmLabel={clearing ? "삭제 중" : "전체 삭제"}
-          description="객체 스토리지의 모든 파일을 삭제하고 녹화 파일 상태 정보를 초기화합니다. 진행 중인 녹화가 있으면 이후 파일이 다시 생성될 수 있습니다."
+          confirmLabel={activeClearAction.busy ? "삭제 중" : "전체 삭제"}
+          description={activeClearAction.description}
+          details={activeClearAction.targetMetrics}
           onCancel={() => {
-            if (!clearing) {
-              setClearConfirmOpen(false);
+            if (!clearingActionID) {
+              setActiveClearActionID("");
             }
           }}
-          onConfirm={confirmClearObjectStorage}
-          subject="객체 스토리지"
-          title="객체 스토리지 전체 삭제"
+          onConfirm={confirmClearAction}
+          subject={activeClearAction.subject}
+          title={activeClearAction.title}
           tone="danger"
-        />
-      ) : null}
-      {sensorClearConfirmOpen ? (
-        <ConfirmDialog
-          cancelLabel="취소"
-          confirmLabel={clearingSensors ? "삭제 중" : "전체 삭제"}
-          description="저장된 센서 정의와 센서값을 모두 삭제합니다. 진행 중인 녹화가 telemetry를 다시 받으면 센서 데이터가 다시 생성됩니다."
-          onCancel={() => {
-            if (!clearingSensors) {
-              setSensorClearConfirmOpen(false);
-            }
-          }}
-          onConfirm={confirmClearSensorData}
-          subject="센서 데이터"
-          title="센서 데이터 전체 삭제"
-          tone="danger"
-        />
-      ) : null}
-      {eventClearConfirmOpen ? (
-        <ConfirmDialog
-          cancelLabel="취소"
-          confirmLabel={clearingEvents ? "삭제 중" : "전체 삭제"}
-          description="저장된 mission.event와 detection.object 이벤트를 모두 삭제합니다. 진행 중인 녹화가 event를 다시 받으면 데이터가 다시 생성됩니다."
-          onCancel={() => {
-            if (!clearingEvents) {
-              setEventClearConfirmOpen(false);
-            }
-          }}
-          onConfirm={confirmClearEventData}
-          subject="이벤트 데이터"
-          title="이벤트 데이터 전체 삭제"
-          tone="danger"
-        />
-      ) : null}
-      {recorderRuntimeClearConfirmOpen ? (
-        <ConfirmDialog
-          cancelLabel="취소"
-          confirmLabel={clearingRecorderRuntime ? "삭제 중" : "전체 삭제"}
-          description="녹화 서비스의 로컬 임시 파일을 모두 삭제합니다. 진행 중인 녹화 작업이 있으면 서버가 거부합니다."
-          onCancel={() => {
-            if (!clearingRecorderRuntime) {
-              setRecorderRuntimeClearConfirmOpen(false);
-            }
-          }}
-          onConfirm={confirmClearRecorderRuntime}
-          subject="녹화 런타임 파일"
-          title="녹화 런타임 파일 전체 삭제"
-          tone="danger"
+          warning={activeClearAction.impact}
         />
       ) : null}
     </>
