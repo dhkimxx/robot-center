@@ -20,7 +20,7 @@ import {
   isClosedMission
 } from "./missionHelpers.js";
 
-const missionPageSizeOptions = [10, 20, 50];
+const missionPageSize = 10;
 const missionTableGrid = "grid-cols-[minmax(220px,1.4fr)_110px_minmax(180px,1fr)_minmax(170px,1fr)] max-[760px]:grid-cols-[minmax(0,1fr)_auto]";
 
 export function MissionListPanel({
@@ -39,19 +39,18 @@ export function MissionListPanel({
   const emptyLabel = activeGroup === "closed" ? "종료된 임무가 없습니다." : "진행 중이거나 시작 가능한 임무가 없습니다.";
   const [filterText, setFilterText] = useState("");
   const [pageIndex, setPageIndex] = useState(0);
-  const [pageSize, setPageSize] = useState(missionPageSizeOptions[0]);
   const [sortDirection, setSortDirection] = useState("desc");
   const [sortKey, setSortKey] = useState("createdAt");
   const listView = useMemo(() => createListView(
     visibleMissions,
-    { filterText, pageIndex, pageSize, sortDirection, sortKey },
+    { filterText, pageIndex, pageSize: missionPageSize, sortDirection, sortKey },
     (mission) => getMissionFilterValues(mission, robots, liveStatuses?.[mission.missionCode] ?? null),
     getMissionSortValue
-  ), [filterText, liveStatuses, pageIndex, pageSize, robots, sortDirection, sortKey, visibleMissions]);
+  ), [filterText, liveStatuses, pageIndex, robots, sortDirection, sortKey, visibleMissions]);
 
   useEffect(() => {
     setPageIndex(0);
-  }, [activeGroup, filterText, pageSize, sortDirection, sortKey]);
+  }, [activeGroup, filterText, sortDirection, sortKey]);
 
   useEffect(() => {
     if (listView.page.pageIndex !== pageIndex) {
@@ -115,9 +114,7 @@ export function MissionListPanel({
         <PaginationControls
           className="mt-2"
           page={listView.page}
-          pageSizeOptions={missionPageSizeOptions}
           onPageChange={setPageIndex}
-          onPageSizeChange={setPageSize}
         />
       ) : null}
     </Surface>

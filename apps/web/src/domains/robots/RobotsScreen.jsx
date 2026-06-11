@@ -20,7 +20,7 @@ import {
   makeRobotStatusTone
 } from "./robotHelpers.js";
 
-const robotPageSizeOptions = [10, 20, 50];
+const robotPageSize = 10;
 const robotTableGrid = "grid-cols-[minmax(190px,1.5fr)_110px_120px_150px] max-[760px]:grid-cols-[minmax(0,1fr)_auto]";
 
 export default function RobotsScreen({
@@ -39,16 +39,15 @@ export default function RobotsScreen({
   const [activeAvailability, setActiveAvailability] = useState(selectedAvailability);
   const [filterText, setFilterText] = useState("");
   const [pageIndex, setPageIndex] = useState(0);
-  const [pageSize, setPageSize] = useState(robotPageSizeOptions[0]);
   const [sortDirection, setSortDirection] = useState("desc");
   const [sortKey, setSortKey] = useState("lastSeenAt");
   const visibleRobots = activeAvailability === "online" ? onlineRobots : offlineRobots;
   const listView = useMemo(() => createListView(
     visibleRobots,
-    { filterText, pageIndex, pageSize, sortDirection, sortKey },
+    { filterText, pageIndex, pageSize: robotPageSize, sortDirection, sortKey },
     (robot) => getRobotFilterValues(robot, missions),
     (robot, nextSortKey) => getRobotSortValue(robot, nextSortKey, missions)
-  ), [filterText, missions, pageIndex, pageSize, sortDirection, sortKey, visibleRobots]);
+  ), [filterText, missions, pageIndex, sortDirection, sortKey, visibleRobots]);
   const selectedRobotOpenMission = selectedRobot ? findRobotOpenMission(selectedRobot.robotCode, missions) : null;
   const selectedRobotHasOpenMission = Boolean(selectedRobotOpenMission);
   const selectedRobotInActiveAvailability = Boolean(
@@ -65,7 +64,7 @@ export default function RobotsScreen({
 
   useEffect(() => {
     setPageIndex(0);
-  }, [activeAvailability, filterText, pageSize, sortDirection, sortKey]);
+  }, [activeAvailability, filterText, sortDirection, sortKey]);
 
   useEffect(() => {
     if (listView.page.pageIndex !== pageIndex) {
@@ -127,9 +126,7 @@ export default function RobotsScreen({
           <PaginationControls
             className="mt-2"
             page={listView.page}
-            pageSizeOptions={robotPageSizeOptions}
             onPageChange={setPageIndex}
-            onPageSizeChange={setPageSize}
           />
         ) : null}
       </Surface>
