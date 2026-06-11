@@ -50,3 +50,24 @@ func TestClearObjectStorageIsBlockedWhenRecorderRuntimeIsActive(t *testing.T) {
 		t.Fatalf("expected object storage clear to be blocked by active recorder runtime, got %d", status)
 	}
 }
+
+func TestSystemPruneActionsRunWhenRecorderRuntimeIsActive(t *testing.T) {
+	server := newAPIFlowTestServerWithOptions(t, apiFlowTestServerOptions{
+		recorderRuntimeBlockingReason: "active recording target",
+		recorderRuntimeClearable:      false,
+	})
+
+	objectStoragePayload := requestJSON[dto.PruneObjectStorageResponse](t, server.baseURL, http.MethodPost, "/api/v1/system/object-storage/prune", "", dto.PruneObjectStorageRequest{
+		Confirmation: "PRUNE_OBJECT_STORAGE",
+	})
+	if objectStoragePayload.ObjectStorage.DeletedObjectCount != 0 {
+		t.Fatalf("expected empty object storage prune on fresh test database, got %#v", objectStoragePayload)
+	}
+
+	recorderRuntimePayload := requestJSON[dto.PruneRecorderRuntimeResponse](t, server.baseURL, http.MethodPost, "/api/v1/system/recorder-runtime/prune", "", dto.PruneRecorderRuntimeRequest{
+		Confirmation: "PRUNE_RECORDER_RUNTIME",
+	})
+	if recorderRuntimePayload.RecorderRuntime.FilesDeleted != 2 || recorderRuntimePayload.RecorderRuntime.DeletedBytes != 2048 {
+		t.Fatalf("expected recorder runtime prune result, got %#v", recorderRuntimePayload)
+	}
+}

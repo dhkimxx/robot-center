@@ -125,6 +125,35 @@ func (s *Server) handleClearObjectStorage(w http.ResponseWriter, r *http.Request
 	})
 }
 
+// @Summary 객체 스토리지 운영 중 정리
+// @Description 진행 중인 녹화와 마무리 작업에 연결된 파일은 제외하고, 완료/실패 상태의 녹화 파일과 파일 상태 메타데이터만 정리합니다. production 환경에서는 실행되지 않습니다.
+// @Tags 시스템 API
+// @Accept json
+// @Produce json
+// @Param request body dto.PruneObjectStorageRequest true "객체 스토리지 운영 중 정리 요청"
+// @Success 200 {object} dto.PruneObjectStorageResponse
+// @Failure 400 {object} dto.ErrorResponse
+// @Failure 403 {object} dto.ErrorResponse
+// @Failure 500 {object} dto.ErrorResponse
+// @Router /api/v1/system/object-storage/prune [post]
+func (s *Server) handlePruneObjectStorage(w http.ResponseWriter, r *http.Request) {
+	var request dto.PruneObjectStorageRequest
+	if err := decodeJSON(r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	result, err := s.services.Storage.PruneObjectStorage(r.Context(), request.Confirmation)
+	if err != nil {
+		writeSystemActionError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, dto.PruneObjectStorageResponse{
+		ObjectStorage: result,
+	})
+}
+
 // @Summary 센서 데이터 초기화
 // @Description 확인 문자열을 받은 뒤 테스트용 센서 정의와 센서값 데이터를 정리합니다. production 환경에서는 실행되지 않습니다.
 // @Tags 시스템 API
@@ -209,6 +238,35 @@ func (s *Server) handleClearRecorderRuntime(w http.ResponseWriter, r *http.Reque
 	}
 
 	writeJSON(w, http.StatusOK, dto.ClearRecorderRuntimeResponse{
+		RecorderRuntime: result,
+	})
+}
+
+// @Summary 녹화 런타임 운영 중 정리
+// @Description 녹화 서비스 로컬 임시 파일 중 현재 작성 중인 chunk와 마무리 대기 chunk는 제외하고 오래된 런타임 파일만 정리합니다. production 환경에서는 실행되지 않습니다.
+// @Tags 시스템 API
+// @Accept json
+// @Produce json
+// @Param request body dto.PruneRecorderRuntimeRequest true "녹화 런타임 운영 중 정리 요청"
+// @Success 200 {object} dto.PruneRecorderRuntimeResponse
+// @Failure 400 {object} dto.ErrorResponse
+// @Failure 403 {object} dto.ErrorResponse
+// @Failure 500 {object} dto.ErrorResponse
+// @Router /api/v1/system/recorder-runtime/prune [post]
+func (s *Server) handlePruneRecorderRuntime(w http.ResponseWriter, r *http.Request) {
+	var request dto.PruneRecorderRuntimeRequest
+	if err := decodeJSON(r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	result, err := s.services.RecorderRuntime.PruneRecorderRuntime(r.Context(), request.Confirmation)
+	if err != nil {
+		writeSystemActionError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, dto.PruneRecorderRuntimeResponse{
 		RecorderRuntime: result,
 	})
 }

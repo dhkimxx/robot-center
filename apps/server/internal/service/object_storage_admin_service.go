@@ -14,7 +14,10 @@ import (
 	"robot-center/apps/server/internal/store"
 )
 
-const clearObjectStorageConfirmation = "CLEAR_OBJECT_STORAGE"
+const (
+	clearObjectStorageConfirmation = "CLEAR_OBJECT_STORAGE"
+	pruneObjectStorageConfirmation = "PRUNE_OBJECT_STORAGE"
+)
 
 var (
 	ErrSystemActionForbidden            = errors.New("system action is disabled in production")
@@ -97,6 +100,42 @@ func (s *ObjectStorageAdminService) ClearObjectStorage(ctx context.Context, conf
 	return result, nil
 }
 
+func (s *ObjectStorageAdminService) PruneObjectStorage(ctx context.Context, confirmation string) (ObjectStorageClearResult, error) {
+	if s == nil {
+		return ObjectStorageClearResult{}, errors.New("object storage admin service is not configured")
+	}
+	if err := s.ValidatePruneObjectStorageRequest(confirmation); err != nil {
+		return ObjectStorageClearResult{}, err
+	}
+	if s.metadataRepository == nil {
+		return ObjectStorageClearResult{}, errors.New("object storage metadata repository is not configured")
+	}
+
+	candidates, err := s.metadataRepository.ListPrunableObjectStorageMetadata(ctx)
+	if err != nil {
+		return ObjectStorageClearResult{}, err
+	}
+	result := ObjectStorageClearResult{Bucket: strings.TrimSpace(s.config.Bucket)}
+	if len(candidates) == 0 {
+		return result, nil
+	}
+	result, err = s.deleteBucketObjectCandidates(ctx, candidates)
+	if err != nil {
+		return ObjectStorageClearResult{}, err
+	}
+	objectKeys := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		objectKeys = append(objectKeys, candidate.ObjectKey)
+	}
+	resetResult, err := s.metadataRepository.ResetPrunedObjectStorageMetadata(ctx, objectKeys)
+	if err != nil {
+		return ObjectStorageClearResult{}, err
+	}
+	result.StorageObjectRowsDeleted = resetResult.StorageObjectRowsDeleted
+	result.RecordingChunksReset = resetResult.RecordingChunksReset
+	return result, nil
+}
+
 func (s *ObjectStorageAdminService) ValidateClearObjectStorageRequest(confirmation string) error {
 	if s == nil {
 		return errors.New("object storage admin service is not configured")
@@ -105,6 +144,19 @@ func (s *ObjectStorageAdminService) ValidateClearObjectStorageRequest(confirmati
 		return ErrSystemActionForbidden
 	}
 	if strings.TrimSpace(confirmation) != clearObjectStorageConfirmation {
+		return ErrSystemActionConfirmationRequired
+	}
+	return nil
+}
+
+func (s *ObjectStorageAdminService) ValidatePruneObjectStorageRequest(confirmation string) error {
+	if s == nil {
+		return errors.New("object storage admin service is not configured")
+	}
+	if strings.EqualFold(strings.TrimSpace(s.config.Environment), "production") {
+		return ErrSystemActionForbidden
+	}
+	if strings.TrimSpace(confirmation) != pruneObjectStorageConfirmation {
 		return ErrSystemActionConfirmationRequired
 	}
 	return nil
@@ -185,6 +237,43 @@ func (s *ObjectStorageAdminService) deleteBucketObjects(ctx context.Context) (Ob
 	objectsToRemove := make(chan minio.ObjectInfo, len(objects))
 	for _, object := range objects {
 		objectsToRemove <- object
+	}
+	close(objectsToRemove)
+	for removeError := range client.RemoveObjects(ctx, bucket, objectsToRemove, minio.RemoveObjectsOptions{}) {
+		if removeError.Err != nil {
+			return result, removeError.Err
+		}
+	}
+	return result, nil
+}
+
+func (s *ObjectStorageAdminService) deleteBucketObjectCandidates(ctx context.Context, candidates []store.StorageObjectPruneCandidate) (ObjectStorageClearResult, error) {
+	bucket := strings.TrimSpace(s.config.Bucket)
+	result := ObjectStorageClearResult{Bucket: bucket}
+	if len(candidates) == 0 {
+		return result, nil
+	}
+	client, err := s.minioClient()
+	if err != nil {
+		return result, err
+	}
+	exists, err := client.BucketExists(ctx, bucket)
+	if err != nil {
+		return result, err
+	}
+	if !exists {
+		return result, nil
+	}
+
+	objectsToRemove := make(chan minio.ObjectInfo, len(candidates))
+	for _, candidate := range candidates {
+		objectKey := strings.TrimSpace(candidate.ObjectKey)
+		if objectKey == "" {
+			continue
+		}
+		result.DeletedObjectCount++
+		result.DeletedBytes += candidate.SizeBytes
+		objectsToRemove <- minio.ObjectInfo{Key: objectKey}
 	}
 	close(objectsToRemove)
 	for removeError := range client.RemoveObjects(ctx, bucket, objectsToRemove, minio.RemoveObjectsOptions{}) {

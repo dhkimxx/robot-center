@@ -1567,6 +1567,58 @@
                 }
             }
         },
+        "/api/v1/system/object-storage/prune": {
+            "post": {
+                "description": "진행 중인 녹화와 마무리 작업에 연결된 파일은 제외하고, 완료/실패 상태의 녹화 파일과 파일 상태 메타데이터만 정리합니다. production 환경에서는 실행되지 않습니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "시스템 API"
+                ],
+                "summary": "객체 스토리지 운영 중 정리",
+                "parameters": [
+                    {
+                        "description": "객체 스토리지 운영 중 정리 요청",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.PruneObjectStorageRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.PruneObjectStorageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/system/recorder-runtime/clear": {
             "post": {
                 "description": "확인 문자열을 받은 뒤 녹화 서비스의 로컬 임시 파일을 정리합니다. 진행 중인 녹화 상태가 있거나 production 환경이면 실행되지 않습니다.",
@@ -1612,6 +1664,58 @@
                     },
                     "409": {
                         "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/system/recorder-runtime/prune": {
+            "post": {
+                "description": "녹화 서비스 로컬 임시 파일 중 현재 작성 중인 chunk와 마무리 대기 chunk는 제외하고 오래된 런타임 파일만 정리합니다. production 환경에서는 실행되지 않습니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "시스템 API"
+                ],
+                "summary": "녹화 런타임 운영 중 정리",
+                "parameters": [
+                    {
+                        "description": "녹화 런타임 운영 중 정리 요청",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.PruneRecorderRuntimeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.PruneRecorderRuntimeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse"
                         }
@@ -2500,6 +2604,38 @@
                     "items": {
                         "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.OperatorRecordingChunkResponse"
                     }
+                }
+            }
+        },
+        "robot-center_apps_server_internal_api_dto.PruneObjectStorageRequest": {
+            "type": "object",
+            "properties": {
+                "confirmation": {
+                    "type": "string"
+                }
+            }
+        },
+        "robot-center_apps_server_internal_api_dto.PruneObjectStorageResponse": {
+            "type": "object",
+            "properties": {
+                "objectStorage": {
+                    "$ref": "#/definitions/robot-center_apps_server_internal_service.ObjectStorageClearResult"
+                }
+            }
+        },
+        "robot-center_apps_server_internal_api_dto.PruneRecorderRuntimeRequest": {
+            "type": "object",
+            "properties": {
+                "confirmation": {
+                    "type": "string"
+                }
+            }
+        },
+        "robot-center_apps_server_internal_api_dto.PruneRecorderRuntimeResponse": {
+            "type": "object",
+            "properties": {
+                "recorderRuntime": {
+                    "$ref": "#/definitions/robot-center_apps_server_internal_domain.RecorderRuntimeClearResult"
                 }
             }
         },

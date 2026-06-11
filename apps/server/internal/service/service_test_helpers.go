@@ -278,6 +278,14 @@ func (s *recordingStoreSpy) ResetObjectStorageMetadata(_ context.Context) (store
 	return store.StorageMetadataResetResult{}, nil
 }
 
+func (s *recordingStoreSpy) ListPrunableObjectStorageMetadata(_ context.Context) ([]store.StorageObjectPruneCandidate, error) {
+	return nil, nil
+}
+
+func (s *recordingStoreSpy) ResetPrunedObjectStorageMetadata(_ context.Context, _ []string) (store.StorageMetadataResetResult, error) {
+	return store.StorageMetadataResetResult{}, nil
+}
+
 func (s *recordingStoreSpy) GetDatabaseUsage(_ context.Context) (store.DatabaseUsageResult, error) {
 	return store.DatabaseUsageResult{}, nil
 }

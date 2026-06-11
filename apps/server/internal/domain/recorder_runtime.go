@@ -2,7 +2,10 @@ package domain
 
 import "time"
 
-const ClearRecorderRuntimeConfirmation = "CLEAR_RECORDER_RUNTIME"
+const (
+	ClearRecorderRuntimeConfirmation = "CLEAR_RECORDER_RUNTIME"
+	PruneRecorderRuntimeConfirmation = "PRUNE_RECORDER_RUNTIME"
+)
 
 type RecorderRuntimeClearResult struct {
 	RecordingDirectoriesDeleted int   `json:"recordingDirectoriesDeleted"`

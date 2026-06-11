@@ -207,6 +207,8 @@ describe("SystemScreen usage summaries", () => {
       canClearObjectStorage: true,
       canClearRecorderRuntime: true,
       canClearSensorData: true,
+      canPruneObjectStorage: true,
+      canPruneRecorderRuntime: true,
       databaseUsage,
       objectStorageUsage: {
         bucketUsedBytes: 8 * 1024 * 1024,
@@ -231,6 +233,23 @@ describe("SystemScreen usage summaries", () => {
         { label: "파일 메타데이터", value: "9건" }
       ]
     });
+    expect(actions.find((action) => action.id === "objectStoragePrune")).toMatchObject({
+      buttonLabel: "운영 중 정리",
+      disabled: false,
+      targetMetrics: [
+        { label: "최대 후보", value: "9개 파일" },
+        { label: "파일 용량", value: "8.00 MB" },
+        { label: "파일 메타데이터", value: "9건" }
+      ]
+    });
+    expect(actions.find((action) => action.id === "recorderRuntime")).toMatchObject({
+      disabled: true,
+      disabledReason: "진행 중인 녹화 대상이 있어 정리를 실행할 수 없습니다."
+    });
+    expect(actions.find((action) => action.id === "recorderRuntimePrune")).toMatchObject({
+      buttonLabel: "운영 중 정리",
+      disabled: false
+    });
     expect(actions.find((action) => action.id === "sensorData").targetMetrics).toEqual([
       { label: "삭제 대상", value: "1,204건" },
       { label: "DB 사용량", value: "3.00 MB" },
@@ -249,6 +268,8 @@ describe("SystemScreen usage summaries", () => {
       canClearObjectStorage: true,
       canClearRecorderRuntime: true,
       canClearSensorData: true,
+      canPruneObjectStorage: true,
+      canPruneRecorderRuntime: true,
       statusReady: false
     });
 

@@ -54,7 +54,7 @@ function DangerActionPanel({ action, onClick }) {
         variant="danger"
       >
         <RiDeleteBin6Line aria-hidden="true" />
-        {action.busy ? "삭제 중" : "전체 삭제"}
+        {action.busy ? action.busyLabel : action.buttonLabel}
       </Button>
     </div>
   );

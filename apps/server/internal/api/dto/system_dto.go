@@ -96,6 +96,14 @@ type ClearObjectStorageResponse struct {
 	ObjectStorage service.ObjectStorageClearResult `json:"objectStorage"`
 }
 
+type PruneObjectStorageRequest struct {
+	Confirmation string `json:"confirmation"`
+}
+
+type PruneObjectStorageResponse struct {
+	ObjectStorage service.ObjectStorageClearResult `json:"objectStorage"`
+}
+
 type ClearSensorDataRequest struct {
 	Confirmation string `json:"confirmation"`
 }
@@ -117,6 +125,14 @@ type ClearRecorderRuntimeRequest struct {
 }
 
 type ClearRecorderRuntimeResponse struct {
+	RecorderRuntime domain.RecorderRuntimeClearResult `json:"recorderRuntime"`
+}
+
+type PruneRecorderRuntimeRequest struct {
+	Confirmation string `json:"confirmation"`
+}
+
+type PruneRecorderRuntimeResponse struct {
 	RecorderRuntime domain.RecorderRuntimeClearResult `json:"recorderRuntime"`
 }
 

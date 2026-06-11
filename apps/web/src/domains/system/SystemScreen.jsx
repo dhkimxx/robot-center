@@ -20,7 +20,17 @@ import {
   normalizeRecorderRuntimeStatus
 } from "./systemViewModel.js";
 
-export default function SystemScreen({ dataLoadState, onClearEventData, onClearObjectStorage, onClearRecorderRuntime, onClearSensorData, statusError, systemStatus }) {
+export default function SystemScreen({
+  dataLoadState,
+  onClearEventData,
+  onClearObjectStorage,
+  onClearRecorderRuntime,
+  onClearSensorData,
+  onPruneObjectStorage,
+  onPruneRecorderRuntime,
+  statusError,
+  systemStatus
+}) {
   const [activeClearActionID, setActiveClearActionID] = useState("");
   const [clearingActionID, setClearingActionID] = useState("");
   const isInitialLoading = Boolean(dataLoadState?.isInitialLoading);
@@ -34,7 +44,9 @@ export default function SystemScreen({ dataLoadState, onClearEventData, onClearO
   const clearActionHandlers = {
     eventData: onClearEventData,
     objectStorage: onClearObjectStorage,
+    objectStoragePrune: onPruneObjectStorage,
     recorderRuntime: onClearRecorderRuntime,
+    recorderRuntimePrune: onPruneRecorderRuntime,
     sensorData: onClearSensorData
   };
   const clearActions = createSystemClearActions({
@@ -42,6 +54,8 @@ export default function SystemScreen({ dataLoadState, onClearEventData, onClearO
     canClearObjectStorage: Boolean(onClearObjectStorage),
     canClearRecorderRuntime: Boolean(onClearRecorderRuntime),
     canClearSensorData: Boolean(onClearSensorData),
+    canPruneObjectStorage: Boolean(onPruneObjectStorage),
+    canPruneRecorderRuntime: Boolean(onPruneRecorderRuntime),
     clearingActionID,
     databaseUsage,
     isProduction,
@@ -131,7 +145,7 @@ export default function SystemScreen({ dataLoadState, onClearEventData, onClearO
       {activeClearAction ? (
         <ConfirmDialog
           cancelLabel="취소"
-          confirmLabel={activeClearAction.busy ? "삭제 중" : "전체 삭제"}
+          confirmLabel={activeClearAction.busy ? activeClearAction.busyLabel : activeClearAction.confirmLabel}
           description={activeClearAction.description}
           details={activeClearAction.targetMetrics}
           onCancel={() => {

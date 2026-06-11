@@ -506,6 +506,26 @@ definitions:
           $ref: '#/definitions/robot-center_apps_server_internal_api_dto.OperatorRecordingChunkResponse'
         type: array
     type: object
+  robot-center_apps_server_internal_api_dto.PruneObjectStorageRequest:
+    properties:
+      confirmation:
+        type: string
+    type: object
+  robot-center_apps_server_internal_api_dto.PruneObjectStorageResponse:
+    properties:
+      objectStorage:
+        $ref: '#/definitions/robot-center_apps_server_internal_service.ObjectStorageClearResult'
+    type: object
+  robot-center_apps_server_internal_api_dto.PruneRecorderRuntimeRequest:
+    properties:
+      confirmation:
+        type: string
+    type: object
+  robot-center_apps_server_internal_api_dto.PruneRecorderRuntimeResponse:
+    properties:
+      recorderRuntime:
+        $ref: '#/definitions/robot-center_apps_server_internal_domain.RecorderRuntimeClearResult'
+    type: object
   robot-center_apps_server_internal_api_dto.RTCConfigResponse:
     properties:
       iceServers:
@@ -2274,6 +2294,41 @@ paths:
       summary: 객체 스토리지 초기화
       tags:
       - 시스템 API
+  /api/v1/system/object-storage/prune:
+    post:
+      consumes:
+      - application/json
+      description: 진행 중인 녹화와 마무리 작업에 연결된 파일은 제외하고, 완료/실패 상태의 녹화 파일과 파일 상태 메타데이터만 정리합니다.
+        production 환경에서는 실행되지 않습니다.
+      parameters:
+      - description: 객체 스토리지 운영 중 정리 요청
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/robot-center_apps_server_internal_api_dto.PruneObjectStorageRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/robot-center_apps_server_internal_api_dto.PruneObjectStorageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse'
+      summary: 객체 스토리지 운영 중 정리
+      tags:
+      - 시스템 API
   /api/v1/system/recorder-runtime/clear:
     post:
       consumes:
@@ -2311,6 +2366,41 @@ paths:
           schema:
             $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse'
       summary: 녹화 런타임 초기화
+      tags:
+      - 시스템 API
+  /api/v1/system/recorder-runtime/prune:
+    post:
+      consumes:
+      - application/json
+      description: 녹화 서비스 로컬 임시 파일 중 현재 작성 중인 chunk와 마무리 대기 chunk는 제외하고 오래된 런타임 파일만
+        정리합니다. production 환경에서는 실행되지 않습니다.
+      parameters:
+      - description: 녹화 런타임 운영 중 정리 요청
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/robot-center_apps_server_internal_api_dto.PruneRecorderRuntimeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/robot-center_apps_server_internal_api_dto.PruneRecorderRuntimeResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse'
+      summary: 녹화 런타임 운영 중 정리
       tags:
       - 시스템 API
   /api/v1/system/sensors/clear:

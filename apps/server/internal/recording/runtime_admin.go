@@ -85,6 +85,50 @@ func (w *Worker) ClearRuntimeRecordings(ctx context.Context, confirmation string
 	return result, nil
 }
 
+func (w *Worker) PruneRuntimeRecordings(ctx context.Context, confirmation string) (domain.RecorderRuntimeClearResult, error) {
+	if strings.EqualFold(strings.TrimSpace(w.config.Environment), "production") {
+		return domain.RecorderRuntimeClearResult{}, ErrRecorderRuntimeClearForbidden
+	}
+	if strings.TrimSpace(confirmation) != domain.PruneRecorderRuntimeConfirmation {
+		return domain.RecorderRuntimeClearResult{}, ErrRecorderRuntimeClearConfirmationRequired
+	}
+
+	protectedEntries := w.protectedRuntimeEntries()
+	runtimeDirectory := recordingRuntimeDirectory()
+	entries, err := os.ReadDir(runtimeDirectory)
+	if errors.Is(err, os.ErrNotExist) {
+		return domain.RecorderRuntimeClearResult{}, nil
+	}
+	if err != nil {
+		return domain.RecorderRuntimeClearResult{}, err
+	}
+
+	var result domain.RecorderRuntimeClearResult
+	for _, entry := range entries {
+		select {
+		case <-ctx.Done():
+			return domain.RecorderRuntimeClearResult{}, ctx.Err()
+		default:
+		}
+		if _, protected := protectedEntries[entry.Name()]; protected {
+			continue
+		}
+		entryPath := filepath.Join(runtimeDirectory, entry.Name())
+		entrySummary, err := summarizeRuntimeEntry(ctx, entryPath)
+		if err != nil {
+			return domain.RecorderRuntimeClearResult{}, err
+		}
+		if err := os.RemoveAll(entryPath); err != nil {
+			return domain.RecorderRuntimeClearResult{}, err
+		}
+		result.RecordingDirectoriesDeleted += entrySummary.RecordingDirectories
+		result.FilesDeleted += entrySummary.Files
+		result.DeletedBytes += entrySummary.UsedBytes
+	}
+	w.invalidateRuntimeUsageCache()
+	return result, nil
+}
+
 func (w *Worker) runtimeClearability() (bool, string) {
 	w.mediaMu.Lock()
 	defer w.mediaMu.Unlock()
@@ -100,6 +144,28 @@ func (w *Worker) runtimeClearability() (bool, string) {
 	default:
 		return true, ""
 	}
+}
+
+func (w *Worker) protectedRuntimeEntries() map[string]struct{} {
+	w.mediaMu.Lock()
+	defer w.mediaMu.Unlock()
+	protectedEntries := make(map[string]struct{}, len(w.activeChunks)+len(w.pendingFinalizations)+len(w.audioWriters))
+	for _, chunk := range w.activeChunks {
+		if strings.TrimSpace(chunk.ID) != "" {
+			protectedEntries[chunk.ID] = struct{}{}
+		}
+	}
+	for _, pendingFinalization := range w.pendingFinalizations {
+		if strings.TrimSpace(pendingFinalization.chunk.ID) != "" {
+			protectedEntries[pendingFinalization.chunk.ID] = struct{}{}
+		}
+	}
+	for _, writer := range w.audioWriters {
+		if writer != nil && strings.TrimSpace(writer.chunkID) != "" {
+			protectedEntries[writer.chunkID] = struct{}{}
+		}
+	}
+	return protectedEntries
 }
 
 func (w *Worker) cachedRuntimeUsage(ctx context.Context, now time.Time) (domain.RecorderRuntimeStatus, error) {
@@ -175,6 +241,51 @@ func summarizeRecordingRuntime(ctx context.Context, runtimeDirectory string) (do
 		return domain.RecorderRuntimeStatus{}, err
 	}
 	applyRecordingRuntimeCapacity(&result, runtimeDirectory)
+	return result, nil
+}
+
+func summarizeRuntimeEntry(ctx context.Context, entryPath string) (domain.RecorderRuntimeStatus, error) {
+	result := domain.RecorderRuntimeStatus{Status: "ok"}
+	info, err := os.Stat(entryPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return result, nil
+	}
+	if err != nil {
+		return result, err
+	}
+	if !info.IsDir() {
+		result.Files = 1
+		result.UsedBytes = info.Size()
+		return result, nil
+	}
+	result.RecordingDirectories = 1
+	err = filepath.WalkDir(entryPath, func(path string, entry os.DirEntry, walkErr error) error {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		if walkErr != nil {
+			return walkErr
+		}
+		if path == entryPath {
+			return nil
+		}
+		if entry.IsDir() {
+			result.RecordingDirectories++
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		result.Files++
+		result.UsedBytes += info.Size()
+		return nil
+	})
+	if err != nil {
+		return domain.RecorderRuntimeStatus{}, err
+	}
 	return result, nil
 }
 

@@ -28,21 +28,29 @@ func NewRecorderRuntimeAdminService(environment string, recorderWorkerInternalUR
 }
 
 func (s *RecorderRuntimeAdminService) ClearRecorderRuntime(ctx context.Context, confirmation string) (domain.RecorderRuntimeClearResult, error) {
+	return s.sendRecorderRuntimeMutation(ctx, "/runtime/recordings/clear", confirmation, domain.ClearRecorderRuntimeConfirmation)
+}
+
+func (s *RecorderRuntimeAdminService) PruneRecorderRuntime(ctx context.Context, confirmation string) (domain.RecorderRuntimeClearResult, error) {
+	return s.sendRecorderRuntimeMutation(ctx, "/runtime/recordings/prune", confirmation, domain.PruneRecorderRuntimeConfirmation)
+}
+
+func (s *RecorderRuntimeAdminService) sendRecorderRuntimeMutation(ctx context.Context, path string, confirmation string, requiredConfirmation string) (domain.RecorderRuntimeClearResult, error) {
 	if s == nil || strings.TrimSpace(s.recorderWorkerInternalURL) == "" {
 		return domain.RecorderRuntimeClearResult{}, fmt.Errorf("recorder runtime admin service is not configured")
 	}
 	if strings.EqualFold(strings.TrimSpace(s.environment), "production") {
 		return domain.RecorderRuntimeClearResult{}, ErrSystemActionForbidden
 	}
-	if strings.TrimSpace(confirmation) != domain.ClearRecorderRuntimeConfirmation {
+	if strings.TrimSpace(confirmation) != requiredConfirmation {
 		return domain.RecorderRuntimeClearResult{}, ErrSystemActionConfirmationRequired
 	}
 
-	requestBody, err := json.Marshal(map[string]string{"confirmation": domain.ClearRecorderRuntimeConfirmation})
+	requestBody, err := json.Marshal(map[string]string{"confirmation": requiredConfirmation})
 	if err != nil {
 		return domain.RecorderRuntimeClearResult{}, err
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, s.recorderWorkerInternalURL+"/runtime/recordings/clear", bytes.NewReader(requestBody))
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, s.recorderWorkerInternalURL+path, bytes.NewReader(requestBody))
 	if err != nil {
 		return domain.RecorderRuntimeClearResult{}, err
 	}

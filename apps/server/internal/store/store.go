@@ -48,6 +48,7 @@ type MissionRecordingRobotSummary = port.MissionRecordingRobotSummary
 type StartRobotStreamSessionInput = port.StartRobotStreamSessionInput
 type TouchRobotStreamSessionInput = port.TouchRobotStreamSessionInput
 type EndRobotStreamSessionInput = port.EndRobotStreamSessionInput
+type StorageObjectPruneCandidate = port.StorageObjectPruneCandidate
 type StorageMetadataResetResult = port.StorageMetadataResetResult
 type SensorDataClearResult = port.SensorDataClearResult
 type EventDataClearResult = port.EventDataClearResult

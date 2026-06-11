@@ -162,6 +162,8 @@ export function createSystemClearActions({
   canClearObjectStorage = false,
   canClearRecorderRuntime = false,
   canClearSensorData = false,
+  canPruneObjectStorage = false,
+  canPruneRecorderRuntime = false,
   clearingActionID = "",
   databaseUsage,
   isProduction = false,
@@ -175,6 +177,8 @@ export function createSystemClearActions({
   const statusDisabledReason = statusReady ? "" : "시스템 상태를 확인한 뒤 삭제를 실행할 수 있습니다.";
   const objectStorageDisabledReason = makeObjectStorageDisabledReason({ isProduction, recorderRuntimeStatus });
   const recorderRuntimeDisabledReason = makeRecorderRuntimeDisabledReason({ isProduction, recorderRuntimeStatus });
+  const objectStoragePruneDisabledReason = isProduction ? "운영 환경에서는 객체 스토리지 운영 중 정리를 실행할 수 없습니다." : "";
+  const recorderRuntimePruneDisabledReason = makeRecorderRuntimePruneDisabledReason({ isProduction, recorderRuntimeStatus });
   const productionSensorDisabledReason = isProduction ? "운영 환경에서는 센서 데이터 정리를 실행할 수 없습니다." : "";
   const productionEventDisabledReason = isProduction ? "운영 환경에서는 이벤트 데이터 정리를 실행할 수 없습니다." : "";
 
@@ -193,6 +197,24 @@ export function createSystemClearActions({
         { label: "파일 메타데이터", value: `${formatInteger(storageObjectsTable?.rowCount)}건` }
       ],
       title: "객체 스토리지 전체 삭제"
+    }),
+    createSystemClearAction({
+      buttonLabel: "운영 중 정리",
+      busyLabel: "정리 중",
+      canRun: canPruneObjectStorage,
+      clearingActionID,
+      confirmLabel: "운영 중 정리",
+      description: "진행 중인 녹화 파일은 제외하고 완료된 녹화 파일과 파일 상태 메타데이터를 정리합니다.",
+      disabledReason: statusDisabledReason || objectStoragePruneDisabledReason,
+      id: "objectStoragePrune",
+      impact: "진행 중이거나 마무리 중인 녹화 파일은 삭제하지 않습니다.",
+      subject: "완료된 녹화 파일 저장소",
+      targetMetrics: [
+        { label: "최대 후보", value: `${formatInteger(objectStorageUsage?.objectCount)}개 파일` },
+        { label: "파일 용량", value: formatStorageByteCount(objectStorageUsage?.bucketUsedBytes) },
+        { label: "파일 메타데이터", value: `${formatInteger(storageObjectsTable?.rowCount)}건` }
+      ],
+      title: "객체 스토리지 운영 중 정리"
     }),
     createSystemClearAction({
       canRun: canClearSensorData,
@@ -238,6 +260,24 @@ export function createSystemClearActions({
         { label: "청크 디렉터리", value: `${formatInteger(recorderRuntimeStatus?.recordingDirectories)}개` }
       ],
       title: "녹화 런타임 파일 전체 삭제"
+    }),
+    createSystemClearAction({
+      buttonLabel: "운영 중 정리",
+      busyLabel: "정리 중",
+      canRun: canPruneRecorderRuntime,
+      clearingActionID,
+      confirmLabel: "운영 중 정리",
+      description: "작성 중인 chunk와 마무리 대기 chunk는 제외하고 오래된 로컬 임시 파일만 정리합니다.",
+      disabledReason: statusDisabledReason || recorderRuntimePruneDisabledReason,
+      id: "recorderRuntimePrune",
+      impact: "현재 녹화 중인 chunk 디렉터리는 삭제하지 않습니다. 저장 완료된 객체 스토리지 파일도 삭제하지 않습니다.",
+      subject: "오래된 녹화 런타임 파일",
+      targetMetrics: [
+        { label: "최대 후보", value: `${formatInteger(recorderRuntimeStatus?.files)}개 파일` },
+        { label: "파일 용량", value: formatStorageByteCount(recorderRuntimeStatus?.usedBytes) },
+        { label: "청크 디렉터리", value: `${formatInteger(recorderRuntimeStatus?.recordingDirectories)}개` }
+      ],
+      title: "녹화 런타임 운영 중 정리"
     })
   ];
 }
@@ -251,6 +291,16 @@ export function makeRecorderRuntimeBlockingLabel(reason) {
     "production environment": "운영 환경에서는 녹화 런타임 파일 정리를 실행할 수 없습니다."
   };
   return labels[reason] ?? "녹화 런타임 파일 정리를 지금 실행할 수 없습니다.";
+}
+
+export function makeRecorderRuntimePruneDisabledReason({ isProduction, recorderRuntimeStatus }) {
+  if (isProduction) {
+    return "운영 환경에서는 녹화 런타임 운영 중 정리를 실행할 수 없습니다.";
+  }
+  if (!recorderRuntimeStatus || recorderRuntimeStatus.status !== "ok") {
+    return "녹화 런타임 상태를 확인할 수 없어 운영 중 정리를 실행할 수 없습니다.";
+  }
+  return "";
 }
 
 export function makeSystemStatusLabel(status) {
@@ -376,8 +426,11 @@ export function createDatabaseTopTables(tables, limit = 5) {
 }
 
 function createSystemClearAction({
+  buttonLabel = "전체 삭제",
+  busyLabel = "삭제 중",
   canRun,
   clearingActionID,
+  confirmLabel = buttonLabel,
   description,
   disabledReason,
   id,
@@ -386,10 +439,13 @@ function createSystemClearAction({
   targetMetrics,
   title
 }) {
-  const handlerDisabledReason = canRun ? "" : "삭제 기능이 현재 화면에 연결되지 않았습니다.";
+  const handlerDisabledReason = canRun ? "" : "정리 기능이 현재 화면에 연결되지 않았습니다.";
   const resolvedDisabledReason = disabledReason || handlerDisabledReason;
   return {
+    buttonLabel,
     busy: clearingActionID === id,
+    busyLabel,
+    confirmLabel,
     description,
     disabled: Boolean(resolvedDisabledReason) || clearingActionID === id,
     disabledReason: resolvedDisabledReason,

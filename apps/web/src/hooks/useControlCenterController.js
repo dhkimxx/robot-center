@@ -20,7 +20,14 @@ import {
   createTelemetryFromSensorLatest
 } from "../domains/live/sensorLatestMapper.js";
 import { useOperationStatuses } from "../domains/live/useOperationStatuses.js";
-import { clearEventData, clearObjectStorage, clearRecorderRuntime, clearSensorData } from "../api/systemApi.js";
+import {
+  clearEventData,
+  clearObjectStorage,
+  clearRecorderRuntime,
+  clearSensorData,
+  pruneObjectStorage,
+  pruneRecorderRuntime
+} from "../api/systemApi.js";
 import { useControlCenterData } from "./useControlCenterData.js";
 import { useNotifications } from "./useNotifications.js";
 
@@ -152,6 +159,22 @@ export function useControlCenterController({
     }
   }, [loadAll, showNotification]);
 
+  const pruneSystemObjectStorage = useCallback(async () => {
+    try {
+      const payload = await pruneObjectStorage();
+      const result = payload.objectStorage ?? {};
+      showNotification(
+        `운영 중 객체 스토리지 파일 ${result.deletedObjectCount ?? 0}개, ${formatByteCount(result.deletedBytes ?? 0)} 정리 완료`,
+        "success"
+      );
+      await loadAll();
+      return result;
+    } catch (error) {
+      showNotification(error instanceof Error ? error.message : "Object storage 운영 중 정리 실패", "danger");
+      throw error;
+    }
+  }, [loadAll, showNotification]);
+
   const clearSystemSensorData = useCallback(async () => {
     try {
       const payload = await clearSensorData();
@@ -197,6 +220,22 @@ export function useControlCenterController({
       return result;
     } catch (error) {
       showNotification(error instanceof Error ? error.message : "녹화 런타임 정리 실패", "danger");
+      throw error;
+    }
+  }, [loadAll, showNotification]);
+
+  const pruneSystemRecorderRuntime = useCallback(async () => {
+    try {
+      const payload = await pruneRecorderRuntime();
+      const result = payload.recorderRuntime ?? {};
+      showNotification(
+        `운영 중 녹화 런타임 파일 ${result.filesDeleted ?? 0}개, ${formatByteCount(result.deletedBytes ?? 0)} 정리 완료`,
+        "success"
+      );
+      await loadAll();
+      return result;
+    } catch (error) {
+      showNotification(error instanceof Error ? error.message : "녹화 런타임 운영 중 정리 실패", "danger");
       throw error;
     }
   }, [loadAll, showNotification]);
@@ -417,6 +456,8 @@ export function useControlCenterController({
       onClearObjectStorage: clearSystemObjectStorage,
       onClearRecorderRuntime: clearSystemRecorderRuntime,
       onClearSensorData: clearSystemSensorData,
+      onPruneObjectStorage: pruneSystemObjectStorage,
+      onPruneRecorderRuntime: pruneSystemRecorderRuntime,
       dataLoadState,
       statusError,
       systemStatus

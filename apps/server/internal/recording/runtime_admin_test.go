@@ -62,6 +62,39 @@ func TestWorkerClearRuntimeRecordingsRejectsActiveState(t *testing.T) {
 	}
 }
 
+func TestWorkerPruneRuntimeRecordingsKeepsActiveAndPendingChunks(t *testing.T) {
+	runtimeDirectory := t.TempDir()
+	t.Setenv("RECORDER_RUNTIME_DIR", runtimeDirectory)
+	writeRuntimeTestFile(t, filepath.Join(runtimeDirectory, "chunk-active", "rgb.h264"), []byte("active"))
+	writeRuntimeTestFile(t, filepath.Join(runtimeDirectory, "chunk-pending", "thermal.h264"), []byte("pending"))
+	writeRuntimeTestFile(t, filepath.Join(runtimeDirectory, "chunk-old", "rgb.h264"), []byte("old"))
+	writeRuntimeTestFile(t, filepath.Join(runtimeDirectory, "chunk-old", "telemetry.jsonl"), []byte("telemetry"))
+
+	worker := NewWorker(config.RecorderWorkerConfig{Environment: "development"})
+	worker.activeTargets["mission-001/robot-001"] = domain.Mission{MissionCode: "mission-001", RobotCode: "robot-001"}
+	worker.activeChunks["mission-001/robot-001"] = domain.RecordingChunk{ID: "chunk-active"}
+	worker.pendingFinalizations["mission-001/robot-001/chunk-pending"] = recordingChunkFinalization{
+		chunk: domain.RecordingChunk{ID: "chunk-pending"},
+	}
+
+	result, err := worker.PruneRuntimeRecordings(context.Background(), domain.PruneRecorderRuntimeConfirmation)
+	if err != nil {
+		t.Fatalf("PruneRuntimeRecordings returned error: %v", err)
+	}
+	if result.RecordingDirectoriesDeleted != 1 || result.FilesDeleted != 2 || result.DeletedBytes != int64(len("oldtelemetry")) {
+		t.Fatalf("unexpected prune result: %#v", result)
+	}
+	if _, err := os.Stat(filepath.Join(runtimeDirectory, "chunk-active", "rgb.h264")); err != nil {
+		t.Fatalf("expected active runtime file to remain, got %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(runtimeDirectory, "chunk-pending", "thermal.h264")); err != nil {
+		t.Fatalf("expected pending runtime file to remain, got %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(runtimeDirectory, "chunk-old")); !os.IsNotExist(err) {
+		t.Fatalf("expected old chunk directory to be removed, got %v", err)
+	}
+}
+
 func TestWorkerRuntimeStatusReportsUsageAndClearableState(t *testing.T) {
 	runtimeDirectory := t.TempDir()
 	t.Setenv("RECORDER_RUNTIME_DIR", runtimeDirectory)

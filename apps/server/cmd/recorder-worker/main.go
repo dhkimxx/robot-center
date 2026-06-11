@@ -68,6 +68,31 @@ func main() {
 			"recorderRuntime": result,
 		})
 	})
+	mux.HandleFunc("POST /runtime/recordings/prune", func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			Confirmation string `json:"confirmation"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		result, err := worker.PruneRuntimeRecordings(r.Context(), request.Confirmation)
+		if err != nil {
+			switch {
+			case errors.Is(err, recording.ErrRecorderRuntimeClearForbidden):
+				http.Error(w, err.Error(), http.StatusForbidden)
+			case errors.Is(err, recording.ErrRecorderRuntimeClearConfirmationRequired):
+				http.Error(w, err.Error(), http.StatusBadRequest)
+			default:
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"recorderRuntime": result,
+		})
+	})
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddress,

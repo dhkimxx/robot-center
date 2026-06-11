@@ -70,6 +70,16 @@ func newAPIFlowTestServerWithOptions(t *testing.T, options apiFlowTestServerOpti
 			})
 			return
 		}
+		if r.Method == http.MethodPost && r.URL.Path == "/runtime/recordings/prune" {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"recorderRuntime": map[string]any{
+					"recordingDirectoriesDeleted": 1,
+					"filesDeleted":                2,
+					"deletedBytes":                2048,
+				},
+			})
+			return
+		}
 		writeJSON(w, http.StatusOK, map[string]any{"status": "ok"})
 	}))
 	t.Cleanup(recorderHealth.Close)
