@@ -105,6 +105,7 @@ export function normalizeDatabaseUsage(rawUsage) {
     databaseSizeBytes: readStorageNumber(rawUsage.databaseSizeBytes),
     status: rawUsage.status ?? "unavailable",
     tables: rawTables,
+    topTables: createDatabaseTopTables(rawTables),
     trackedTableBytes: readStorageNumber(rawUsage.trackedTableBytes)
   };
 }
@@ -136,6 +137,19 @@ export function makeRecorderRuntimeDisabledReason({ isProduction, recorderRuntim
   }
   if (!recorderRuntimeStatus || recorderRuntimeStatus.status !== "ok") {
     return "녹화 런타임 상태를 확인할 수 없어 정리를 실행할 수 없습니다.";
+  }
+  if (!recorderRuntimeStatus.clearable) {
+    return makeRecorderRuntimeBlockingLabel(recorderRuntimeStatus.blockingReason);
+  }
+  return "";
+}
+
+export function makeObjectStorageDisabledReason({ isProduction, recorderRuntimeStatus }) {
+  if (isProduction) {
+    return "운영 환경에서는 객체 스토리지 정리를 실행할 수 없습니다.";
+  }
+  if (!recorderRuntimeStatus || recorderRuntimeStatus.status !== "ok") {
+    return "녹화 런타임 상태를 확인할 수 없어 객체 스토리지 정리를 실행할 수 없습니다.";
   }
   if (!recorderRuntimeStatus.clearable) {
     return makeRecorderRuntimeBlockingLabel(recorderRuntimeStatus.blockingReason);
@@ -259,6 +273,23 @@ export function createDatabaseUsageCategories(tables) {
     });
 }
 
+export function createDatabaseTopTables(tables, limit = 5) {
+  return tables
+    .filter((table) => !isInternalDatabaseTable(table.tableName))
+    .filter((table) => table.totalBytes > 0 || table.rowCount > 0)
+    .sort((left, right) => {
+      if (left.totalBytes !== right.totalBytes) {
+        return right.totalBytes - left.totalBytes;
+      }
+      return right.rowCount - left.rowCount;
+    })
+    .slice(0, limit)
+    .map((table) => ({
+      ...table,
+      label: databaseTableLabels[table.tableName] ?? table.tableName
+    }));
+}
+
 function resolveDatabaseUsageCategory(tableName) {
   const categoryID = databaseTableCategoryIDs[tableName] ?? (
     isInternalDatabaseTable(tableName) ? "internal" : "other"
@@ -332,6 +363,28 @@ const databaseTableCategoryIDs = {
   sensor_samples: "sensors",
   storage_objects: "recordings",
   users: "operations"
+};
+
+const databaseTableLabels = {
+  browser_sessions: "브라우저 세션",
+  control_acks: "제어 응답",
+  control_commands: "제어 명령",
+  events: "이벤트 로그",
+  mission_robots: "임무 로봇 할당",
+  missions: "임무",
+  recorder_sessions: "녹화 연결 세션",
+  recording_chunks: "녹화 청크",
+  recording_finalization_jobs: "녹화 마무리 작업",
+  recording_sessions: "녹화 세션",
+  robot_sessions: "로봇 세션",
+  robot_stream_sessions: "로봇 송출 세션",
+  robot_tokens: "로봇 토큰",
+  robots: "로봇",
+  sensor_descriptors: "센서 정의",
+  sensor_latest_samples: "최신 센서값",
+  sensor_samples: "센서 샘플",
+  storage_objects: "녹화 파일 메타데이터",
+  users: "사용자"
 };
 
 function makePeerSummaryKey(peer) {

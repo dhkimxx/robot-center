@@ -36,3 +36,17 @@ func TestSystemAPIFlow(t *testing.T) {
 		t.Fatalf("expected Swagger UI HTML response, got %s %s", swaggerResponse.Status, swaggerResponse.Header.Get("Content-Type"))
 	}
 }
+
+func TestClearObjectStorageIsBlockedWhenRecorderRuntimeIsActive(t *testing.T) {
+	server := newAPIFlowTestServerWithOptions(t, apiFlowTestServerOptions{
+		recorderRuntimeBlockingReason: "active recording target",
+		recorderRuntimeClearable:      false,
+	})
+
+	status := requestStatus(t, server.baseURL, http.MethodPost, "/api/v1/system/object-storage/clear", "", dto.ClearObjectStorageRequest{
+		Confirmation: "CLEAR_OBJECT_STORAGE",
+	})
+	if status != http.StatusConflict {
+		t.Fatalf("expected object storage clear to be blocked by active recorder runtime, got %d", status)
+	}
+}

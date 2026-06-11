@@ -78,11 +78,8 @@ func (s *ObjectStorageAdminService) ClearObjectStorage(ctx context.Context, conf
 	if s == nil {
 		return ObjectStorageClearResult{}, errors.New("object storage admin service is not configured")
 	}
-	if strings.EqualFold(strings.TrimSpace(s.config.Environment), "production") {
-		return ObjectStorageClearResult{}, ErrSystemActionForbidden
-	}
-	if strings.TrimSpace(confirmation) != clearObjectStorageConfirmation {
-		return ObjectStorageClearResult{}, ErrSystemActionConfirmationRequired
+	if err := s.ValidateClearObjectStorageRequest(confirmation); err != nil {
+		return ObjectStorageClearResult{}, err
 	}
 
 	result, err := s.deleteBucketObjects(ctx)
@@ -98,6 +95,19 @@ func (s *ObjectStorageAdminService) ClearObjectStorage(ctx context.Context, conf
 		result.RecordingChunksReset = resetResult.RecordingChunksReset
 	}
 	return result, nil
+}
+
+func (s *ObjectStorageAdminService) ValidateClearObjectStorageRequest(confirmation string) error {
+	if s == nil {
+		return errors.New("object storage admin service is not configured")
+	}
+	if strings.EqualFold(strings.TrimSpace(s.config.Environment), "production") {
+		return ErrSystemActionForbidden
+	}
+	if strings.TrimSpace(confirmation) != clearObjectStorageConfirmation {
+		return ErrSystemActionConfirmationRequired
+	}
+	return nil
 }
 
 func (s *ObjectStorageAdminService) GetObjectStorageUsage(ctx context.Context) (ObjectStorageUsageResult, error) {

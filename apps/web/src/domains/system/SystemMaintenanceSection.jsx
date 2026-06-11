@@ -19,6 +19,7 @@ export default function SystemMaintenanceSection({
   isInitialLoading,
   isProduction,
   objectStorageUsage,
+  objectStorageDisabledReason,
   onRequestClearEventData,
   onRequestClearObjectStorage,
   onRequestClearRecorderRuntime,
@@ -35,8 +36,8 @@ export default function SystemMaintenanceSection({
         {isInitialLoading ? <PanelSkeleton rows={3} /> : <RecorderRuntimeUsagePanel status={recorderRuntimeStatus} />}
         <DangerActionPanel
           busy={clearingObjectStorage}
-          description="객체 스토리지의 모든 녹화 파일과 파일 상태 정보를 정리합니다."
-          disabled={isProduction || !canClearObjectStorage || clearingObjectStorage}
+          description={objectStorageDisabledReason || "객체 스토리지의 모든 녹화 파일과 파일 상태 정보를 정리합니다."}
+          disabled={Boolean(objectStorageDisabledReason) || !canClearObjectStorage || clearingObjectStorage}
           onClick={onRequestClearObjectStorage}
           title="객체 스토리지 전체 삭제"
         />

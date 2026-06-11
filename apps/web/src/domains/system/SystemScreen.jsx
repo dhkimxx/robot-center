@@ -12,6 +12,7 @@ import SystemMaintenanceSection from "./SystemMaintenanceSection.jsx";
 import SystemRealtimeConnections from "./SystemRealtimeConnections.jsx";
 import {
   makeRecorderRuntimeDisabledReason,
+  makeObjectStorageDisabledReason,
   makeSystemStatusLabel,
   makeSystemStatusTone,
   normalizeDatabaseUsage,
@@ -36,6 +37,7 @@ export default function SystemScreen({ dataLoadState, onClearEventData, onClearO
   const objectStorageUsage = normalizeObjectStorageUsage(systemStatus?.objectStorage);
   const databaseUsage = normalizeDatabaseUsage(systemStatus?.database);
   const recorderRuntimeStatus = normalizeRecorderRuntimeStatus(systemStatus?.recorderRuntime);
+  const objectStorageDisabledReason = makeObjectStorageDisabledReason({ isProduction, recorderRuntimeStatus });
   const recorderRuntimeDisabledReason = makeRecorderRuntimeDisabledReason({ isProduction, recorderRuntimeStatus });
   const summaryItems = [
     ["등록 로봇", systemStatus?.summary?.robots ?? 0],
@@ -148,6 +150,7 @@ export default function SystemScreen({ dataLoadState, onClearEventData, onClearO
             isInitialLoading={isInitialLoading}
             isProduction={isProduction}
             objectStorageUsage={objectStorageUsage}
+            objectStorageDisabledReason={objectStorageDisabledReason}
             onRequestClearEventData={() => setEventClearConfirmOpen(true)}
             onRequestClearObjectStorage={() => setClearConfirmOpen(true)}
             onRequestClearRecorderRuntime={() => setRecorderRuntimeClearConfirmOpen(true)}

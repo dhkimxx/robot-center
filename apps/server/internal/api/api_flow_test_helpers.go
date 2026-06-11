@@ -15,6 +15,11 @@ type apiFlowTestServer struct {
 	baseURL string
 }
 
+type apiFlowTestServerOptions struct {
+	recorderRuntimeBlockingReason string
+	recorderRuntimeClearable      bool
+}
+
 type testRobot struct {
 	code  string
 	token string
@@ -26,22 +31,32 @@ type testMission struct {
 }
 
 func newAPIFlowTestServer(t *testing.T) apiFlowTestServer {
+	return newAPIFlowTestServerWithOptions(t, apiFlowTestServerOptions{
+		recorderRuntimeClearable: true,
+	})
+}
+
+func newAPIFlowTestServerWithOptions(t *testing.T, options apiFlowTestServerOptions) apiFlowTestServer {
 	t.Helper()
 
 	postgresContainer := postgrestest.Start(t)
 	recorderHealth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && r.URL.Path == "/runtime/recordings/status" {
+			recorderRuntime := map[string]any{
+				"status":               "ok",
+				"recordingDirectories": 2,
+				"files":                4,
+				"usedBytes":            4096,
+				"totalBytes":           8192,
+				"availableBytes":       4096,
+				"usedPercent":          50,
+				"clearable":            options.recorderRuntimeClearable,
+			}
+			if !options.recorderRuntimeClearable {
+				recorderRuntime["blockingReason"] = options.recorderRuntimeBlockingReason
+			}
 			writeJSON(w, http.StatusOK, map[string]any{
-				"recorderRuntime": map[string]any{
-					"status":               "ok",
-					"recordingDirectories": 2,
-					"files":                4,
-					"usedBytes":            4096,
-					"totalBytes":           8192,
-					"availableBytes":       4096,
-					"usedPercent":          50,
-					"clearable":            true,
-				},
+				"recorderRuntime": recorderRuntime,
 			})
 			return
 		}

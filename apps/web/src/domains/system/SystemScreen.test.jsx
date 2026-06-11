@@ -3,8 +3,10 @@ import {
   countRoomPublishedTracks,
   countRoomRobotPublishers,
   createDatabaseUsageCategories,
+  createDatabaseTopTables,
   createRoomPeerSummaries,
   formatStorageByteCount,
+  makeObjectStorageDisabledReason,
   normalizeDatabaseUsage,
   normalizeObjectStorageUsage,
   normalizeRecorderRuntimeStatus,
@@ -88,6 +90,10 @@ describe("SystemScreen usage summaries", () => {
         { tableName: "sensor_samples", rowCount: 0, totalBytes: 1048576 },
         { tableName: "spatial_ref_sys", rowCount: 8500, totalBytes: 7340032 }
       ],
+      topTables: [
+        { label: "이벤트 로그", tableName: "events", rowCount: 100036, totalBytes: 7340032 },
+        { label: "센서 샘플", tableName: "sensor_samples", rowCount: 0, totalBytes: 1048576 }
+      ],
       trackedTableBytes: 8388608
     });
   });
@@ -113,6 +119,21 @@ describe("SystemScreen usage summaries", () => {
       totalBytes: 550
     });
     expect(categories.some((category) => category.label === "spatial_ref_sys")).toBe(false);
+  });
+
+  it("lists top database tables without internal PostGIS tables", () => {
+    const topTables = createDatabaseTopTables([
+      { tableName: "spatial_ref_sys", rowCount: 8500, totalBytes: 7000 },
+      { tableName: "sensor_samples", rowCount: 20, totalBytes: 500 },
+      { tableName: "events", rowCount: 100, totalBytes: 900 },
+      { tableName: "robots", rowCount: 2, totalBytes: 50 }
+    ]);
+
+    expect(topTables).toEqual([
+      { label: "이벤트 로그", tableName: "events", rowCount: 100, totalBytes: 900 },
+      { label: "센서 샘플", tableName: "sensor_samples", rowCount: 20, totalBytes: 500 },
+      { label: "로봇", tableName: "robots", rowCount: 2, totalBytes: 50 }
+    ]);
   });
 
   it("normalizes object storage percent from byte counts when needed", () => {
@@ -156,5 +177,16 @@ describe("SystemScreen usage summaries", () => {
     expect(formatStorageByteCount(0)).toBe("0 B");
     expect(formatStorageByteCount(1024)).toBe("1.00 KB");
     expect(formatStorageByteCount(1536 * 1024)).toBe("1.50 MB");
+  });
+
+  it("blocks object storage clearing while recorder runtime is active", () => {
+    expect(makeObjectStorageDisabledReason({
+      isProduction: false,
+      recorderRuntimeStatus: {
+        blockingReason: "active recording target",
+        clearable: false,
+        status: "ok"
+      }
+    })).toBe("진행 중인 녹화 대상이 있어 정리를 실행할 수 없습니다.");
   });
 });

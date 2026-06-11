@@ -2163,7 +2163,8 @@ paths:
     post:
       consumes:
       - application/json
-      description: 확인 문자열을 받은 뒤 테스트용 객체 스토리지 데이터를 정리합니다. production 환경에서는 실행되지 않습니다.
+      description: 확인 문자열을 받은 뒤 테스트용 객체 스토리지 데이터를 정리합니다. production 환경이거나 녹화 런타임 상태가
+        정리 가능하지 않으면 실행되지 않습니다.
       parameters:
       - description: 객체 스토리지 초기화 요청
         in: body
@@ -2184,6 +2185,10 @@ paths:
             $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse'
         "403":
           description: Forbidden
+          schema:
+            $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse'
+        "409":
+          description: Conflict
           schema:
             $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ErrorResponse'
         "500":

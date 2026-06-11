@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -86,7 +87,7 @@ func (s *Server) readRecorderRuntimeStatus(ctx context.Context) domain.RecorderR
 }
 
 // @Summary 객체 스토리지 초기화
-// @Description 확인 문자열을 받은 뒤 테스트용 객체 스토리지 데이터를 정리합니다. production 환경에서는 실행되지 않습니다.
+// @Description 확인 문자열을 받은 뒤 테스트용 객체 스토리지 데이터를 정리합니다. production 환경이거나 녹화 런타임 상태가 정리 가능하지 않으면 실행되지 않습니다.
 // @Tags 시스템 API
 // @Accept json
 // @Produce json
@@ -94,12 +95,22 @@ func (s *Server) readRecorderRuntimeStatus(ctx context.Context) domain.RecorderR
 // @Success 200 {object} dto.ClearObjectStorageResponse
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 403 {object} dto.ErrorResponse
+// @Failure 409 {object} dto.ErrorResponse
 // @Failure 500 {object} dto.ErrorResponse
 // @Router /api/v1/system/object-storage/clear [post]
 func (s *Server) handleClearObjectStorage(w http.ResponseWriter, r *http.Request) {
 	var request dto.ClearObjectStorageRequest
 	if err := decodeJSON(r, &request); err != nil {
 		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	if err := s.services.Storage.ValidateClearObjectStorageRequest(request.Confirmation); err != nil {
+		writeSystemActionError(w, err)
+		return
+	}
+	if err := s.ensureObjectStorageClearable(r.Context()); err != nil {
+		writeSystemActionError(w, err)
 		return
 	}
 
@@ -200,6 +211,20 @@ func (s *Server) handleClearRecorderRuntime(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, dto.ClearRecorderRuntimeResponse{
 		RecorderRuntime: result,
 	})
+}
+
+func (s *Server) ensureObjectStorageClearable(ctx context.Context) error {
+	if s.services.RecorderRuntime == nil {
+		return fmt.Errorf("%w: recorder runtime status is unavailable", service.ErrSystemActionConflict)
+	}
+	status, err := s.services.RecorderRuntime.GetRecorderRuntimeStatus(ctx)
+	if err != nil {
+		return fmt.Errorf("%w: recorder runtime status is unavailable", service.ErrSystemActionConflict)
+	}
+	if status.Status != "ok" || !status.Clearable {
+		return fmt.Errorf("%w: recorder runtime is not clearable", service.ErrSystemActionConflict)
+	}
+	return nil
 }
 
 func writeSystemActionError(w http.ResponseWriter, err error) {
