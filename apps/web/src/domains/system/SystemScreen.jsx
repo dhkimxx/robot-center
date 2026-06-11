@@ -7,9 +7,10 @@ import MetricStrip from "../../components/ui/MetricStrip.jsx";
 import SectionHeader from "../../components/ui/SectionHeader.jsx";
 import StatusBadge from "../../components/ui/StatusBadge.jsx";
 import Surface from "../../components/ui/Surface.jsx";
-import { ListSkeleton, SkeletonBlock } from "../../components/ui/Skeleton.jsx";
+import { ListSkeleton, PanelSkeleton, SkeletonBlock } from "../../components/ui/Skeleton.jsx";
 import SystemMaintenanceSection from "./SystemMaintenanceSection.jsx";
 import SystemRealtimeConnections from "./SystemRealtimeConnections.jsx";
+import { DatabaseUsagePanel, ObjectStorageUsagePanel, RecorderRuntimeUsagePanel } from "./SystemUsagePanels.jsx";
 import {
   createSystemClearActions,
   makeSystemStatusLabel,
@@ -75,54 +76,64 @@ export default function SystemScreen({ dataLoadState, onClearEventData, onClearO
 
   return (
     <>
-      <section className="grid h-full min-h-0 grid-cols-[400px_minmax(0,1fr)] gap-3 max-[980px]:grid-cols-1">
-        <div className="grid min-h-0 content-start gap-3 overflow-auto">
-          <Surface>
-            <SectionHeader title="운영 요약" meta={isInitialLoading ? "확인 중" : statusError ? "응답 대기" : "정상 수신"} />
-            {isInitialLoading ? (
-              <div className="flex min-h-9 flex-wrap items-center gap-2 rounded-lg border border-slate-700/70 bg-slate-950/20 px-3">
-                <SkeletonBlock className="h-6 w-24 rounded-full" />
-                <SkeletonBlock className="h-6 w-24 rounded-full" />
-                <SkeletonBlock className="h-6 w-24 rounded-full" />
-              </div>
-            ) : (
-              <MetricStrip items={summaryItems.map(([label, value]) => ({ label, value }))} />
-            )}
-          </Surface>
+      <section className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3">
+        <Surface>
+          <SectionHeader title="운영 요약" meta={isInitialLoading ? "확인 중" : statusError ? "응답 대기" : "정상 수신"} />
+          {isInitialLoading ? (
+            <div className="flex min-h-9 flex-wrap items-center gap-2 rounded-lg border border-slate-700/70 bg-slate-950/20 px-3">
+              <SkeletonBlock className="h-6 w-24 rounded-full" />
+              <SkeletonBlock className="h-6 w-24 rounded-full" />
+              <SkeletonBlock className="h-6 w-24 rounded-full" />
+            </div>
+          ) : (
+            <MetricStrip items={summaryItems.map(([label, value]) => ({ label, value }))} />
+          )}
+        </Surface>
 
-          <Surface>
-            <SectionHeader title="서비스 상태" meta={isInitialLoading ? "확인 중" : `${components.length}개 항목`} />
-            {isInitialLoading ? (
-              <ListSkeleton count={4} />
-            ) : statusError ? (
-              <EmptyState>응답 대기: {statusError}</EmptyState>
-            ) : (
-              <ul className="grid gap-2">
-                {components.map((component) => (
-                  <ListRow
-                    as="li"
-                    key={component.name}
-                    right={<StatusBadge size="xs" tone={makeSystemStatusTone(component.status)}>{makeSystemStatusLabel(component.status)}</StatusBadge>}
-                    title={componentLabels[component.name] ?? component.name}
-                  >
-                  </ListRow>
-                ))}
-              </ul>
-            )}
-          </Surface>
+        <div className="grid min-h-0 content-start gap-3 overflow-auto">
+          <div className="grid items-start grid-cols-[minmax(0,0.9fr)_minmax(360px,1.1fr)] gap-3 max-[1180px]:grid-cols-1">
+            <Surface>
+              <SectionHeader title="서비스 상태" meta={isInitialLoading ? "확인 중" : `${components.length}개 항목`} />
+              {isInitialLoading ? (
+                <ListSkeleton count={4} />
+              ) : statusError ? (
+                <EmptyState>응답 대기: {statusError}</EmptyState>
+              ) : (
+                <ul className="grid grid-cols-2 gap-2 max-[760px]:grid-cols-1">
+                  {components.map((component) => (
+                    <ListRow
+                      as="li"
+                      key={component.name}
+                      right={<StatusBadge size="xs" tone={makeSystemStatusTone(component.status)}>{makeSystemStatusLabel(component.status)}</StatusBadge>}
+                      title={componentLabels[component.name] ?? component.name}
+                    >
+                    </ListRow>
+                  ))}
+                </ul>
+              )}
+            </Surface>
+
+            <Surface>
+              <SectionHeader title="저장소 / 데이터베이스" meta={environment || "environment unknown"} />
+              <div className="grid grid-cols-2 gap-3 max-[900px]:grid-cols-1">
+                {isInitialLoading ? <PanelSkeleton rows={3} /> : <ObjectStorageUsagePanel usage={objectStorageUsage} />}
+                {isInitialLoading ? <PanelSkeleton rows={3} /> : <DatabaseUsagePanel usage={databaseUsage} />}
+                <div className="col-span-2 max-[900px]:col-span-1">
+                  {isInitialLoading ? <PanelSkeleton rows={3} /> : <RecorderRuntimeUsagePanel status={recorderRuntimeStatus} />}
+                </div>
+              </div>
+            </Surface>
+          </div>
+
+          <SystemRealtimeConnections isInitialLoading={isInitialLoading} rooms={rooms} />
 
           <SystemMaintenanceSection
             clearActions={clearActions}
-            databaseUsage={databaseUsage}
             environment={environment}
             isInitialLoading={isInitialLoading}
-            objectStorageUsage={objectStorageUsage}
             onRequestClearAction={setActiveClearActionID}
-            recorderRuntimeStatus={recorderRuntimeStatus}
           />
         </div>
-
-        <SystemRealtimeConnections isInitialLoading={isInitialLoading} rooms={rooms} />
       </section>
       {activeClearAction ? (
         <ConfirmDialog

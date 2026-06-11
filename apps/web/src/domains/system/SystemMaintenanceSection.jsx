@@ -3,24 +3,18 @@ import Button from "../../components/ui/Button.jsx";
 import SectionHeader from "../../components/ui/SectionHeader.jsx";
 import Surface from "../../components/ui/Surface.jsx";
 import { PanelSkeleton } from "../../components/ui/Skeleton.jsx";
-import { DatabaseUsagePanel, ObjectStorageUsagePanel, RecorderRuntimeUsagePanel } from "./SystemUsagePanels.jsx";
 
 export default function SystemMaintenanceSection({
   clearActions,
-  databaseUsage,
   environment,
   isInitialLoading,
-  objectStorageUsage,
-  onRequestClearAction,
-  recorderRuntimeStatus
+  onRequestClearAction
 }) {
   return (
     <Surface>
-      <SectionHeader title="테스트 관리" meta={environment || "environment unknown"} />
-      <div className="grid gap-3">
-        {isInitialLoading ? <PanelSkeleton rows={3} /> : <ObjectStorageUsagePanel usage={objectStorageUsage} />}
-        {isInitialLoading ? <PanelSkeleton rows={3} /> : <DatabaseUsagePanel usage={databaseUsage} />}
-        {isInitialLoading ? <PanelSkeleton rows={3} /> : <RecorderRuntimeUsagePanel status={recorderRuntimeStatus} />}
+      <SectionHeader title="데이터 정리" meta={environment || "environment unknown"} />
+      <div className="grid grid-cols-2 gap-3 max-[900px]:grid-cols-1">
+        {isInitialLoading ? <PanelSkeleton rows={3} /> : null}
         {(clearActions ?? []).map((action) => (
           <DangerActionPanel
             action={action}

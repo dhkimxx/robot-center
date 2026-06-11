@@ -12,11 +12,11 @@ import {
   makeRoomStreamingState
 } from "./systemViewModel.js";
 
-export default function SystemRealtimeConnections({ isInitialLoading, rooms }) {
+export default function SystemRealtimeConnections({ className = "", isInitialLoading, rooms }) {
   return (
-    <Surface className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
+    <Surface className={cn("grid gap-3", className)}>
       <SectionHeader title="실시간 연결" meta={isInitialLoading ? "확인 중" : `${rooms.length}개`} />
-      <div className="grid min-h-0 auto-rows-max content-start gap-2 overflow-auto pr-1">
+      <div className="grid auto-rows-max content-start gap-2">
         {isInitialLoading ? (
           <ListSkeleton count={4} />
         ) : rooms.length === 0 ? (

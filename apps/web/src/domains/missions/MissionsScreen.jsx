@@ -1,8 +1,9 @@
+import { useEffect, useMemo, useState } from "react";
 import { MissionControlView } from "../live/components/MissionControlView.jsx";
 import { MissionDetailPanel } from "./MissionDetailPanel.jsx";
 import { MissionListPanel } from "./MissionListPanel.jsx";
 import { MissionReplayScreen } from "./MissionReplayScreen.jsx";
-import { getMissionRobotDetails } from "./missionHelpers.js";
+import { getMissionRobotDetails, groupMissionsByLifecycle, isClosedMission } from "./missionHelpers.js";
 import Surface from "../../components/ui/Surface.jsx";
 import { PanelSkeleton } from "../../components/ui/Skeleton.jsx";
 
@@ -37,6 +38,19 @@ export default function MissionsScreen({
   setSelectedMissionTargetKey
 }) {
   const isInitialLoading = Boolean(dataLoadState?.isInitialLoading);
+  const { closedMissions, openMissions } = useMemo(() => groupMissionsByLifecycle(missions), [missions]);
+  const selectedMissionGroup = selectedMission && isClosedMission(selectedMission) ? "closed" : "open";
+  const [activeMissionGroup, setActiveMissionGroup] = useState(selectedMissionGroup);
+  const visibleMissions = activeMissionGroup === "closed" ? closedMissions : openMissions;
+  const selectedMissionInActiveGroup = Boolean(
+    selectedMission
+    && (activeMissionGroup === "closed" ? isClosedMission(selectedMission) : !isClosedMission(selectedMission))
+  );
+  const detailMission = selectedMissionInActiveGroup ? selectedMission : null;
+
+  useEffect(() => {
+    setActiveMissionGroup(selectedMissionGroup);
+  }, [selectedMissionGroup]);
 
   if (replayMissionCode) {
     return (
@@ -85,36 +99,41 @@ export default function MissionsScreen({
   }
 
   return (
-    <section className="grid h-full min-h-0 grid-cols-[400px_minmax(0,1fr)] items-stretch gap-3 max-[1180px]:grid-cols-1">
+    <section className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)_440px] items-stretch gap-3 max-[1180px]:grid-cols-1">
       <MissionListPanel
+        activeGroup={activeMissionGroup}
+        closedMissions={closedMissions}
         isLoading={isInitialLoading}
         liveStatuses={liveStatuses}
         missions={missions}
         onSelectMission={onSelectMission}
+        onSetActiveGroup={setActiveMissionGroup}
+        openMissions={openMissions}
         robots={robots}
         selectedMission={selectedMission}
+        visibleMissions={visibleMissions}
       />
 
       <Surface className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden" padding="none">
         <div className="flex min-h-14 min-w-0 items-center justify-between gap-4 border-b border-slate-700/70 px-4">
-          <h2 className="text-base font-bold text-slate-50">임무 상세</h2>
-          <span className="truncate text-sm font-bold text-slate-400">{selectedMission?.missionCode ?? "선택 없음"}</span>
+          <h2 className="text-base font-bold text-slate-50">선택 임무</h2>
+          <span className="truncate text-sm font-bold text-slate-400">{detailMission?.missionCode ?? "선택 없음"}</span>
         </div>
         <div className="min-h-0 overflow-auto p-4">
           {isInitialLoading ? (
             <PanelSkeleton rows={5} />
-          ) : !selectedMission ? (
+          ) : !detailMission ? (
             <p className="rounded-xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-sm font-semibold text-amber-200">
-              임무를 선택하세요.
+              현재 탭에서 임무를 선택하세요.
             </p>
           ) : (
             <MissionDetailPanel
-              mission={selectedMission}
+              mission={detailMission}
               onEndMission={onEndMission}
               onOpenMissionControl={onOpenMissionControl}
               onOpenMissionReplay={onOpenMissionReplay}
               onStartMission={onStartMission}
-              robotDetails={getMissionRobotDetails(selectedMission, robots, liveStatuses?.[selectedMission.missionCode] ?? null)}
+              robotDetails={getMissionRobotDetails(detailMission, robots, liveStatuses?.[detailMission.missionCode] ?? null)}
             />
           )}
         </div>

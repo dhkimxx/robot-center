@@ -32,7 +32,7 @@ export function MissionDetailPanel({
     { label: "생성 시간", value: formatDateTimeFull(mission.createdAt) },
     { label: "시작 시간", value: mission.startedAt ? formatDateTimeFull(mission.startedAt) : "시작 전" },
     { label: "종료 시간", value: mission.endedAt ? formatDateTimeFull(mission.endedAt) : "-" },
-    { className: "min-[981px]:col-span-3", label: "현장 메모", value: mission.siteNote || "-", wrap: true }
+    { label: "현장 메모", value: mission.siteNote || "-", wrap: true }
   ];
 
   return (
@@ -91,7 +91,7 @@ export function MissionDetailPanel({
       <div className="grid min-h-0 gap-3">
         <Surface className="grid min-w-0 content-start gap-3" padding="sm" variant="section">
           <h3 className="text-xs font-bold uppercase tracking-normal text-slate-500">임무 개요</h3>
-          <DefinitionList className="grid-cols-3 gap-x-6 max-[980px]:grid-cols-1" items={missionOverviewItems} />
+          <DefinitionList className="grid-cols-1" items={missionOverviewItems} />
         </Surface>
 
         <Surface className="grid min-w-0 content-start gap-2" padding="sm" variant="section">
@@ -104,7 +104,7 @@ export function MissionDetailPanel({
               미배정
             </span>
           ) : (
-            <div className="grid grid-cols-2 gap-2 max-[980px]:grid-cols-1">
+            <div className="grid gap-2">
               {robotDetails.map((robot) => (
                 <ListRow
                   as="div"
