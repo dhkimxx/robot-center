@@ -1,8 +1,11 @@
 export const replayChunkPageSize = 80;
+export const replayAutoRefreshIntervalMs = 10000;
 
 export function createEmptyReplaySummaryState() {
   return {
     error: "",
+    loadedAt: "",
+    refreshing: false,
     status: "idle",
     summary: null
   };
@@ -12,7 +15,9 @@ export function createEmptyReplayChunkState() {
   return {
     chunks: [],
     error: "",
+    loadedAt: "",
     page: null,
+    refreshing: false,
     robotCode: "",
     status: "idle"
   };
@@ -76,4 +81,36 @@ export function makeFileAvailabilityLabel(robotSummary, fileType, label) {
 
 export function makeLoadedChunkLabel(loadedCount, totalCount) {
   return `${loadedCount}/${totalCount}개 로드`;
+}
+
+export function hasPendingReplayChunks(robotSummary) {
+  return (robotSummary?.recordingChunkCount ?? 0) > 0
+    || (robotSummary?.finalizingChunkCount ?? 0) > 0;
+}
+
+export function shouldAutoRefreshReplayRecordings({ missionStatus, selectedRobotSummary } = {}) {
+  return missionStatus === "active" || hasPendingReplayChunks(selectedRobotSummary);
+}
+
+export function makeReplayContinuityNotice(robotSummary) {
+  if ((robotSummary?.recordingChunkCount ?? 0) > 0) {
+    return "현재 녹화 중인 청크는 저장 완료 후 재생 버튼이 표시됩니다.";
+  }
+  if ((robotSummary?.finalizingChunkCount ?? 0) > 0) {
+    return "저장 마무리 중인 청크는 업로드가 끝나면 재생할 수 있습니다.";
+  }
+  if ((robotSummary?.partialChunkCount ?? 0) > 0) {
+    return "부분 저장 청크는 저장된 파일만 재생할 수 있습니다.";
+  }
+  return "";
+}
+
+export function makeReplayRefreshStatusLabel({ autoRefreshEnabled, loadedAt, refreshing } = {}) {
+  if (refreshing) {
+    return "갱신 중";
+  }
+  if (loadedAt) {
+    return autoRefreshEnabled ? "자동 갱신 중" : "최근 갱신됨";
+  }
+  return autoRefreshEnabled ? "자동 갱신 대기" : "수동 갱신";
 }

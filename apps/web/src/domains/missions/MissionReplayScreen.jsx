@@ -30,6 +30,7 @@ export function MissionReplayScreen({
   const robotDisplayNamesByCode = useMemo(() => createRobotDisplayNamesByCode(robots), [robots]);
   const robotDetails = useMemo(() => getMissionRobotDetails(mission, robots), [mission, robots]);
   const {
+    autoRefreshEnabled,
     chunkState,
     isChunkLoading,
     isLoadingMore,
@@ -43,7 +44,7 @@ export function MissionReplayScreen({
     sessionGroups,
     setSelectedRobotCode,
     summaryState
-  } = useMissionReplayRecordings(missionCode);
+  } = useMissionReplayRecordings(missionCode, mission?.status ?? "");
   const selectedRobotDisplayName = getRobotDisplayName(robotDisplayNamesByCode, selectedRobotSummary?.robotCode);
 
   if (!mission && isLoading) {
@@ -105,6 +106,7 @@ export function MissionReplayScreen({
             selectedRobotCode={selectedRobotSummary?.robotCode ?? selectedRobotCode}
           />
           <MissionReplayChunkPanel
+            autoRefreshEnabled={autoRefreshEnabled}
             chunkState={chunkState}
             isChunkLoading={isChunkLoading}
             isLoadingMore={isLoadingMore}

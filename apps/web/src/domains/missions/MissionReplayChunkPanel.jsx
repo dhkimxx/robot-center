@@ -11,10 +11,13 @@ import {
 import {
   makeFileAvailabilityLabel,
   makeLoadedChunkLabel,
+  makeReplayContinuityNotice,
+  makeReplayRefreshStatusLabel,
   replayChunkPageSize
 } from "./missionReplayHelpers.js";
 
 export function MissionReplayChunkPanel({
+  autoRefreshEnabled,
   chunkState,
   isChunkLoading,
   isLoadingMore,
@@ -28,7 +31,10 @@ export function MissionReplayChunkPanel({
   return (
     <section className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-2 overflow-hidden">
       <MissionReplayChunkHeader
+        autoRefreshEnabled={autoRefreshEnabled}
         chunkState={chunkState}
+        isChunkLoading={isChunkLoading}
+        onReloadChunks={onReloadChunks}
         selectedRobotDisplayName={selectedRobotDisplayName}
         selectedRobotSummary={selectedRobotSummary}
       />
@@ -75,10 +81,19 @@ export function MissionReplayChunkPanel({
 }
 
 function MissionReplayChunkHeader({
+  autoRefreshEnabled,
   chunkState,
+  isChunkLoading,
+  onReloadChunks,
   selectedRobotDisplayName,
   selectedRobotSummary
 }) {
+  const continuityNotice = makeReplayContinuityNotice(selectedRobotSummary);
+  const refreshStatusLabel = makeReplayRefreshStatusLabel({
+    autoRefreshEnabled,
+    loadedAt: chunkState.loadedAt,
+    refreshing: chunkState.refreshing
+  });
   return (
     <div className="grid gap-2 rounded-lg border border-slate-500/20 bg-white/[0.035] p-3">
       <div className="flex min-h-9 items-center justify-between gap-3">
@@ -88,9 +103,14 @@ function MissionReplayChunkHeader({
             {selectedRobotSummary?.robotCode ? `${selectedRobotSummary.robotCode} · 최근 저장순` : "최근 저장순"}
           </span>
         </div>
-        <small className="shrink-0 text-xs font-semibold text-slate-500">
-          {makeLoadedChunkLabel(chunkState.chunks.length, chunkState.page?.total ?? selectedRobotSummary?.chunkCount ?? 0)}
-        </small>
+        <div className="flex shrink-0 items-center gap-2">
+          <small className="text-xs font-semibold text-slate-500">
+            {makeLoadedChunkLabel(chunkState.chunks.length, chunkState.page?.total ?? selectedRobotSummary?.chunkCount ?? 0)}
+          </small>
+          <Button disabled={isChunkLoading || chunkState.refreshing} size="sm" onClick={onReloadChunks}>
+            {chunkState.refreshing ? "갱신 중" : "새로고침"}
+          </Button>
+        </div>
       </div>
       {selectedRobotSummary ? (
         <div className="flex flex-wrap gap-2">
@@ -101,7 +121,16 @@ function MissionReplayChunkHeader({
           </StatusBadge>
           <StatusBadge size="xs" tone="neutral">{makeFileAvailabilityLabel(selectedRobotSummary, "rgb_audio_mp4", "RGB")}</StatusBadge>
           <StatusBadge size="xs" tone="neutral">{makeFileAvailabilityLabel(selectedRobotSummary, "thermal_mp4", "Thermal")}</StatusBadge>
+          <StatusBadge size="xs" tone={autoRefreshEnabled ? "info" : "neutral"}>
+            {refreshStatusLabel}
+          </StatusBadge>
+          {chunkState.loadedAt ? (
+            <StatusBadge size="xs" tone="neutral">조회 {formatDateTime(chunkState.loadedAt)}</StatusBadge>
+          ) : null}
         </div>
+      ) : null}
+      {continuityNotice ? (
+        <span className="text-xs font-semibold leading-relaxed text-amber-100/80">{continuityNotice}</span>
       ) : null}
     </div>
   );

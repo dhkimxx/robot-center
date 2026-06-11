@@ -89,6 +89,25 @@ export function makeFileStatusLabel(status) {
   return labels[status] ?? "대기";
 }
 
+export function makeRecordingFileAvailabilityNote(entry) {
+  if (isPlayableRecordingFile(entry)) {
+    return "재생 가능";
+  }
+  if (entry?.status === "available" && entry?.url) {
+    return "파일 열기 가능";
+  }
+  const labels = {
+    available: "파일 URL 대기",
+    failed: "저장 실패",
+    finalizing: "파일 업로드 대기",
+    partial: "이 파일은 저장되지 않음",
+    planned: "아직 생성되지 않음",
+    recording: "청크 작성 중",
+    stopped: "이 파일은 저장되지 않음"
+  };
+  return labels[entry?.status] ?? "파일 대기";
+}
+
 export function isPlayableRecordingFile(entry) {
   return Boolean(entry?.url) && entry?.status === "available" && String(entry?.contentType ?? "").startsWith("video/");
 }

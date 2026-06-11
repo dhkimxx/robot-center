@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getPlayableRecordingVideoEntries,
+  makeRecordingFileAvailabilityNote,
   makeRecordingStateForTarget
 } from "./recordingHelpers.js";
 
@@ -95,5 +96,25 @@ describe("recordingHelpers", () => {
 
     expect(playableEntries).toHaveLength(1);
     expect(playableEntries[0].type).toBe("rgb_audio_mp4");
+  });
+
+  it("explains why recording files are not yet playable", () => {
+    expect(makeRecordingFileAvailabilityNote({
+      status: "available",
+      contentType: "video/mp4",
+      url: "http://storage/rgb.mp4"
+    })).toBe("재생 가능");
+    expect(makeRecordingFileAvailabilityNote({
+      status: "recording",
+      contentType: "video/mp4"
+    })).toBe("청크 작성 중");
+    expect(makeRecordingFileAvailabilityNote({
+      status: "finalizing",
+      contentType: "video/mp4"
+    })).toBe("파일 업로드 대기");
+    expect(makeRecordingFileAvailabilityNote({
+      status: "partial",
+      contentType: "video/mp4"
+    })).toBe("이 파일은 저장되지 않음");
   });
 });
