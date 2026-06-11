@@ -145,6 +145,28 @@ definitions:
       status:
         type: string
     type: object
+  robot-center_apps_server_internal_api_dto.ListPageResponse:
+    properties:
+      hasMore:
+        type: boolean
+      limit:
+        type: integer
+      offset:
+        type: integer
+      returned:
+        type: integer
+      total:
+        type: integer
+    type: object
+  robot-center_apps_server_internal_api_dto.ListQueryResponse:
+    properties:
+      filter:
+        type: string
+      order:
+        type: string
+      sort:
+        type: string
+    type: object
   robot-center_apps_server_internal_api_dto.LiveConnectionStatusResponse:
     properties:
       lastSeenAt:
@@ -313,6 +335,10 @@ definitions:
         items:
           $ref: '#/definitions/robot-center_apps_server_internal_api_dto.MissionResponse'
         type: array
+      page:
+        $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ListPageResponse'
+      query:
+        $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ListQueryResponse'
     type: object
   robot-center_apps_server_internal_api_dto.OKResponse:
     properties:
@@ -786,6 +812,10 @@ definitions:
     type: object
   robot-center_apps_server_internal_api_dto.RobotsResponse:
     properties:
+      page:
+        $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ListPageResponse'
+      query:
+        $ref: '#/definitions/robot-center_apps_server_internal_api_dto.ListQueryResponse'
       robots:
         items:
           $ref: '#/definitions/robot-center_apps_server_internal_api_dto.RobotResponse'
@@ -1212,7 +1242,30 @@ info:
 paths:
   /api/v1/operator/missions:
     get:
-      description: 관제 서버에 등록된 임무 목록을 반환합니다.
+      description: 관제 서버에 등록된 임무 목록을 반환합니다. limit, offset, sort, order, filter query로
+        관제 화면용 페이지네이션과 정렬을 적용할 수 있습니다. limit을 생략하면 기존 호환을 위해 전체 목록을 반환합니다.
+      parameters:
+      - description: 반환할 최대 임무 개수. 생략하면 전체 반환, 최대 200.
+        in: query
+        name: limit
+        type: integer
+      - description: 건너뛸 임무 개수. 기본 0.
+        in: query
+        name: offset
+        type: integer
+      - description: '정렬 기준: missionCode, name, missionType, status, createdAt, startedAt,
+          endedAt'
+        in: query
+        name: sort
+        type: string
+      - description: '정렬 방향: asc 또는 desc. 기본 asc.'
+        in: query
+        name: order
+        type: string
+      - description: 임무명, 임무 코드, 시나리오, 상태, 현장 메모, 로봇 코드 검색어.
+        in: query
+        name: filter
+        type: string
       produces:
       - application/json
       responses:
@@ -1477,7 +1530,30 @@ paths:
       - Operator API
   /api/v1/operator/robots:
     get:
-      description: 관제 서버에 등록된 로봇 목록을 반환합니다.
+      description: 관제 서버에 등록된 로봇 목록을 반환합니다. limit, offset, sort, order, filter query로
+        관제 화면용 페이지네이션과 정렬을 적용할 수 있습니다. limit을 생략하면 기존 호환을 위해 전체 목록을 반환합니다.
+      parameters:
+      - description: 반환할 최대 로봇 개수. 생략하면 전체 반환, 최대 200.
+        in: query
+        name: limit
+        type: integer
+      - description: 건너뛸 로봇 개수. 기본 0.
+        in: query
+        name: offset
+        type: integer
+      - description: '정렬 기준: robotCode, displayName, modelName, status, lastSeenAt,
+          createdAt'
+        in: query
+        name: sort
+        type: string
+      - description: '정렬 방향: asc 또는 desc. 기본 asc.'
+        in: query
+        name: order
+        type: string
+      - description: 로봇명, 로봇 코드, 모델명, 상태 검색어.
+        in: query
+        name: filter
+        type: string
       produces:
       - application/json
       responses:

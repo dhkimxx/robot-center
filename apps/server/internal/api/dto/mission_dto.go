@@ -36,6 +36,8 @@ type MissionEnvelopeResponse struct {
 
 type MissionsResponse struct {
 	Missions []MissionResponse `json:"missions"`
+	Page     ListPageResponse  `json:"page"`
+	Query    ListQueryResponse `json:"query"`
 }
 
 type MissionConflictResponse struct {
@@ -79,10 +81,15 @@ func Missions(missions []domain.Mission) []MissionResponse {
 	return response
 }
 
-func MissionsPayload(missions []domain.Mission) MissionsResponse {
-	return MissionsResponse{
+func MissionsPayload(missions []domain.Mission, listMeta ...ListResponseMeta) MissionsResponse {
+	response := MissionsResponse{
 		Missions: Missions(missions),
 	}
+	if len(listMeta) > 0 {
+		response.Page = listMeta[0].Page
+		response.Query = listMeta[0].Query
+	}
+	return response
 }
 
 func MissionConflictPayload(errorMessage string, conflicts []store.MissionStartConflict) MissionConflictEnvelopeResponse {

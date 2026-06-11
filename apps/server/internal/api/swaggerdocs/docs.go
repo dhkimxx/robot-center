@@ -17,7 +17,7 @@ const docTemplate = `{
     "paths": {
         "/api/v1/operator/missions": {
             "get": {
-                "description": "관제 서버에 등록된 임무 목록을 반환합니다.",
+                "description": "관제 서버에 등록된 임무 목록을 반환합니다. limit, offset, sort, order, filter query로 관제 화면용 페이지네이션과 정렬을 적용할 수 있습니다. limit을 생략하면 기존 호환을 위해 전체 목록을 반환합니다.",
                 "produces": [
                     "application/json"
                 ],
@@ -25,6 +25,38 @@ const docTemplate = `{
                     "Operator API"
                 ],
                 "summary": "임무 목록 조회",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "반환할 최대 임무 개수. 생략하면 전체 반환, 최대 200.",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "건너뛸 임무 개수. 기본 0.",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "정렬 기준: missionCode, name, missionType, status, createdAt, startedAt, endedAt",
+                        "name": "sort",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "정렬 방향: asc 또는 desc. 기본 asc.",
+                        "name": "order",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "임무명, 임무 코드, 시나리오, 상태, 현장 메모, 로봇 코드 검색어.",
+                        "name": "filter",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -415,7 +447,7 @@ const docTemplate = `{
         },
         "/api/v1/operator/robots": {
             "get": {
-                "description": "관제 서버에 등록된 로봇 목록을 반환합니다.",
+                "description": "관제 서버에 등록된 로봇 목록을 반환합니다. limit, offset, sort, order, filter query로 관제 화면용 페이지네이션과 정렬을 적용할 수 있습니다. limit을 생략하면 기존 호환을 위해 전체 목록을 반환합니다.",
                 "produces": [
                     "application/json"
                 ],
@@ -423,6 +455,38 @@ const docTemplate = `{
                     "Operator API"
                 ],
                 "summary": "로봇 목록 조회",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "반환할 최대 로봇 개수. 생략하면 전체 반환, 최대 200.",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "건너뛸 로봇 개수. 기본 0.",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "정렬 기준: robotCode, displayName, modelName, status, lastSeenAt, createdAt",
+                        "name": "sort",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "정렬 방향: asc 또는 desc. 기본 asc.",
+                        "name": "order",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "로봇명, 로봇 코드, 모델명, 상태 검색어.",
+                        "name": "filter",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -1893,6 +1957,40 @@ const docTemplate = `{
                 }
             }
         },
+        "robot-center_apps_server_internal_api_dto.ListPageResponse": {
+            "type": "object",
+            "properties": {
+                "hasMore": {
+                    "type": "boolean"
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "offset": {
+                    "type": "integer"
+                },
+                "returned": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "robot-center_apps_server_internal_api_dto.ListQueryResponse": {
+            "type": "object",
+            "properties": {
+                "filter": {
+                    "type": "string"
+                },
+                "order": {
+                    "type": "string"
+                },
+                "sort": {
+                    "type": "string"
+                }
+            }
+        },
         "robot-center_apps_server_internal_api_dto.LiveConnectionStatusResponse": {
             "type": "object",
             "properties": {
@@ -2149,6 +2247,12 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.MissionResponse"
                     }
+                },
+                "page": {
+                    "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.ListPageResponse"
+                },
+                "query": {
+                    "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.ListQueryResponse"
                 }
             }
         },
@@ -2876,6 +2980,12 @@ const docTemplate = `{
         "robot-center_apps_server_internal_api_dto.RobotsResponse": {
             "type": "object",
             "properties": {
+                "page": {
+                    "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.ListPageResponse"
+                },
+                "query": {
+                    "$ref": "#/definitions/robot-center_apps_server_internal_api_dto.ListQueryResponse"
+                },
                 "robots": {
                     "type": "array",
                     "items": {

@@ -38,7 +38,9 @@ type RobotEnvelopeResponse struct {
 }
 
 type RobotsResponse struct {
-	Robots []RobotResponse `json:"robots"`
+	Robots []RobotResponse   `json:"robots"`
+	Page   ListPageResponse  `json:"page"`
+	Query  ListQueryResponse `json:"query"`
 }
 
 type CreateRobotResponse struct {
@@ -77,10 +79,15 @@ func RobotEnvelope(robot domain.Robot, now time.Time, heartbeatTTL time.Duration
 	}
 }
 
-func RobotsPayload(robots []domain.Robot, now time.Time, heartbeatTTL time.Duration) RobotsResponse {
-	return RobotsResponse{
+func RobotsPayload(robots []domain.Robot, now time.Time, heartbeatTTL time.Duration, listMeta ...ListResponseMeta) RobotsResponse {
+	response := RobotsResponse{
 		Robots: Robots(robots, now, heartbeatTTL),
 	}
+	if len(listMeta) > 0 {
+		response.Page = listMeta[0].Page
+		response.Query = listMeta[0].Query
+	}
+	return response
 }
 
 func RobotConnectionInfo(info domain.RobotConnectionInfo) RobotConnectionInfoResponse {

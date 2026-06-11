@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   findRobotOpenMission,
+  getRobotAvailabilityTab,
   groupRobotsByAvailability,
   isOnlineRobot,
   makeRobotStatusTone,
@@ -54,6 +55,12 @@ describe("robotHelpers", () => {
     ]);
 
     expect(robot?.robotCode).toBe("robot-online");
+  });
+
+  it("uses the online tab while robot data is still loading", () => {
+    expect(getRobotAvailabilityTab(null)).toBe("online");
+    expect(getRobotAvailabilityTab({ status: "streaming" })).toBe("online");
+    expect(getRobotAvailabilityTab({ status: "offline" })).toBe("offline");
   });
 
   it("finds the current ready or active mission for a robot", () => {

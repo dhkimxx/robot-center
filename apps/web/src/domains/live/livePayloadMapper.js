@@ -31,6 +31,16 @@ function withReceivedAt(payload) {
   };
 }
 
+function hasTelemetrySampleValues(payload) {
+  return (payload?.samples ?? []).some((sample) => {
+    if (!sample?.sensorId) {
+      return false;
+    }
+    return (sample.values !== null && sample.values !== undefined)
+      || Boolean(sample.objectKey);
+  });
+}
+
 function createTelemetryProjection(payload) {
   const positionValues = findSampleValues(payload, "position");
   if (!positionValues) {
@@ -52,14 +62,15 @@ function createTelemetrySensorProjection(payload) {
     ...(positionValues ? { position: positionValues, positionAvailable: true } : {}),
     ...(batteryValues ?? {})
   };
+  const hasProjectedPayload = Object.keys(projectedPayload).length > 0;
 
-  if (Object.keys(projectedPayload).length === 0) {
+  if (!hasProjectedPayload && !hasTelemetrySampleValues(payload)) {
     return null;
   }
 
   return {
     ...payload,
-    payload: projectedPayload
+    ...(hasProjectedPayload ? { payload: projectedPayload } : {})
   };
 }
 

@@ -29,6 +29,43 @@ describe("mapLiveDataChannelPayload", () => {
     });
   });
 
+  it("maps gas-only telemetry samples to a live sensor projection", () => {
+    const payload = {
+      channelRole: "channel.telemetry",
+      messageType: "telemetry",
+      descriptors: [
+        {
+          enabled: true,
+          label: "CO",
+          sensorId: "telemetry.gas.channel_1",
+          sensorType: "gas",
+          unit: "ppm"
+        }
+      ],
+      samples: [
+        {
+          sensorId: "telemetry.gas.channel_1",
+          timestamp: "2026-06-11T08:35:40.490Z",
+          values: {
+            alarm: "normal",
+            concentration: 12.8,
+            valid: true
+          }
+        }
+      ]
+    };
+
+    const result = mapLiveDataChannelPayload("channel.telemetry", JSON.stringify(payload));
+
+    expect(result.ok).toBe(true);
+    expect(result.sensor).toMatchObject({
+      descriptors: payload.descriptors,
+      receivedAt: "2026-06-11T08:35:40.490Z",
+      samples: payload.samples
+    });
+    expect(result.sensor.payload).toBeUndefined();
+  });
+
   it("maps event channel to event message", () => {
     const result = mapLiveDataChannelPayload("channel.event", JSON.stringify({
       channelRole: "channel.event",

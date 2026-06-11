@@ -89,9 +89,14 @@ func (s *Server) handleArchiveRobot(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary 로봇 목록 조회
-// @Description 관제 서버에 등록된 로봇 목록을 반환합니다.
+// @Description 관제 서버에 등록된 로봇 목록을 반환합니다. limit, offset, sort, order, filter query로 관제 화면용 페이지네이션과 정렬을 적용할 수 있습니다. limit을 생략하면 기존 호환을 위해 전체 목록을 반환합니다.
 // @Tags Operator API
 // @Produce json
+// @Param limit query int false "반환할 최대 로봇 개수. 생략하면 전체 반환, 최대 200."
+// @Param offset query int false "건너뛸 로봇 개수. 기본 0."
+// @Param sort query string false "정렬 기준: robotCode, displayName, modelName, status, lastSeenAt, createdAt"
+// @Param order query string false "정렬 방향: asc 또는 desc. 기본 asc."
+// @Param filter query string false "로봇명, 로봇 코드, 모델명, 상태 검색어."
 // @Success 200 {object} dto.RobotsResponse
 // @Failure 500 {object} dto.ErrorResponse
 // @Router /api/v1/operator/robots [get]
@@ -102,7 +107,13 @@ func (s *Server) handleListRobots(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now().UTC()
-	writeJSON(w, http.StatusOK, dto.RobotsPayload(robots, now, domain.DefaultRobotHeartbeatTTL))
+	result := applyListQuery(
+		robots,
+		parseListQuery(r, operatorRobotListSorts()),
+		robotMatchesOperatorListFilter(now),
+		lessRobotByOperatorListSort(now),
+	)
+	writeJSON(w, http.StatusOK, dto.RobotsPayload(result.items, now, domain.DefaultRobotHeartbeatTTL, result.meta))
 }
 
 // @Summary 로봇 연결 정보 조회
@@ -137,4 +148,57 @@ func (s *Server) handleRotateRobotConnectionToken(w http.ResponseWriter, r *http
 		return
 	}
 	writeJSON(w, http.StatusOK, dto.RobotConnectionInfoPayload(connectionInfo))
+}
+
+func operatorRobotListSorts() map[string]string {
+	return map[string]string{
+		"robotCode":   "robotCode",
+		"robotcode":   "robotCode",
+		"displayName": "displayName",
+		"displayname": "displayName",
+		"modelName":   "modelName",
+		"modelname":   "modelName",
+		"status":      "status",
+		"lastSeenAt":  "lastSeenAt",
+		"lastseenat":  "lastSeenAt",
+		"createdAt":   "createdAt",
+		"createdat":   "createdAt",
+	}
+}
+
+func robotMatchesOperatorListFilter(now time.Time) func(domain.Robot, string) bool {
+	return func(robot domain.Robot, filter string) bool {
+		return containsListFilterValue(
+			filter,
+			robot.RobotCode,
+			robot.DisplayName,
+			robot.ModelName,
+			string(robot.DeviceState),
+			string(robot.ConnectionState(now, domain.DefaultRobotHeartbeatTTL)),
+		)
+	}
+}
+
+func lessRobotByOperatorListSort(now time.Time) func(domain.Robot, domain.Robot, string) bool {
+	return func(left domain.Robot, right domain.Robot, sortKey string) bool {
+		switch sortKey {
+		case "robotCode":
+			return lessListString(left.RobotCode, right.RobotCode)
+		case "displayName":
+			return lessListString(left.DisplayName, right.DisplayName)
+		case "modelName":
+			return lessListString(left.ModelName, right.ModelName)
+		case "status":
+			return lessListString(
+				string(left.ConnectionState(now, domain.DefaultRobotHeartbeatTTL)),
+				string(right.ConnectionState(now, domain.DefaultRobotHeartbeatTTL)),
+			)
+		case "lastSeenAt":
+			return lessOptionalListTime(left.LastSeenAt, right.LastSeenAt)
+		case "createdAt":
+			return lessListTime(left.CreatedAt, right.CreatedAt)
+		default:
+			return false
+		}
+	}
 }

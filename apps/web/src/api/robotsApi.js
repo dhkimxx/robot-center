@@ -1,11 +1,12 @@
 import { requestJson } from "./controlCenterApi.js";
+import { createListQueryPath } from "./listQueryApi.js";
 
 function robotPath(robotCode) {
   return encodeURIComponent(robotCode);
 }
 
-export function fetchRobots() {
-  return requestJson("/api/v1/operator/robots");
+export function fetchRobots(query) {
+  return requestJson(createListQueryPath("/api/v1/operator/robots", query));
 }
 
 export function createRobotRequest(robotForm) {

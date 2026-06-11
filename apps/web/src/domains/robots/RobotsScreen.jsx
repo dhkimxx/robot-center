@@ -1,19 +1,27 @@
 import { useEffect, useMemo, useState } from "react";
 import { formatDateTime, makeStatusLabel } from "../../utils/formatters.js";
 import Button from "../../components/ui/Button.jsx";
+import DataTable from "../../components/ui/DataTable.jsx";
 import DefinitionList from "../../components/ui/DefinitionList.jsx";
 import EmptyState from "../../components/ui/EmptyState.jsx";
+import ListFilterInput from "../../components/ui/ListFilterInput.jsx";
+import PaginationControls from "../../components/ui/PaginationControls.jsx";
 import SegmentedControl from "../../components/ui/SegmentedControl.jsx";
 import SectionHeader from "../../components/ui/SectionHeader.jsx";
 import StatusBadge from "../../components/ui/StatusBadge.jsx";
 import Surface from "../../components/ui/Surface.jsx";
 import { ListSkeleton, PanelSkeleton } from "../../components/ui/Skeleton.jsx";
+import { createListView, createNextSortState } from "../../utils/listView.js";
 import {
   findRobotOpenMission,
+  getRobotAvailabilityTab,
   groupRobotsByAvailability,
   isOnlineRobot,
   makeRobotStatusTone
 } from "./robotHelpers.js";
+
+const robotPageSizeOptions = [10, 20, 50];
+const robotTableGrid = "grid-cols-[minmax(190px,1.5fr)_110px_120px_150px] max-[760px]:grid-cols-[minmax(0,1fr)_auto]";
 
 export default function RobotsScreen({
   dataLoadState,
@@ -27,9 +35,20 @@ export default function RobotsScreen({
 }) {
   const isInitialLoading = Boolean(dataLoadState?.isInitialLoading);
   const { offlineRobots, onlineRobots } = useMemo(() => groupRobotsByAvailability(robots), [robots]);
-  const selectedAvailability = selectedRobot && isOnlineRobot(selectedRobot) ? "online" : "offline";
+  const selectedAvailability = getRobotAvailabilityTab(selectedRobot);
   const [activeAvailability, setActiveAvailability] = useState(selectedAvailability);
+  const [filterText, setFilterText] = useState("");
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState(robotPageSizeOptions[0]);
+  const [sortDirection, setSortDirection] = useState("desc");
+  const [sortKey, setSortKey] = useState("lastSeenAt");
   const visibleRobots = activeAvailability === "online" ? onlineRobots : offlineRobots;
+  const listView = useMemo(() => createListView(
+    visibleRobots,
+    { filterText, pageIndex, pageSize, sortDirection, sortKey },
+    (robot) => getRobotFilterValues(robot, missions),
+    (robot, nextSortKey) => getRobotSortValue(robot, nextSortKey, missions)
+  ), [filterText, missions, pageIndex, pageSize, sortDirection, sortKey, visibleRobots]);
   const selectedRobotOpenMission = selectedRobot ? findRobotOpenMission(selectedRobot.robotCode, missions) : null;
   const selectedRobotHasOpenMission = Boolean(selectedRobotOpenMission);
   const selectedRobotInActiveAvailability = Boolean(
@@ -44,9 +63,29 @@ export default function RobotsScreen({
     setActiveAvailability(selectedAvailability);
   }, [selectedAvailability]);
 
+  useEffect(() => {
+    setPageIndex(0);
+  }, [activeAvailability, filterText, pageSize, sortDirection, sortKey]);
+
+  useEffect(() => {
+    if (listView.page.pageIndex !== pageIndex) {
+      setPageIndex(listView.page.pageIndex);
+    }
+  }, [listView.page.pageIndex, pageIndex]);
+
+  function handleSortChange(nextSortKey) {
+    const nextSort = createNextSortState({
+      currentDirection: sortDirection,
+      currentKey: sortKey,
+      nextKey: nextSortKey
+    });
+    setSortKey(nextSort.sortKey);
+    setSortDirection(nextSort.sortDirection);
+  }
+
   return (
     <section className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)_420px] items-stretch gap-3 max-[1180px]:grid-cols-1">
-      <Surface className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
+      <Surface className="grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] overflow-hidden">
         <SectionHeader
           action={(
             <SegmentedControl
@@ -58,8 +97,14 @@ export default function RobotsScreen({
               value={activeAvailability}
             />
           )}
-          meta={`${visibleRobots.length}/${robots.length}대`}
+          meta={`${listView.filteredItems.length}/${visibleRobots.length}대`}
           title="등록 로봇"
+        />
+        <ListFilterInput
+          className="mb-2 w-full"
+          placeholder="로봇명, 코드, 모델 검색"
+          value={filterText}
+          onChange={setFilterText}
         />
         <div className="min-h-0 overflow-auto pr-1">
           {isInitialLoading ? (
@@ -69,12 +114,24 @@ export default function RobotsScreen({
           ) : (
             <RobotManagementRows
               missions={missions}
-              robots={visibleRobots}
+              robots={listView.page.pageItems}
               selectedRobot={selectedRobot}
+              sortDirection={sortDirection}
+              sortKey={sortKey}
               onSelectRobot={onSelectRobot}
+              onSortChange={handleSortChange}
             />
           )}
         </div>
+        {!isInitialLoading && robots.length > 0 ? (
+          <PaginationControls
+            className="mt-2"
+            page={listView.page}
+            pageSizeOptions={robotPageSizeOptions}
+            onPageChange={setPageIndex}
+            onPageSizeChange={setPageSize}
+          />
+        ) : null}
       </Surface>
 
       <Surface className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden" padding="none">
@@ -132,54 +189,103 @@ export default function RobotsScreen({
   );
 }
 
-function RobotManagementRows({ missions, onSelectRobot, robots, selectedRobot }) {
+function RobotManagementRows({
+  missions,
+  onSelectRobot,
+  onSortChange,
+  robots,
+  selectedRobot,
+  sortDirection,
+  sortKey
+}) {
   if (robots.length === 0) {
-    return (
-      <div className="rounded-lg border border-slate-500/20 bg-white/[0.03] px-3 py-4 text-sm font-semibold text-slate-500">
-        해당 상태의 로봇이 없습니다.
-      </div>
-    );
+    return <EmptyState>해당 조건의 로봇이 없습니다.</EmptyState>;
   }
 
   return (
-    <div className="grid gap-1.5">
-      <div className="grid min-h-9 grid-cols-[minmax(160px,1.3fr)_120px_120px_140px_auto] items-center gap-3 rounded-lg border border-slate-700/50 bg-command-950/50 px-3 text-xs font-black text-slate-500 max-[760px]:hidden">
-        <span>로봇</span>
-        <span>상태</span>
-        <span>현재 임무</span>
-        <span>최근 연결</span>
-        <span className="text-right">관리</span>
-      </div>
-      {robots.map((robot) => {
-        const openMission = findRobotOpenMission(robot.robotCode, missions);
-        const isSelectedRobot = selectedRobot?.robotCode === robot.robotCode;
-        return (
-          <button
-            aria-label={`${robot.displayName} ${robot.robotCode} 선택`}
-            aria-pressed={isSelectedRobot}
-            className={[
-              "grid min-h-[72px] w-full grid-cols-[minmax(160px,1.3fr)_120px_120px_140px_auto] items-center gap-3 rounded-lg border border-slate-700/70 bg-white/[0.035] px-3 py-2 text-left transition",
-              "hover:border-sapphire-400/35 hover:bg-sapphire-500/[0.08] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sapphire-500",
-              isSelectedRobot ? "border-sapphire-400/45 bg-sapphire-500/[0.10] shadow-[inset_3px_0_0_var(--color-sapphire)]" : "",
-              "max-[760px]:grid-cols-[minmax(0,1fr)_auto]"
-            ].join(" ")}
-            key={robot.robotCode}
-            type="button"
-            onClick={() => onSelectRobot(robot.robotCode)}
-          >
-            <div className="min-w-0">
-              <strong className="block truncate text-sm font-bold text-slate-100">{robot.displayName}</strong>
-              <span className="mt-1 block truncate text-xs font-semibold text-slate-500">{robot.robotCode} · {robot.modelName || "모델 미지정"}</span>
-            </div>
-            <div className="max-[760px]:hidden">
-              <StatusBadge size="xs" tone={makeRobotStatusTone(robot.status)}>{makeStatusLabel(robot.status)}</StatusBadge>
-            </div>
-            <span className="truncate text-xs font-bold text-slate-400 max-[760px]:hidden">{openMission?.missionCode ?? "-"}</span>
-            <span className="truncate text-xs font-bold text-slate-500 max-[760px]:hidden">{formatDateTime(robot.lastSeenAt)}</span>
-            <StatusBadge className="justify-self-end" size="xs" tone={makeRobotStatusTone(robot.status)}>{makeStatusLabel(robot.status)}</StatusBadge>
-          </button>
-        );
-      })}
-    </div>
+    <DataTable
+      columns={createRobotColumns(missions)}
+      emptyLabel="해당 조건의 로봇이 없습니다."
+      getRowKey={(robot) => robot.robotCode}
+      gridTemplateClass={robotTableGrid}
+      rowAriaLabel={(robot) => `${robot.displayName} ${robot.robotCode} 선택`}
+      rows={robots}
+      selectedRowKey={selectedRobot?.robotCode}
+      sortDirection={sortDirection}
+      sortKey={sortKey}
+      onRowClick={(robot) => onSelectRobot(robot.robotCode)}
+      onSortChange={onSortChange}
+    />
   );
+}
+
+function createRobotColumns(missions) {
+  return [
+    {
+      key: "robot",
+      label: "로봇",
+      sortKey: "displayName",
+      render: (robot) => (
+        <div className="min-w-0">
+          <strong className="block truncate text-sm font-bold text-slate-100">{robot.displayName}</strong>
+          <span className="mt-1 block truncate text-xs font-semibold text-slate-500">{robot.robotCode} · {robot.modelName || "모델 미지정"}</span>
+        </div>
+      )
+    },
+    {
+      key: "status",
+      label: "상태",
+      sortKey: "status",
+      render: (robot) => (
+        <StatusBadge className="justify-self-end max-[760px]:justify-self-end" size="xs" tone={makeRobotStatusTone(robot.status)}>
+          {makeStatusLabel(robot.status)}
+        </StatusBadge>
+      )
+    },
+    {
+      className: "max-[760px]:hidden",
+      key: "mission",
+      label: "현재 임무",
+      sortKey: "missionCode",
+      render: (robot) => {
+        const openMission = findRobotOpenMission(robot.robotCode, missions);
+        return <span className="truncate text-xs font-bold text-slate-400">{openMission?.missionCode ?? "-"}</span>;
+      }
+    },
+    {
+      className: "max-[760px]:hidden",
+      key: "lastSeenAt",
+      label: "최근 연결",
+      sortKey: "lastSeenAt",
+      render: (robot) => (
+        <span className="truncate text-xs font-bold text-slate-500">{formatDateTime(robot.lastSeenAt)}</span>
+      )
+    }
+  ];
+}
+
+function getRobotFilterValues(robot, missions) {
+  const openMission = findRobotOpenMission(robot.robotCode, missions);
+  return [
+    robot.robotCode,
+    robot.displayName,
+    robot.modelName,
+    robot.status,
+    openMission?.missionCode
+  ];
+}
+
+function getRobotSortValue(robot, sortKey, missions) {
+  switch (sortKey) {
+    case "displayName":
+      return robot.displayName;
+    case "status":
+      return robot.status;
+    case "missionCode":
+      return findRobotOpenMission(robot.robotCode, missions)?.missionCode ?? "";
+    case "lastSeenAt":
+      return robot.lastSeenAt ?? "";
+    default:
+      return robot[sortKey];
+  }
 }

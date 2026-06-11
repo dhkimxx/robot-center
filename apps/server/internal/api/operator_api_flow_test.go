@@ -79,3 +79,42 @@ func TestOperatorAPIFlow(t *testing.T) {
 	}
 	assertStringListEqual(t, endedMission.RobotCodes, []string{robot.code, supportRobot.code})
 }
+
+func TestOperatorListQuerySupportsPagingSortingAndFiltering(t *testing.T) {
+	server := newAPIFlowTestServer(t)
+	alphaRobot := server.createRobot(t, "Alpha Robot")
+	betaRobot := server.createRobot(t, "Beta Robot")
+
+	robotsPayload := requestJSON[dto.RobotsResponse](t, server.baseURL, http.MethodGet, "/api/v1/operator/robots?filter=robot&sort=robotCode&order=desc&limit=1&offset=0", "", nil)
+	if len(robotsPayload.Robots) != 1 {
+		t.Fatalf("expected one paged robot, got %#v", robotsPayload)
+	}
+	if robotsPayload.Robots[0].RobotCode != betaRobot.code {
+		t.Fatalf("expected desc robotCode to return %s first, got %#v", betaRobot.code, robotsPayload.Robots)
+	}
+	if robotsPayload.Page.Total != 2 || robotsPayload.Page.Returned != 1 || !robotsPayload.Page.HasMore {
+		t.Fatalf("expected robot page metadata for 2 total rows, got %#v", robotsPayload.Page)
+	}
+	if robotsPayload.Query.Sort != "robotCode" || robotsPayload.Query.Order != "desc" || robotsPayload.Query.Filter != "robot" {
+		t.Fatalf("expected robot query metadata, got %#v", robotsPayload.Query)
+	}
+
+	firstMission := server.createMission(t, []string{alphaRobot.code})
+	secondMission := server.createMission(t, []string{betaRobot.code})
+	missionsPayload := requestJSON[dto.MissionsResponse](t, server.baseURL, http.MethodGet, "/api/v1/operator/missions?filter="+betaRobot.code+"&sort=missionCode&order=desc&limit=1&offset=0", "", nil)
+	if len(missionsPayload.Missions) != 1 {
+		t.Fatalf("expected one filtered mission, got %#v", missionsPayload)
+	}
+	if missionsPayload.Missions[0].MissionCode != secondMission.code {
+		t.Fatalf("expected mission for %s, got %#v", betaRobot.code, missionsPayload.Missions)
+	}
+	if missionsPayload.Missions[0].MissionCode == firstMission.code {
+		t.Fatalf("expected filter to exclude %s, got %#v", firstMission.code, missionsPayload.Missions)
+	}
+	if missionsPayload.Page.Total != 1 || missionsPayload.Page.Returned != 1 || missionsPayload.Page.HasMore {
+		t.Fatalf("expected filtered mission page metadata, got %#v", missionsPayload.Page)
+	}
+	if missionsPayload.Query.Sort != "missionCode" || missionsPayload.Query.Order != "desc" || missionsPayload.Query.Filter != betaRobot.code {
+		t.Fatalf("expected mission query metadata, got %#v", missionsPayload.Query)
+	}
+}

@@ -1,11 +1,12 @@
 import { requestJson } from "./controlCenterApi.js";
+import { createListQueryPath } from "./listQueryApi.js";
 
 function missionPath(missionCode) {
   return encodeURIComponent(missionCode);
 }
 
-export function fetchMissions() {
-  return requestJson("/api/v1/operator/missions");
+export function fetchMissions(query) {
+  return requestJson(createListQueryPath("/api/v1/operator/missions", query));
 }
 
 export function createMissionRequest(missionForm) {

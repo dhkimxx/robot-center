@@ -50,6 +50,13 @@ export function selectDefaultRobotForManagement(robots = []) {
   return sortRobotsForManagement(robots)[0] ?? null;
 }
 
+export function getRobotAvailabilityTab(robot) {
+  if (!robot) {
+    return "online";
+  }
+  return isOnlineRobot(robot) ? "online" : "offline";
+}
+
 export function sortRobotsForManagement(robots = []) {
   return [...robots].sort((left, right) => {
     const leftOrder = robotStatusOrder[left.status] ?? 9;
