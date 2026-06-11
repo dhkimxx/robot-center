@@ -14,7 +14,7 @@ import {
 const browserMediaSlots = [
   ["rgb", "RGB"],
   ["thermal", "Thermal"],
-  ["audio", "Audio"]
+  ["audio", "음성"]
 ];
 
 export function getRobotLiveStatusSummary({ liveSessions = {}, target }) {
@@ -131,34 +131,39 @@ function makePublisherMediaDiagnostic(stream, now) {
   const lastMediaAt = stream?.lastMediaAt ?? stream?.lastTrackAt;
   const details = [];
   if (lastMediaAt) {
-    details.push(`최근 미디어 ${formatElapsedTime(lastMediaAt, now)}`);
+    details.push(`최근 영상/음성 ${formatElapsedTime(lastMediaAt, now)}`);
+  }
+  if (trackCount > 0) {
+    details.push(`송출 채널 ${trackCount}개`);
   }
   if ((stream?.diagnostics?.reconnectCount ?? 0) > 0) {
     details.push(`재접속 ${stream.diagnostics.reconnectCount}회`);
   }
-  if (stream?.roomId) {
-    details.push(stream.roomId);
-  }
   return {
-    detail: details.join(" · ") || "publisher track 대기",
+    detail: details.join(" · ") || "로봇 영상/음성 대기",
     key: "media",
-    label: "Publisher 미디어",
+    label: "로봇 영상/음성",
     tone: stream?.state === "streaming" && trackCount > 0 ? "ok" : stream?.state === "fault" ? "danger" : "waiting",
-    value: trackCount > 0 ? `미디어 ${trackCount}개` : "미디어 대기"
+    value: trackCount > 0 ? "송출 중" : "송출 대기"
   };
 }
 
 function makePublisherDataDiagnostic(stream, now) {
   const dataChannelCount = normalizeCount(stream?.dataChannelCount);
   const lastDataAt = stream?.lastDataAt;
+  const details = [];
+  if (lastDataAt) {
+    details.push(`최근 수신 ${formatElapsedTime(lastDataAt, now)}`);
+  }
+  if (dataChannelCount > 0) {
+    details.push(`수신 채널 ${dataChannelCount}개`);
+  }
   return {
-    detail: lastDataAt
-      ? `최근 데이터 ${formatElapsedTime(lastDataAt, now)}`
-      : dataChannelCount > 0 ? "DataChannel open, 데이터 대기" : "DataChannel 대기",
+    detail: details.join(" · ") || "센서/이벤트 수신 대기",
     key: "data",
-    label: "Publisher 데이터",
+    label: "센서/이벤트 데이터",
     tone: dataChannelCount > 0 && lastDataAt ? "ok" : "waiting",
-    value: dataChannelCount > 0 ? `데이터 ${dataChannelCount}개` : "데이터 대기"
+    value: lastDataAt ? "수신 중" : dataChannelCount > 0 ? "연결됨" : "수신 대기"
   };
 }
 
@@ -166,7 +171,7 @@ function makeRecordingDiagnostic(recording) {
   const recordingState = makeRecordingStateFromLiveStatus(recording);
   const chunk = recording?.latestChunk;
   return {
-    detail: chunk ? makeRecordingChunkDetail(chunk, recording) : recording?.reason || "녹화 chunk 대기",
+    detail: chunk ? makeRecordingChunkDetail(chunk, recording) : recording?.reason || "녹화 구간 대기",
     key: "recording",
     label: "녹화",
     tone: makeDiagnosticToneFromRecordingState(recordingState.tone),
@@ -175,7 +180,7 @@ function makeRecordingDiagnostic(recording) {
 }
 
 function makeRecordingChunkDetail(chunk, recording) {
-  const chunkLabel = chunk.chunkIndex || chunk.chunkIndex === 0 ? `chunk #${chunk.chunkIndex}` : "chunk";
+  const chunkLabel = chunk.chunkIndex || chunk.chunkIndex === 0 ? `구간 #${chunk.chunkIndex}` : "녹화 구간";
   const statusLabel = makeStatusLabel(chunk.status ?? recording?.latestChunkStatus ?? recording?.state);
   return `${chunkLabel} · ${formatDateTime(chunk.startedAt)} - ${formatDateTime(chunk.endedAt)} · ${statusLabel}`;
 }
@@ -184,7 +189,7 @@ function makeBrowserMediaReceiptLabel(session) {
   const labels = browserMediaSlots
     .filter(([slot]) => Boolean(session?.videoStreams?.[slot]))
     .map(([, label]) => label);
-  return labels.length > 0 ? `브라우저 수신 ${labels.join(", ")}` : "";
+  return labels.length > 0 ? `관제 화면 수신 ${labels.join(", ")}` : "";
 }
 
 function makeDiagnosticToneFromLiveSession(status) {

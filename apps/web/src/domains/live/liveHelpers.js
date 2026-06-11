@@ -76,13 +76,13 @@ export function formatMediaChannelCount(streamSource) {
     ?? streamSource?.publishedDataChannels?.length
     ?? 0;
   if (mediaCount > 0 && dataChannelCount > 0) {
-    return `미디어 ${mediaCount} / 데이터 ${dataChannelCount}`;
+    return `영상/음성 ${mediaCount}채널 / 센서 ${dataChannelCount}채널`;
   }
   if (mediaCount > 0) {
-    return `미디어 ${mediaCount}`;
+    return `영상/음성 ${mediaCount}채널`;
   }
   if (dataChannelCount > 0) {
-    return `데이터 ${dataChannelCount}`;
+    return `센서 ${dataChannelCount}채널`;
   }
   return "송출 대기";
 }

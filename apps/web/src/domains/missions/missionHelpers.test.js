@@ -151,6 +151,6 @@ describe("missionHelpers", () => {
         endedAt: "2026-06-04T04:40:00Z",
         status: "recording"
       }
-    })).toContain("녹화 chunk #0");
+    })).toContain("녹화 구간 #0");
   });
 });

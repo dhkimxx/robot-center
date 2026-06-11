@@ -125,7 +125,7 @@ export function makeLiveRecordingTimingLabel(recording) {
   if (!chunk) {
     return recording?.state === "recording" ? "녹화 중" : "녹화 대기";
   }
-  const chunkLabel = chunk.chunkIndex || chunk.chunkIndex === 0 ? `chunk #${chunk.chunkIndex}` : "chunk";
+  const chunkLabel = chunk.chunkIndex || chunk.chunkIndex === 0 ? `구간 #${chunk.chunkIndex}` : "녹화 구간";
   const rangeLabel = `${formatDateTime(chunk.startedAt)} - ${formatDateTime(chunk.endedAt)}`;
   return `녹화 ${chunkLabel} · ${rangeLabel} · ${makeStatusLabel(chunk.status ?? recording.latestChunkStatus ?? recording.state)}`;
 }

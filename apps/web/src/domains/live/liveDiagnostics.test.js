@@ -27,7 +27,7 @@ describe("liveDiagnostics", () => {
     expect(summary.streamLabel).toBe("송출 중");
     expect(summary.recordingLabel).toBe("녹화 중");
     expect(summary.connectionLabel).toBe("연결됨");
-    expect(summary.channelLabel).toBe("미디어 3 / 데이터 2 / 관제 -");
+    expect(summary.channelLabel).toBe("영상/음성 3채널 / 센서 2채널 / 관제 -");
   });
 
   it("creates selected robot diagnostics from live-status and browser session", () => {
@@ -67,25 +67,25 @@ describe("liveDiagnostics", () => {
 
     expect(diagnostics).toEqual([
       expect.objectContaining({
-        detail: "브라우저 수신 RGB, Audio",
+        detail: "관제 화면 수신 RGB, 음성",
         key: "operator",
         tone: "ok",
         value: "연결됨"
       }),
       expect.objectContaining({
-        detail: "최근 미디어 5초 전 · mission-001",
+        detail: "최근 영상/음성 5초 전 · 송출 채널 3개",
         key: "media",
         tone: "ok",
-        value: "미디어 3개"
+        value: "송출 중"
       }),
       expect.objectContaining({
-        detail: "최근 데이터 4초 전",
+        detail: "최근 수신 4초 전 · 수신 채널 1개",
         key: "data",
         tone: "ok",
-        value: "데이터 1개"
+        value: "수신 중"
       }),
       expect.objectContaining({
-        detail: expect.stringContaining("chunk #7"),
+        detail: expect.stringContaining("구간 #7"),
         key: "recording",
         tone: "ok",
         value: "녹화 중"
@@ -109,9 +109,9 @@ describe("liveDiagnostics", () => {
     });
 
     expect(diagnostics.find((diagnostic) => diagnostic.key === "data")).toMatchObject({
-      detail: "DataChannel 대기",
+      detail: "센서/이벤트 수신 대기",
       tone: "waiting",
-      value: "데이터 대기"
+      value: "수신 대기"
     });
   });
 
