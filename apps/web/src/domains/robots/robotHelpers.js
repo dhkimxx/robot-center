@@ -46,6 +46,10 @@ export function groupRobotsByAvailability(robots = []) {
   };
 }
 
+export function selectDefaultRobotForManagement(robots = []) {
+  return sortRobotsForManagement(robots)[0] ?? null;
+}
+
 export function sortRobotsForManagement(robots = []) {
   return [...robots].sort((left, right) => {
     const leftOrder = robotStatusOrder[left.status] ?? 9;

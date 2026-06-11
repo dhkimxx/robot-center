@@ -91,38 +91,31 @@ export default function SystemScreen({ dataLoadState, onClearEventData, onClearO
         </Surface>
 
         <div className="grid min-h-0 content-start gap-3 overflow-auto">
-          <div className="grid items-start grid-cols-[minmax(0,0.9fr)_minmax(360px,1.1fr)] gap-3 max-[1180px]:grid-cols-1">
-            <Surface>
-              <SectionHeader title="서비스 상태" meta={isInitialLoading ? "확인 중" : `${components.length}개 항목`} />
-              {isInitialLoading ? (
-                <ListSkeleton count={4} />
-              ) : statusError ? (
-                <EmptyState>응답 대기: {statusError}</EmptyState>
-              ) : (
-                <ul className="grid grid-cols-2 gap-2 max-[760px]:grid-cols-1">
-                  {components.map((component) => (
-                    <ListRow
-                      as="li"
-                      key={component.name}
-                      right={<StatusBadge size="xs" tone={makeSystemStatusTone(component.status)}>{makeSystemStatusLabel(component.status)}</StatusBadge>}
-                      title={componentLabels[component.name] ?? component.name}
-                    >
-                    </ListRow>
-                  ))}
-                </ul>
-              )}
-            </Surface>
+          <Surface>
+            <SectionHeader title="서비스 상태" meta={isInitialLoading ? "확인 중" : `${components.length}개 항목`} />
+            {isInitialLoading ? (
+              <ListSkeleton count={4} />
+            ) : statusError ? (
+              <EmptyState>응답 대기: {statusError}</EmptyState>
+            ) : (
+              <ul className="grid grid-cols-3 gap-2 max-[1180px]:grid-cols-2 max-[760px]:grid-cols-1">
+                {components.map((component) => (
+                  <ListRow
+                    as="li"
+                    key={component.name}
+                    right={<StatusBadge size="xs" tone={makeSystemStatusTone(component.status)}>{makeSystemStatusLabel(component.status)}</StatusBadge>}
+                    title={componentLabels[component.name] ?? component.name}
+                  >
+                  </ListRow>
+                ))}
+              </ul>
+            )}
+          </Surface>
 
-            <Surface>
-              <SectionHeader title="저장소 / 데이터베이스" meta={environment || "environment unknown"} />
-              <div className="grid grid-cols-2 gap-3 max-[900px]:grid-cols-1">
-                {isInitialLoading ? <PanelSkeleton rows={3} /> : <ObjectStorageUsagePanel usage={objectStorageUsage} />}
-                {isInitialLoading ? <PanelSkeleton rows={3} /> : <DatabaseUsagePanel usage={databaseUsage} />}
-                <div className="col-span-2 max-[900px]:col-span-1">
-                  {isInitialLoading ? <PanelSkeleton rows={3} /> : <RecorderRuntimeUsagePanel status={recorderRuntimeStatus} />}
-                </div>
-              </div>
-            </Surface>
+          <div className="grid gap-3">
+            {isInitialLoading ? <PanelSkeleton rows={3} /> : <ObjectStorageUsagePanel usage={objectStorageUsage} />}
+            {isInitialLoading ? <PanelSkeleton rows={3} /> : <DatabaseUsagePanel usage={databaseUsage} />}
+            {isInitialLoading ? <PanelSkeleton rows={3} /> : <RecorderRuntimeUsagePanel status={recorderRuntimeStatus} />}
           </div>
 
           <SystemRealtimeConnections isInitialLoading={isInitialLoading} rooms={rooms} />

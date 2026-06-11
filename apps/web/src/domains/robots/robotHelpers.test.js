@@ -4,6 +4,7 @@ import {
   groupRobotsByAvailability,
   isOnlineRobot,
   makeRobotStatusTone,
+  selectDefaultRobotForManagement,
   shouldRefreshRobotEditForm
 } from "./robotHelpers.js";
 
@@ -44,6 +45,15 @@ describe("robotHelpers", () => {
     expect(groups.offlineRobots.map((robot) => robot.robotCode)).toEqual(["robot-fault", "robot-offline"]);
     expect(isOnlineRobot({ status: "streaming" })).toBe(true);
     expect(isOnlineRobot({ status: "offline" })).toBe(false);
+  });
+
+  it("selects an online robot first for management defaults", () => {
+    const robot = selectDefaultRobotForManagement([
+      { robotCode: "robot-offline", status: "offline", lastSeenAt: "2026-06-11T06:00:00Z" },
+      { robotCode: "robot-online", status: "online", lastSeenAt: "2026-06-11T05:00:00Z" }
+    ]);
+
+    expect(robot?.robotCode).toBe("robot-online");
   });
 
   it("finds the current ready or active mission for a robot", () => {

@@ -6,7 +6,12 @@ import {
   rotateRobotConnectionToken,
   updateRobotRequest
 } from "../../api/robotsApi.js";
-import { createInitialRobotForm, createRobotEditForm, shouldRefreshRobotEditForm } from "./robotHelpers.js";
+import {
+  createInitialRobotForm,
+  createRobotEditForm,
+  selectDefaultRobotForManagement,
+  shouldRefreshRobotEditForm
+} from "./robotHelpers.js";
 
 export function useRobotManagementController({
   connectionInfo,
@@ -21,10 +26,11 @@ export function useRobotManagementController({
   const [robotModal, setRobotModal] = useState(null);
   const [pendingArchiveRobotCode, setPendingArchiveRobotCode] = useState("");
   const previousRobotEditCodeRef = useRef("");
+  const defaultRobot = useMemo(() => selectDefaultRobotForManagement(robots), [robots]);
 
   const selectedRobot = useMemo(
-    () => robots.find((robot) => robot.robotCode === selectedRobotManagementCode) ?? robots[0] ?? null,
-    [robots, selectedRobotManagementCode]
+    () => robots.find((robot) => robot.robotCode === selectedRobotManagementCode) ?? defaultRobot,
+    [defaultRobot, robots, selectedRobotManagementCode]
   );
   const selectedRobotCode = selectedRobot?.robotCode ?? "";
   const pendingArchiveRobot = useMemo(
@@ -38,9 +44,9 @@ export function useRobotManagementController({
       return;
     }
     if (!selectedRobotManagementCode || !robots.some((robot) => robot.robotCode === selectedRobotManagementCode)) {
-      setSelectedRobotManagementCode(robots[0].robotCode);
+      setSelectedRobotManagementCode(defaultRobot?.robotCode ?? "");
     }
-  }, [robots, selectedRobotManagementCode]);
+  }, [defaultRobot, robots, selectedRobotManagementCode]);
 
   useEffect(() => {
     if (!shouldRefreshRobotEditForm({
