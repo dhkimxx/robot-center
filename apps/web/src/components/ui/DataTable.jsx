@@ -1,3 +1,4 @@
+import { LuArrowDown, LuArrowUp, LuChevronsUpDown } from "react-icons/lu";
 import { cn } from "../../utils/cn.js";
 import EmptyState from "./EmptyState.jsx";
 
@@ -73,9 +74,11 @@ function DataTableHeaderCell({ column, onSortChange, sortDirection, sortKey }) {
   }
   return (
     <button
+      aria-label={`${column.label} 정렬${isActiveSort ? `, 현재 ${sortDirection === "asc" ? "오름차순" : "내림차순"}` : ""}`}
+      aria-pressed={isActiveSort}
       className={cn(
-        "inline-flex min-w-0 items-center gap-1 rounded-md py-1 text-left transition hover:text-slate-200",
-        isActiveSort ? "text-slate-200" : "text-slate-500",
+        "group inline-flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-left transition hover:bg-slate-700/35 hover:text-slate-100",
+        isActiveSort ? "bg-sapphire-500/10 text-sapphire-100" : "text-slate-500",
         column.headerClassName,
         column.className
       )}
@@ -83,7 +86,25 @@ function DataTableHeaderCell({ column, onSortChange, sortDirection, sortKey }) {
       onClick={() => onSortChange(column.sortKey)}
     >
       <span className="truncate">{column.label}</span>
-      <span className="text-[10px]">{isActiveSort ? sortDirection === "asc" ? "오름" : "내림" : "정렬"}</span>
+      <SortIcon active={isActiveSort} direction={sortDirection} />
     </button>
+  );
+}
+
+function SortIcon({ active, direction }) {
+  const Icon = active
+    ? direction === "asc"
+      ? LuArrowUp
+      : LuArrowDown
+    : LuChevronsUpDown;
+
+  return (
+    <Icon
+      aria-hidden="true"
+      className={cn(
+        "size-3.5 shrink-0 transition",
+        active ? "text-sapphire-300" : "text-slate-600 group-hover:text-slate-300"
+      )}
+    />
   );
 }
