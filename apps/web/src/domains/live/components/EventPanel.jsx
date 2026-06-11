@@ -24,9 +24,9 @@ function makeSeverityClass(severity) {
   }
 }
 
-export function EventPanel({ className = "", liveEvents }) {
+export function EventPanel({ className = "", liveEvents, ...props }) {
   return (
-    <Surface className={cn("grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden", className)}>
+    <Surface className={cn("grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden", className)} {...props}>
       <SectionHeader className="mb-0" title="이벤트" meta={`${liveEvents.length}건`} />
       <div className="grid min-h-0 content-start gap-2 overflow-auto pr-1">
         {liveEvents.length === 0 ? (
