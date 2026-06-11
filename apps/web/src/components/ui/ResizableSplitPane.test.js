@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { clampSplitRatio, getSplitRatioBounds } from "./ResizableSplitPane.jsx";
+import {
+  clampSplitRatio,
+  getSplitRatioBounds,
+  parseStoredSplitRatio,
+  stringifyStoredSplitRatio
+} from "./ResizableSplitPane.jsx";
 
 describe("ResizableSplitPane", () => {
   it("keeps the default 3:2 split when both panes fit", () => {
@@ -44,5 +49,13 @@ describe("ResizableSplitPane", () => {
       maxRatio: 0.8,
       minRatio: 0.2
     });
+  });
+
+  it("ignores legacy numeric storage values", () => {
+    expect(parseStoredSplitRatio("0.2", 0.6)).toBe(0.6);
+  });
+
+  it("restores versioned storage values", () => {
+    expect(parseStoredSplitRatio(stringifyStoredSplitRatio(0.65), 0.6)).toBe(0.65);
   });
 });

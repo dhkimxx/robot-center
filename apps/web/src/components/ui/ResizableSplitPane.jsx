@@ -4,6 +4,7 @@ import { cn } from "../../utils/cn.js";
 const defaultMinimumRatio = 0.2;
 const defaultMaximumRatio = 0.8;
 const splitHandleWidth = 10;
+const splitStorageVersion = 2;
 
 export function getSplitRatioBounds(containerWidth, leftMinWidth, rightMinWidth) {
   const paneWidth = containerWidth - splitHandleWidth;
@@ -32,6 +33,29 @@ export function clampSplitRatio(value, {
   const ratio = Number.isFinite(value) ? value : fallbackRatio;
   const { maxRatio, minRatio } = getSplitRatioBounds(containerWidth, leftMinWidth, rightMinWidth);
   return Math.min(Math.max(ratio, minRatio), maxRatio);
+}
+
+export function parseStoredSplitRatio(rawValue, fallbackRatio = 0.6) {
+  if (!rawValue) {
+    return fallbackRatio;
+  }
+
+  try {
+    const storedValue = JSON.parse(rawValue);
+    if (storedValue?.version !== splitStorageVersion || !Number.isFinite(storedValue?.ratio)) {
+      return fallbackRatio;
+    }
+    return clampSplitRatio(storedValue.ratio, { fallbackRatio });
+  } catch {
+    return fallbackRatio;
+  }
+}
+
+export function stringifyStoredSplitRatio(ratio) {
+  return JSON.stringify({
+    ratio,
+    version: splitStorageVersion
+  });
 }
 
 export default function ResizableSplitPane({
@@ -106,7 +130,7 @@ export default function ResizableSplitPane({
     if (!storageKey || typeof window === "undefined") {
       return;
     }
-    window.localStorage.setItem(storageKey, String(leftRatio));
+    window.localStorage.setItem(storageKey, stringifyStoredSplitRatio(leftRatio));
   }, [leftRatio, storageKey]);
 
   function handlePointerDown(event) {
@@ -213,6 +237,5 @@ function getInitialLeftRatio(storageKey, defaultLeftRatio) {
     return defaultLeftRatio;
   }
 
-  const savedRatio = Number(window.localStorage.getItem(storageKey));
-  return clampSplitRatio(savedRatio, { fallbackRatio: defaultLeftRatio });
+  return parseStoredSplitRatio(window.localStorage.getItem(storageKey), defaultLeftRatio);
 }
