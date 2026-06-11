@@ -211,7 +211,7 @@ export default function ResizableSplitPane({
       style={mergedStyle}
       {...props}
     >
-      <div className="min-h-0 min-w-0">{left}</div>
+      <div className="grid min-h-0 min-w-0">{left}</div>
       <div
         aria-label="목록과 상세 영역 너비 조절"
         aria-orientation="vertical"
@@ -227,7 +227,7 @@ export default function ResizableSplitPane({
       >
         <span className="my-1 w-px rounded-full bg-slate-700/80 transition group-hover:bg-sapphire-300/80 group-focus-visible:bg-sapphire-300" />
       </div>
-      <div className="min-h-0 min-w-0">{right}</div>
+      <div className="grid min-h-0 min-w-0">{right}</div>
     </section>
   );
 }
