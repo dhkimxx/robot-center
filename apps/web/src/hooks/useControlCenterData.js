@@ -5,7 +5,8 @@ import { fetchRobots } from "../api/robotsApi.js";
 import { fetchSystemStatus } from "../api/systemApi.js";
 
 export function useControlCenterData({
-  includeActiveMissionLiveStatuses = true
+  includeActiveMissionLiveStatuses = true,
+  systemStatusScope = "overview"
 } = {}) {
   const [systemStatus, setSystemStatus] = useState(null);
   const [robots, setRobots] = useState([]);
@@ -28,7 +29,7 @@ export function useControlCenterData({
     let payloads;
     try {
       payloads = await Promise.all([
-        fetchSystemStatus(),
+        fetchSystemStatus({ scope: systemStatusScope }),
         fetchRobots(),
         fetchMissions()
       ]);
@@ -67,7 +68,7 @@ export function useControlCenterData({
       isLoading: false
     });
     return true;
-  }, [includeActiveMissionLiveStatuses]);
+  }, [includeActiveMissionLiveStatuses, systemStatusScope]);
 
   const loadMissionLiveStatus = useCallback(async (missionCode, options = {}) => {
     if (!missionCode) {

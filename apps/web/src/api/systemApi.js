@@ -1,7 +1,8 @@
 import { requestJson } from "./controlCenterApi.js";
 
-export function fetchSystemStatus() {
-  return requestJson("/api/v1/system/status");
+export function fetchSystemStatus({ scope = "full" } = {}) {
+  const query = scope ? `?scope=${encodeURIComponent(scope)}` : "";
+  return requestJson(`/api/v1/system/status${query}`);
 }
 
 export function clearObjectStorage() {

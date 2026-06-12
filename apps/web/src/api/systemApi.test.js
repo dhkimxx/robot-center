@@ -1,10 +1,22 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { clearEventData, clearRecorderRuntime, pruneObjectStorage, pruneRecorderRuntime } from "./systemApi.js";
+import { clearEventData, clearRecorderRuntime, fetchSystemStatus, pruneObjectStorage, pruneRecorderRuntime } from "./systemApi.js";
 
 describe("systemApi", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it("fetches lightweight system status with an explicit scope", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ status: "ok" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchSystemStatus({ scope: "overview" })).resolves.toEqual({ status: "ok" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/system/status?scope=overview",
+      expect.any(Object)
+    );
   });
 
   it("clears event data through the system endpoint", async () => {

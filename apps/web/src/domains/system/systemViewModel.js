@@ -310,7 +310,8 @@ export function makeSystemStatusLabel(status) {
     error: "오류",
     failed: "실패",
     ok: "정상",
-    ready: "준비"
+    ready: "준비",
+    skipped: "요약 생략"
   };
   return labels[status] ?? status;
 }

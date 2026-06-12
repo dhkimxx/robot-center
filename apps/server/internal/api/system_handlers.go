@@ -14,29 +14,22 @@ import (
 )
 
 // @Summary 시스템 상태 조회
-// @Description 관제 서비스, 녹화 서비스, 저장소, 실시간 연결 상태 요약을 반환합니다.
+// @Description 관제 서비스, 녹화 서비스, 저장소, 실시간 연결 상태 요약을 반환합니다. scope=overview는 공통 상태바용 경량 응답이며, scope=full 또는 생략 시 시스템 관리 화면용 상세 응답을 반환합니다.
 // @Tags 시스템 API
 // @Produce json
+// @Param scope query string false "응답 범위" Enums(full, overview) default(full)
 // @Success 200 {object} dto.SystemStatusResponse
 // @Failure 500 {object} dto.ErrorResponse
 // @Router /api/v1/system/status [get]
 func (s *Server) handleSystemStatus(w http.ResponseWriter, r *http.Request) {
 	requestContext := r.Context()
-	robots, err := s.services.Robots.ListRobots(requestContext)
+	scope := normalizeSystemStatusScope(r.URL.Query().Get("scope"))
+	robotCount, missionCount, recordingCount, err := s.readSystemSummaryCounts(requestContext, scope)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	missions, err := s.services.Missions.ListMissions(requestContext)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	recordings, err := s.services.Recording.ListRecordingChunks(requestContext)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
+
 	sfuRooms := s.sfuHub.Summaries()
 	writeJSON(w, http.StatusOK, dto.SystemStatus(dto.SystemStatusInput{
 		Environment:               s.config.Environment,
@@ -46,17 +39,53 @@ func (s *Server) handleSystemStatus(w http.ResponseWriter, r *http.Request) {
 		MinIOPublicURL:            s.config.MinIOPublicURL,
 		MinIOBucket:               s.config.MinIOBucket,
 		RecorderWorkerStatus:      s.componentHTTPStatus(requestContext, s.config.RecorderWorkerInternalURL+"/healthz"),
-		ObjectStorage:             s.readObjectStorageStatus(requestContext),
-		Database:                  s.readDatabaseStatus(requestContext),
-		RecorderRuntime:           s.readRecorderRuntimeStatus(requestContext),
-		RobotCount:                len(robots),
-		MissionCount:              len(missions),
-		RecordingCount:            len(recordings),
+		ObjectStorage:             s.readObjectStorageStatus(requestContext, scope),
+		Database:                  s.readDatabaseStatus(requestContext, scope),
+		RecorderRuntime:           s.readRecorderRuntimeStatus(requestContext, scope),
+		RobotCount:                robotCount,
+		MissionCount:              missionCount,
+		RecordingCount:            recordingCount,
 		SFURooms:                  sfuRooms,
 	}))
 }
 
-func (s *Server) readObjectStorageStatus(ctx context.Context) dto.ObjectStorageStatusResponse {
+const (
+	systemStatusScopeFull     = "full"
+	systemStatusScopeOverview = "overview"
+)
+
+func normalizeSystemStatusScope(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case systemStatusScopeOverview:
+		return systemStatusScopeOverview
+	default:
+		return systemStatusScopeFull
+	}
+}
+
+func (s *Server) readSystemSummaryCounts(ctx context.Context, scope string) (int, int, int, error) {
+	if scope == systemStatusScopeOverview {
+		return 0, 0, 0, nil
+	}
+	robots, err := s.services.Robots.ListRobots(ctx)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	missions, err := s.services.Missions.ListMissions(ctx)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	recordings, err := s.services.Recording.ListRecordingChunks(ctx)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	return len(robots), len(missions), len(recordings), nil
+}
+
+func (s *Server) readObjectStorageStatus(ctx context.Context, scope string) dto.ObjectStorageStatusResponse {
+	if scope == systemStatusScopeOverview {
+		return dto.ObjectStorageSkipped(s.config.MinIOBucket)
+	}
 	if s.services.Storage == nil {
 		return dto.ObjectStorageUnavailable(s.config.MinIOBucket, nil)
 	}
@@ -67,7 +96,10 @@ func (s *Server) readObjectStorageStatus(ctx context.Context) dto.ObjectStorageS
 	return dto.ObjectStorageStatus(usage)
 }
 
-func (s *Server) readDatabaseStatus(ctx context.Context) dto.DatabaseStatusResponse {
+func (s *Server) readDatabaseStatus(ctx context.Context, scope string) dto.DatabaseStatusResponse {
+	if scope == systemStatusScopeOverview {
+		return dto.DatabaseSkipped()
+	}
 	usage, err := s.services.System.GetDatabaseUsage(ctx)
 	if err != nil {
 		return dto.DatabaseUnavailable(err)
@@ -75,7 +107,10 @@ func (s *Server) readDatabaseStatus(ctx context.Context) dto.DatabaseStatusRespo
 	return dto.DatabaseStatus(usage)
 }
 
-func (s *Server) readRecorderRuntimeStatus(ctx context.Context) domain.RecorderRuntimeStatus {
+func (s *Server) readRecorderRuntimeStatus(ctx context.Context, scope string) domain.RecorderRuntimeStatus {
+	if scope == systemStatusScopeOverview {
+		return domain.RecorderRuntimeStatus{Status: "skipped"}
+	}
 	if s.services.RecorderRuntime == nil {
 		return domain.RecorderRuntimeStatus{Status: "unavailable", Error: "recorder runtime admin service is not configured"}
 	}

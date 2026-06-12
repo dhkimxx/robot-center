@@ -37,6 +37,7 @@ export function useControlCenterController({
   navigateToPath = null
 } = {}) {
   const shouldPollActiveMissionLiveStatuses = !routeMissionControlCode && !routeMissionReplayCode;
+  const systemStatusScope = activeSection === "system" ? "full" : "overview";
   const {
     systemStatus,
     robots,
@@ -47,7 +48,8 @@ export function useControlCenterController({
     loadAll,
     loadMissionLiveStatus
   } = useControlCenterData({
-    includeActiveMissionLiveStatuses: shouldPollActiveMissionLiveStatuses
+    includeActiveMissionLiveStatuses: shouldPollActiveMissionLiveStatuses,
+    systemStatusScope
   });
   const {
     notifications,

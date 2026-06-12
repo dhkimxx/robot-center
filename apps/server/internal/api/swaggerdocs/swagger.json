@@ -1783,7 +1783,7 @@
         },
         "/api/v1/system/status": {
             "get": {
-                "description": "관제 서비스, 녹화 서비스, 저장소, 실시간 연결 상태 요약을 반환합니다.",
+                "description": "관제 서비스, 녹화 서비스, 저장소, 실시간 연결 상태 요약을 반환합니다. scope=overview는 공통 상태바용 경량 응답이며, scope=full 또는 생략 시 시스템 관리 화면용 상세 응답을 반환합니다.",
                 "produces": [
                     "application/json"
                 ],
@@ -1791,6 +1791,19 @@
                     "시스템 API"
                 ],
                 "summary": "시스템 상태 조회",
+                "parameters": [
+                    {
+                        "enum": [
+                            "full",
+                            "overview"
+                        ],
+                        "type": "string",
+                        "default": "full",
+                        "description": "응답 범위",
+                        "name": "scope",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",

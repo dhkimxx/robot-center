@@ -27,6 +27,14 @@ func TestSystemAPIFlow(t *testing.T) {
 		t.Fatalf("expected recorder runtime status, got %#v", systemStatus.RecorderRuntime)
 	}
 
+	overviewStatus := requestJSON[dto.SystemStatusResponse](t, server.baseURL, http.MethodGet, "/api/v1/system/status?scope=overview", "", nil)
+	if !componentHasStatus(overviewStatus.Components, "recorder-worker", "ok") {
+		t.Fatalf("expected overview recorder-worker component status ok, got %#v", overviewStatus.Components)
+	}
+	if overviewStatus.Database.Status != "skipped" || overviewStatus.ObjectStorage.Status != "skipped" || overviewStatus.RecorderRuntime.Status != "skipped" {
+		t.Fatalf("expected overview scope to skip heavy usage fields, got database=%#v object=%#v recorder=%#v", overviewStatus.Database, overviewStatus.ObjectStorage, overviewStatus.RecorderRuntime)
+	}
+
 	swaggerResponse, err := http.Get(server.baseURL + "/swagger/index.html")
 	if err != nil {
 		t.Fatalf("request Swagger UI: %v", err)

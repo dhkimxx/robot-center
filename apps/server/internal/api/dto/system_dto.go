@@ -186,6 +186,10 @@ func DatabaseUnavailable(err error) DatabaseStatusResponse {
 	return response
 }
 
+func DatabaseSkipped() DatabaseStatusResponse {
+	return DatabaseStatusResponse{Status: "skipped"}
+}
+
 func DatabaseTableUsage(tables []store.DatabaseTableUsage) []DatabaseTableUsageResponse {
 	response := make([]DatabaseTableUsageResponse, 0, len(tables))
 	for _, table := range tables {
@@ -224,6 +228,13 @@ func ObjectStorageUnavailable(bucket string, err error) ObjectStorageStatusRespo
 		response.Error = err.Error()
 	}
 	return response
+}
+
+func ObjectStorageSkipped(bucket string) ObjectStorageStatusResponse {
+	return ObjectStorageStatusResponse{
+		Status: "skipped",
+		Bucket: bucket,
+	}
 }
 
 func intPtr(value int) *int {
