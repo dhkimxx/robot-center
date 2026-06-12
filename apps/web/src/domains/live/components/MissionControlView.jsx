@@ -77,7 +77,7 @@ export function MissionControlView({
       data-testid="live-control-layout"
     >
       <div
-        className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(300px,0.35fr)] gap-3 max-[900px]:grid-cols-1"
+        className="relative z-30 grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(300px,0.35fr)] gap-3 max-[900px]:grid-cols-1"
         data-testid="live-control-topbar"
       >
         <MissionControlToolbar
@@ -97,7 +97,7 @@ export function MissionControlView({
         <ControlStatusSummary diagnostics={selectedDiagnostics} statuses={operationStatuses} />
       </div>
 
-      <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2" data-testid="live-control-video-grid">
+      <div className="relative z-0 grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2" data-testid="live-control-video-grid">
         <div className="flex min-h-8 items-center justify-end">
           <DetectionOverlayControls
             maxDetections={detectionOverlaySettings.maxDetections}

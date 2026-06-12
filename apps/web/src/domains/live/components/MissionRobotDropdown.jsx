@@ -50,7 +50,7 @@ export function MissionRobotDropdown({
   }
 
   return (
-    <div className="relative min-w-0" ref={rootRef}>
+    <div className="relative z-50 min-w-0" ref={rootRef}>
       <button
         aria-expanded={open}
         className={cn(
@@ -74,7 +74,7 @@ export function MissionRobotDropdown({
       </button>
 
       {open ? (
-        <div className="absolute right-0 top-[calc(100%+8px)] z-30 w-[min(520px,calc(100vw-32px))] overflow-hidden rounded-lg border border-slate-500/20 bg-command-950 shadow-2xl shadow-black/40">
+        <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-[min(520px,calc(100vw-32px))] overflow-hidden rounded-lg border border-slate-500/20 bg-command-950 shadow-2xl shadow-black/40">
           <div className="border-b border-slate-500/10 px-3 py-2">
             <span className="text-xs font-bold text-slate-400">관제 로봇 선택</span>
           </div>

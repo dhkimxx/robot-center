@@ -17,7 +17,7 @@ export function MissionControlToolbar({
   setSelectedMissionTargetKey
 }) {
   return (
-    <Surface className="grid min-h-[76px] min-w-0 grid-cols-[minmax(120px,0.55fr)_minmax(220px,1fr)_minmax(170px,0.7fr)_auto] items-center gap-3 overflow-hidden px-3 py-2 max-[900px]:grid-cols-[minmax(120px,0.6fr)_minmax(220px,1fr)] max-[760px]:grid-cols-1">
+    <Surface className="grid min-h-[76px] min-w-0 grid-cols-[minmax(120px,0.55fr)_minmax(220px,1fr)_minmax(170px,0.7fr)_auto] items-center gap-3 overflow-visible px-3 py-2 max-[900px]:grid-cols-[minmax(120px,0.6fr)_minmax(220px,1fr)] max-[760px]:grid-cols-1">
       <div className="min-w-0">
         <strong className="block truncate text-sm font-extrabold text-slate-50">{mission.missionCode}</strong>
         <span className="mt-0.5 block truncate text-xs font-bold text-slate-500">
