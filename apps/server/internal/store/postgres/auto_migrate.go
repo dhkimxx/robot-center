@@ -61,6 +61,8 @@ func (s *Store) applyPostAutoMigrateDDL(db *gorm.DB) error {
 			WHERE ended_at IS NULL`,
 		`CREATE INDEX IF NOT EXISTS recording_chunks_mission_robot_started_idx
 			ON recording_chunks(mission_id, robot_id, started_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS recording_chunks_mission_started_idx
+			ON recording_chunks(mission_id, started_at DESC, id DESC)`,
 		`CREATE INDEX IF NOT EXISTS storage_objects_recording_chunk_type_idx
 			ON storage_objects(recording_chunk_id, object_type)`,
 		`CREATE INDEX IF NOT EXISTS robot_stream_sessions_mission_robot_started_idx

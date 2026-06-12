@@ -157,30 +157,15 @@ func (s *Store) ListMissionRecordingChunks(ctx context.Context, query repo.Missi
 	}
 
 	var total int
-	if err := s.sqlDB.QueryRowContext(ctx, `
+	if err := s.sqlDB.QueryRowContext(ctx, missionRecordingChunkIDsSQL()+`
 		SELECT COUNT(*)::int
-		FROM recording_chunks rc
-		JOIN recording_sessions rs ON rs.id = rc.recording_session_id
-		JOIN missions m ON m.id = rc.mission_id
-		JOIN robots r ON r.id = rc.robot_id
-		WHERE m.mission_code = $1
-			AND ($2 = '' OR r.robot_code = $2)
-			AND NOT (
-				rs.ended_at IS NOT NULL
-				AND rc.status IN ('recording', 'pending')
-			)
+		FROM mission_chunk_ids
 	`, query.MissionCode, query.RobotCode).Scan(&total); err != nil {
 		return repo.MissionRecordingChunkPage{}, err
 	}
 
-	rows, err := s.sqlDB.QueryContext(ctx, recordingChunkSelectSQL()+`
-		JOIN recording_sessions rs ON rs.id = rc.recording_session_id
-		WHERE m.mission_code = $1
-			AND ($2 = '' OR r.robot_code = $2)
-			AND NOT (
-				rs.ended_at IS NOT NULL
-				AND rc.status IN ('recording', 'pending')
-			)
+	rows, err := s.sqlDB.QueryContext(ctx, missionRecordingChunkIDsSQL()+recordingChunkSelectSQL()+`
+		JOIN mission_chunk_ids mci ON mci.id = rc.id
 		ORDER BY rc.started_at DESC, rc.id DESC
 		LIMIT $3 OFFSET $4
 	`, query.MissionCode, query.RobotCode, query.Limit, query.Offset)
@@ -206,6 +191,32 @@ func (s *Store) ListMissionRecordingChunks(ctx context.Context, query repo.Missi
 		Offset: query.Offset,
 		Total:  total,
 	}, nil
+}
+
+func missionRecordingChunkIDsSQL() string {
+	return `
+		WITH target_mission AS (
+			SELECT id
+			FROM missions
+			WHERE mission_code = $1
+		),
+		target_robot AS (
+			SELECT id
+			FROM robots
+			WHERE robot_code = $2
+		),
+		mission_chunk_ids AS (
+			SELECT rc.id
+			FROM target_mission tm
+			JOIN recording_chunks rc ON rc.mission_id = tm.id
+			JOIN recording_sessions rs ON rs.id = rc.recording_session_id
+			WHERE ($2 = '' OR rc.robot_id = (SELECT id FROM target_robot))
+				AND NOT (
+					rs.ended_at IS NOT NULL
+					AND rc.status IN ('recording', 'pending')
+				)
+		)
+	`
 }
 
 func makeMissingRecordingFileCounts(chunkCount int, availableFileCounts map[string]int) map[string]int {

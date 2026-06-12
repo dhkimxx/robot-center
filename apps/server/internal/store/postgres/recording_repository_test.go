@@ -191,6 +191,88 @@ func TestRecordingRepositoryListsMissionChunksWithPagination(t *testing.T) {
 	}
 }
 
+func TestRecordingRepositoryListsMissionChunksWithoutRobotFilter(t *testing.T) {
+	store := newPostgresTestStore(t)
+	ctx := context.Background()
+	firstRobot := createRobotFixture(t, store, "Recording Robot A")
+	secondRobot := createRobotFixture(t, store, "Recording Robot B")
+	mission, err := store.CreateMission(ctx, repo.CreateMissionInput{
+		Name:        "Multi Robot Recording Mission",
+		MissionType: "mountain_rescue",
+		RobotCodes:  []string{firstRobot.Robot.RobotCode, secondRobot.Robot.RobotCode},
+	})
+	if err != nil {
+		t.Fatalf("create multi robot mission: %v", err)
+	}
+	startedMission, err := store.StartMission(ctx, mission.MissionCode)
+	if err != nil {
+		t.Fatalf("start multi robot mission: %v", err)
+	}
+	firstFixture := activeMissionFixture{
+		Robot:          firstRobot.Robot,
+		ConnectionInfo: firstRobot.ConnectionInfo,
+		Mission:        startedMission,
+	}
+	secondFixture := activeMissionFixture{
+		Robot:          secondRobot.Robot,
+		ConnectionInfo: secondRobot.ConnectionInfo,
+		Mission:        startedMission,
+	}
+	otherFixture := createActiveMissionFixture(t, store)
+	base := time.Date(2026, 6, 8, 1, 0, 0, 0, time.UTC)
+
+	firstChunk := createRecordingChunkFixture(t, store, firstFixture, base)
+	secondChunk := createRecordingChunkFixture(t, store, secondFixture, base.Add(10*time.Minute))
+	createRecordingChunkFixture(t, store, otherFixture, base.Add(20*time.Minute))
+
+	page, err := store.ListMissionRecordingChunks(ctx, repo.MissionRecordingChunkQuery{
+		MissionCode: startedMission.MissionCode,
+		Limit:       10,
+	})
+	if err != nil {
+		t.Fatalf("list mission recording chunks: %v", err)
+	}
+	if page.Total != 2 || len(page.Chunks) != 2 {
+		t.Fatalf("page = %#v, want two chunks from target mission", page)
+	}
+	if page.Chunks[0].ID != secondChunk.ID || page.Chunks[1].ID != firstChunk.ID {
+		t.Fatalf("chunks ordered/mixed incorrectly: %#v", page.Chunks)
+	}
+	for _, chunk := range page.Chunks {
+		if chunk.MissionCode != startedMission.MissionCode {
+			t.Fatalf("other mission chunk leaked into page: %#v", chunk)
+		}
+	}
+}
+
+func TestRecordingRepositoryListMissionChunksSkipsClosedSessionOpenChunks(t *testing.T) {
+	store := newPostgresTestStore(t)
+	fixture := createActiveMissionFixture(t, store)
+	ctx := context.Background()
+	now := time.Date(2026, 6, 8, 1, 0, 0, 0, time.UTC)
+	chunk := createRecordingChunkFixture(t, store, fixture, now)
+
+	_, err := store.sqlDB.Exec(`
+		UPDATE recording_sessions
+		SET status = 'finalizing', ended_at = $2
+		WHERE id = $1::uuid
+	`, chunk.RecordingSessionID, now.Add(time.Minute))
+	if err != nil {
+		t.Fatalf("force close recording session: %v", err)
+	}
+
+	page, err := store.ListMissionRecordingChunks(ctx, repo.MissionRecordingChunkQuery{
+		MissionCode: fixture.Mission.MissionCode,
+		Limit:       10,
+	})
+	if err != nil {
+		t.Fatalf("list mission recording chunks: %v", err)
+	}
+	if page.Total != 0 || len(page.Chunks) != 0 {
+		t.Fatalf("stale open chunk from closed session was listed: %#v", page)
+	}
+}
+
 func TestRecordingRepositorySummarizesMissionRecordings(t *testing.T) {
 	store := newPostgresTestStore(t)
 	fixture := createActiveMissionFixture(t, store)
