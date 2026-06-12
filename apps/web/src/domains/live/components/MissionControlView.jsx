@@ -11,16 +11,22 @@ import {
   connectedLiveConnectionStatuses,
   reconnectableLiveStatuses
 } from "../liveConnectionStates.js";
+import {
+  createPresetLiveDashboardLayout,
+  moveLiveDashboardWidget,
+  readLiveDashboardLayout,
+  resizeLiveDashboardWidget,
+  writeLiveDashboardLayout
+} from "../liveDashboardLayout.js";
 import { makeLiveRobotDiagnostics } from "../liveDiagnostics.js";
 import { createEmptyLiveSession } from "../liveHelpers.js";
 import { AudioSink } from "./AudioSink.jsx";
 import { ControlStatusSummary } from "./ControlStatusSummary.jsx";
 import { DetectionOverlayControls } from "./DetectionOverlayControls.jsx";
-import { EventPanel } from "./EventPanel.jsx";
+import { LiveDashboardControls } from "./LiveDashboardControls.jsx";
+import { LiveDashboardGrid } from "./LiveDashboardGrid.jsx";
+import { LiveDashboardWidgetContent } from "./LiveDashboardWidgetContent.jsx";
 import { MissionControlToolbar } from "./MissionControlToolbar.jsx";
-import { RobotMap } from "./RobotMap.jsx";
-import { SensorPanel } from "./SensorPanel.jsx";
-import { VideoPane } from "./VideoPane.jsx";
 
 export function MissionControlView({
   isSensorSnapshotRefreshing = false,
@@ -38,6 +44,9 @@ export function MissionControlView({
   setSelectedMissionTargetKey
 }) {
   const [detectionOverlaySettings, setDetectionOverlaySettings] = useState(readDetectionOverlaySettings);
+  const [dashboardLayout, setDashboardLayout] = useState(readLiveDashboardLayout);
+  const [draftDashboardLayout, setDraftDashboardLayout] = useState(() => dashboardLayout);
+  const [isDashboardEditing, setIsDashboardEditing] = useState(false);
   const selectedTarget = missionTargets.find((target) => target.key === selectedMissionTargetKey) ?? missionTargets[0] ?? null;
   const selectedSession = selectedTarget ? liveSessions[selectedTarget.key] ?? createEmptyLiveSession() : createEmptyLiveSession();
   const connectedCount = missionTargets.filter((target) => {
@@ -68,11 +77,71 @@ export function MissionControlView({
       [field]: value
     }));
   }, []);
+  const startDashboardEditing = useCallback(() => {
+    setDraftDashboardLayout(dashboardLayout);
+    setIsDashboardEditing(true);
+  }, [dashboardLayout]);
+  const cancelDashboardEditing = useCallback(() => {
+    setDraftDashboardLayout(dashboardLayout);
+    setIsDashboardEditing(false);
+  }, [dashboardLayout]);
+  const saveDashboardLayout = useCallback(() => {
+    setDashboardLayout(writeLiveDashboardLayout(draftDashboardLayout));
+    setIsDashboardEditing(false);
+  }, [draftDashboardLayout]);
+  const resetDashboardLayout = useCallback(() => {
+    const nextLayout = createPresetLiveDashboardLayout();
+    setDraftDashboardLayout(nextLayout);
+    if (!isDashboardEditing) {
+      setDashboardLayout(writeLiveDashboardLayout(nextLayout));
+    }
+  }, [isDashboardEditing]);
+  const changeDashboardPreset = useCallback((presetId) => {
+    const nextLayout = createPresetLiveDashboardLayout(presetId);
+    if (isDashboardEditing) {
+      setDraftDashboardLayout(nextLayout);
+      return;
+    }
+    setDashboardLayout(writeLiveDashboardLayout(nextLayout));
+  }, [isDashboardEditing]);
+  const resizeDashboardWidget = useCallback((widgetId, nextSize) => {
+    setDraftDashboardLayout((current) => resizeLiveDashboardWidget(current, widgetId, nextSize));
+  }, []);
+  const moveDashboardWidget = useCallback((widgetId, direction) => {
+    setDraftDashboardLayout((current) => moveLiveDashboardWidget(current, widgetId, direction));
+  }, []);
   const detectionOverlayTtlMs = detectionOverlaySettings.ttlSeconds * 1000;
+  const activeDashboardLayout = isDashboardEditing ? draftDashboardLayout : dashboardLayout;
+  const renderDashboardWidget = useCallback((widgetId) => {
+    return (
+      <LiveDashboardWidgetContent
+        detectionOverlaySettings={detectionOverlaySettings}
+        detectionOverlayTtlMs={detectionOverlayTtlMs}
+        isSensorSnapshotRefreshing={isSensorSnapshotRefreshing}
+        latestSensor={latestSensor}
+        latestSensorSourceLabel={latestSensorSourceLabel}
+        latestTelemetry={latestTelemetry}
+        liveEvents={liveEvents}
+        onRefreshSensorSnapshot={onRefreshSensorSnapshot}
+        selectedSession={selectedSession}
+        widgetId={widgetId}
+      />
+    );
+  }, [
+    detectionOverlaySettings,
+    detectionOverlayTtlMs,
+    isSensorSnapshotRefreshing,
+    latestSensor,
+    latestSensorSourceLabel,
+    latestTelemetry,
+    liveEvents,
+    onRefreshSensorSnapshot,
+    selectedSession
+  ]);
 
   return (
     <section
-      className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1.35fr)_minmax(0,0.95fr)_minmax(128px,0.5fr)] gap-3 overflow-hidden max-[1100px]:h-auto max-[1100px]:grid-rows-none max-[1100px]:overflow-auto"
+      className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden max-[1100px]:h-auto max-[1100px]:grid-rows-none max-[1100px]:overflow-auto"
       data-testid="live-control-layout"
     >
       <div
@@ -96,12 +165,24 @@ export function MissionControlView({
         <ControlStatusSummary diagnostics={selectedDiagnostics} />
       </div>
 
-      <div className="relative z-0 grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2" data-testid="live-control-video-grid">
-        <div className="flex min-h-8 items-center justify-end">
+      <div
+        className="relative z-0 grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2 overflow-hidden"
+        data-testid="live-dashboard-shell"
+      >
+        <div className="flex min-h-8 flex-wrap items-center justify-between gap-2">
           <DetectionOverlayControls
             maxDetections={detectionOverlaySettings.maxDetections}
             onChange={updateDetectionOverlaySetting}
             ttlSeconds={detectionOverlaySettings.ttlSeconds}
+          />
+          <LiveDashboardControls
+            isEditing={isDashboardEditing}
+            layout={activeDashboardLayout}
+            onCancel={cancelDashboardEditing}
+            onChangePreset={changeDashboardPreset}
+            onReset={resetDashboardLayout}
+            onSave={saveDashboardLayout}
+            onStartEdit={startDashboardEditing}
           />
         </div>
         {!selectedTarget ? (
@@ -109,40 +190,15 @@ export function MissionControlView({
             <EmptyState>관제할 로봇을 선택할 수 없습니다.</EmptyState>
           </Surface>
         ) : (
-          <div className="grid min-h-0 grid-cols-2 gap-3 max-[900px]:grid-cols-1" data-testid="live-control-video-panes">
-            <VideoPane
-              className="min-h-0"
-              detectionOverlay={selectedSession.detectionOverlays?.rgb}
-              detectionOverlayMaxCount={detectionOverlaySettings.maxDetections}
-              detectionOverlayTtlMs={detectionOverlayTtlMs}
-              label="RGB"
-              stream={selectedSession.videoStreams.rgb}
-            />
-            <VideoPane
-              className="min-h-0"
-              detectionOverlay={selectedSession.detectionOverlays?.thermal}
-              detectionOverlayMaxCount={detectionOverlaySettings.maxDetections}
-              detectionOverlayTtlMs={detectionOverlayTtlMs}
-              label="Thermal"
-              stream={selectedSession.videoStreams.thermal}
-              thermal
-            />
-          </div>
+          <LiveDashboardGrid
+            isEditing={isDashboardEditing}
+            layout={activeDashboardLayout}
+            onMoveWidget={moveDashboardWidget}
+            onResizeWidget={resizeDashboardWidget}
+            renderWidget={renderDashboardWidget}
+          />
         )}
       </div>
-
-      <div className="grid min-h-0 grid-cols-2 gap-3 max-[900px]:grid-cols-1" data-testid="live-control-map-sensor-grid">
-        <RobotMap className="min-h-0" telemetry={latestTelemetry} />
-        <SensorPanel
-          className="min-h-0"
-          isRefreshing={isSensorSnapshotRefreshing}
-          onRefresh={onRefreshSensorSnapshot}
-          sensor={latestSensor}
-          sourceLabel={latestSensorSourceLabel}
-        />
-      </div>
-
-      <EventPanel className="min-h-0" data-testid="live-control-event-panel" liveEvents={liveEvents} />
       <AudioSink stream={selectedSession.videoStreams.audio} />
     </section>
   );
