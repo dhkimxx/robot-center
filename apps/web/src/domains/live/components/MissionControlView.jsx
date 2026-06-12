@@ -107,8 +107,8 @@ export function MissionControlView({
   const resizeDashboardWidget = useCallback((widgetId, nextSize) => {
     setDraftDashboardLayout((current) => resizeLiveDashboardWidget(current, widgetId, nextSize));
   }, []);
-  const moveDashboardWidget = useCallback((widgetId, direction) => {
-    setDraftDashboardLayout((current) => moveLiveDashboardWidget(current, widgetId, direction));
+  const moveDashboardWidget = useCallback((widgetId, nextPosition) => {
+    setDraftDashboardLayout((current) => moveLiveDashboardWidget(current, widgetId, nextPosition));
   }, []);
   const detectionOverlayTtlMs = detectionOverlaySettings.ttlSeconds * 1000;
   const activeDashboardLayout = isDashboardEditing ? draftDashboardLayout : dashboardLayout;
@@ -117,6 +117,7 @@ export function MissionControlView({
       <LiveDashboardWidgetContent
         detectionOverlaySettings={detectionOverlaySettings}
         detectionOverlayTtlMs={detectionOverlayTtlMs}
+        isLayoutEditing={isDashboardEditing}
         isSensorSnapshotRefreshing={isSensorSnapshotRefreshing}
         latestSensor={latestSensor}
         latestSensorSourceLabel={latestSensorSourceLabel}
@@ -130,6 +131,7 @@ export function MissionControlView({
   }, [
     detectionOverlaySettings,
     detectionOverlayTtlMs,
+    isDashboardEditing,
     isSensorSnapshotRefreshing,
     latestSensor,
     latestSensorSourceLabel,

@@ -20,7 +20,7 @@ function MapRecenter({ position }) {
   return null;
 }
 
-export function RobotMap({ className = "", telemetry }) {
+export function RobotMap({ className = "", isPreviewDisabled = false, telemetry }) {
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -47,7 +47,7 @@ export function RobotMap({ className = "", telemetry }) {
     <Surface className={["grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto_auto] gap-3 overflow-hidden p-3", className].filter(Boolean).join(" ")}>
       <SectionHeader className="mb-0" title="위치" meta={positionState.statusLabel} />
       <div className="relative min-h-0 overflow-hidden rounded-xl border border-slate-500/20 bg-command-900">
-        {mapPosition ? (
+        {mapPosition && !isPreviewDisabled ? (
           <MapContainer
             center={mapPosition}
             className="robot-location-map"
@@ -69,7 +69,9 @@ export function RobotMap({ className = "", telemetry }) {
             <MapRecenter position={mapPosition} />
           </MapContainer>
         ) : (
-          <span className="grid h-full min-h-[180px] place-items-center text-sm font-bold text-slate-500">GPS 대기</span>
+          <span className="grid h-full min-h-[180px] place-items-center text-sm font-bold text-slate-500">
+            {mapPosition ? "지도 미리보기" : "GPS 대기"}
+          </span>
         )}
       </div>
       <div className="flex items-center justify-between gap-3 text-xs font-semibold text-slate-400">

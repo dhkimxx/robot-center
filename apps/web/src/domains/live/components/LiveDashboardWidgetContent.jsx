@@ -6,6 +6,7 @@ import { VideoPane } from "./VideoPane.jsx";
 export function LiveDashboardWidgetContent({
   detectionOverlaySettings,
   detectionOverlayTtlMs,
+  isLayoutEditing,
   isSensorSnapshotRefreshing,
   latestSensor,
   latestSensorSourceLabel,
@@ -25,7 +26,7 @@ export function LiveDashboardWidgetContent({
         />
       );
     case "map":
-      return <RobotMap className="h-full min-h-0" telemetry={latestTelemetry} />;
+      return <RobotMap className="h-full min-h-0" isPreviewDisabled={isLayoutEditing} telemetry={latestTelemetry} />;
     case "rgb":
       return (
         <VideoPane
