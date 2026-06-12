@@ -320,12 +320,6 @@ func (s *Store) authorizeRobot(ctx context.Context, tx *sql.Tx, bearerToken stri
 	if err != nil {
 		return domain.Robot{}, err
 	}
-	if _, err := tx.ExecContext(ctx, `
-		UPDATE robot_tokens SET last_used_at = now()
-		WHERE robot_id = $1::uuid AND token_hash = $2
-	`, robot.ID, utils.HashToken(trimmedToken)); err != nil {
-		return domain.Robot{}, err
-	}
 	return robot, nil
 }
 
