@@ -3,11 +3,11 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
 	"robot-center/apps/server/internal/api/dto"
-	"robot-center/apps/server/internal/domain"
 	"robot-center/apps/server/internal/service"
 	"robot-center/apps/server/internal/store"
 	"strings"
@@ -25,36 +25,20 @@ import (
 // @Router /api/v1/operator/missions/{missionCode}/live-status [get]
 func (s *Server) handleMissionLiveStatus(w http.ResponseWriter, r *http.Request) {
 	missionCode := strings.TrimSpace(r.PathValue("missionCode"))
-	missions, err := s.services.Missions.ListMissions(r.Context())
+	snapshot, err := s.services.Live.GetMissionLiveStatusSnapshot(r.Context(), missionCode)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	mission, found := findMissionByCode(missions, missionCode)
-	if !found {
-		writeError(w, http.StatusNotFound, store.ErrNotFound)
-		return
-	}
-	robots, err := s.services.Robots.ListRobots(r.Context())
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	recordings, err := s.services.Recording.ListRecordingChunks(r.Context())
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	streamSessions, err := s.services.Streams.ListRobotStreamSessionsForMission(r.Context(), mission.MissionCode)
-	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, err)
+			return
+		}
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
 	liveStatus := s.services.Live.BuildMissionLiveStatus(service.LiveStatusInput{
-		Mission:         mission,
-		Robots:          robots,
-		RecordingChunks: recordings,
-		StreamSessions:  streamSessions,
+		Mission:         snapshot.Mission,
+		Robots:          snapshot.Robots,
+		RecordingChunks: snapshot.RecordingChunks,
+		StreamSessions:  snapshot.StreamSessions,
 		ObservedRooms:   s.sfuHub.ObservedRooms(),
 		Recorder:        s.fetchRecorderRuntimeSnapshot(r.Context()),
 		Now:             time.Now().UTC(),
@@ -148,13 +132,4 @@ func nonZeroTimePointer(value time.Time) *time.Time {
 	}
 	normalized := value.UTC()
 	return &normalized
-}
-
-func findMissionByCode(missions []domain.Mission, missionCode string) (domain.Mission, bool) {
-	for _, mission := range missions {
-		if mission.MissionCode == missionCode {
-			return mission, true
-		}
-	}
-	return domain.Mission{}, false
 }

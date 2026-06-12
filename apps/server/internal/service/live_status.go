@@ -1,17 +1,22 @@
 package service
 
 import (
+	"context"
+	"errors"
 	"sort"
 	"strings"
 	"time"
 
 	"robot-center/apps/server/internal/domain"
 	"robot-center/apps/server/internal/sfu"
+	"robot-center/apps/server/internal/store"
 )
 
 const defaultLiveStatusFreshnessWindow = 30 * time.Second
 
-type LiveStatusService struct{}
+type LiveStatusService struct {
+	repository store.LiveStatusRepository
+}
 
 type LiveStatusInput struct {
 	Mission         domain.Mission
@@ -27,6 +32,13 @@ type LiveStatusInput struct {
 type RecorderRuntimeSnapshot struct {
 	Available bool
 	Rooms     []RecorderRoomRuntime
+}
+
+func (s *LiveStatusService) GetMissionLiveStatusSnapshot(ctx context.Context, missionCode string) (store.MissionLiveStatusSnapshot, error) {
+	if s.repository == nil {
+		return store.MissionLiveStatusSnapshot{}, errors.New("live status repository is not configured")
+	}
+	return s.repository.GetMissionLiveStatusSnapshot(ctx, missionCode)
 }
 
 type RecorderRoomRuntime struct {

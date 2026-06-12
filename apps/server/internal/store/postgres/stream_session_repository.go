@@ -144,7 +144,11 @@ func (s *Store) EndRobotStreamSession(ctx context.Context, input repo.EndRobotSt
 }
 
 func (s *Store) ListRobotStreamSessionsForMission(ctx context.Context, missionCode string) ([]domain.RobotStreamSession, error) {
-	rows, err := s.sqlRunner().QueryContext(ctx, `
+	return s.listRobotStreamSessionsForMission(ctx, s.sqlRunner(), missionCode)
+}
+
+func (s *Store) listRobotStreamSessionsForMission(ctx context.Context, runner sqlContextRunner, missionCode string) ([]domain.RobotStreamSession, error) {
+	rows, err := runner.QueryContext(ctx, `
 		SELECT
 			rss.id::text,
 			m.mission_code,

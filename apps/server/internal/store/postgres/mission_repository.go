@@ -425,30 +425,3 @@ type missionTransitionQueryRow struct {
 	ID     string
 	Status string
 }
-
-func (s *Store) findMissionByCode(ctx context.Context, tx *sql.Tx, missionCode string) (domain.Mission, error) {
-	row := tx.QueryRowContext(ctx, `
-		SELECT
-			m.id::text,
-			m.mission_code,
-			m.name,
-			m.mission_type,
-			m.status,
-			COALESCE(m.site_note, ''),
-			COALESCE(string_agg(r.robot_code, ',' ORDER BY mr.created_at, r.robot_code) FILTER (WHERE r.robot_code IS NOT NULL), ''),
-			m.started_at,
-			m.ended_at,
-			m.created_at,
-			m.updated_at
-		FROM missions m
-		LEFT JOIN mission_robots mr ON mr.mission_id = m.id AND mr.status != 'removed'
-		LEFT JOIN robots r ON r.id = mr.robot_id
-		WHERE m.mission_code = $1
-		GROUP BY m.id, m.mission_code, m.name, m.mission_type, m.status, m.site_note, m.started_at, m.ended_at, m.created_at, m.updated_at
-	`, strings.TrimSpace(missionCode))
-	mission, err := scanMissionWithRobotCodes(row)
-	if errors.Is(err, sql.ErrNoRows) {
-		return domain.Mission{}, repo.ErrNotFound
-	}
-	return mission, err
-}

@@ -23,6 +23,7 @@ type Services struct {
 
 func NewServices(repository store.Store) *Services {
 	transactionRunner, _ := repository.(store.TransactionRunner)
+	liveStatusRepository, _ := repository.(store.LiveStatusRepository)
 	return &Services{
 		Robots:            &RobotService{repository: repository},
 		Missions:          &MissionService{repository: repository, recordingRepository: repository, transactionRunner: transactionRunner},
@@ -30,7 +31,7 @@ func NewServices(repository store.Store) *Services {
 		Events:            &EventService{repository: repository},
 		Recording:         &RecordingService{repository: repository, transactionRunner: transactionRunner},
 		Streams:           &StreamSessionService{repository: repository},
-		Live:              &LiveStatusService{},
+		Live:              &LiveStatusService{repository: liveStatusRepository},
 		System:            &SystemService{repository: repository},
 		transactionRunner: transactionRunner,
 	}
