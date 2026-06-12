@@ -1,5 +1,5 @@
 export const liveDashboardLayoutStorageKey = "robot-center.liveDashboardLayout";
-export const liveDashboardLayoutVersion = 1;
+export const liveDashboardLayoutVersion = 2;
 export const liveDashboardGridColumns = 12;
 
 export const liveDashboardWidgetSpecs = {

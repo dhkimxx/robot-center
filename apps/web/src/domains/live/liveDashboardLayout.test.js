@@ -65,7 +65,7 @@ describe("liveDashboardLayout", () => {
     const storage = createMemoryStorage();
     const layout = writeLiveDashboardLayout(resizeLiveDashboardWidget(createPresetLiveDashboardLayout(), "rgb", { w: 10 }), storage);
 
-    expect(JSON.parse(storage.getItem(liveDashboardLayoutStorageKey))).toMatchObject({ version: 1 });
+    expect(JSON.parse(storage.getItem(liveDashboardLayoutStorageKey))).toMatchObject({ version: 2 });
     expect(readLiveDashboardLayout(storage)).toEqual(layout);
 
     const invalidStorage = createMemoryStorage({
@@ -78,6 +78,24 @@ describe("liveDashboardLayout", () => {
       "map",
       "sensor"
     ]);
+  });
+
+  it("uses cockpit when a previous layout version exists in storage", () => {
+    const storage = createMemoryStorage({
+      [liveDashboardLayoutStorageKey]: JSON.stringify({
+        presetId: "classic",
+        version: 1,
+        widgets: [
+          { h: 5, id: "rgb", w: 6 },
+          { h: 5, id: "thermal", w: 6 },
+          { h: 3, id: "map", w: 6 },
+          { h: 3, id: "sensor", w: 6 },
+          { h: 3, id: "event", w: 12 }
+        ]
+      })
+    });
+
+    expect(readLiveDashboardLayout(storage).presetId).toBe("cockpit");
   });
 
   it("keeps the default layout when browser storage fails", () => {
