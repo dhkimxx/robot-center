@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getTelemetryPositionState } from "../utils/formatters.js";
 import { createMissionRobotTargets } from "../domains/missions/missionHelpers.js";
 import {
   createMissionControlPageChrome,
@@ -19,7 +18,6 @@ import {
   createSensorPanelSnapshot,
   createTelemetryFromSensorLatest
 } from "../domains/live/sensorLatestMapper.js";
-import { useOperationStatuses } from "../domains/live/useOperationStatuses.js";
 import {
   clearEventData,
   clearObjectStorage,
@@ -61,7 +59,6 @@ export function useControlCenterController({
     () => missions.filter((mission) => mission.status === "active"),
     [missions]
   );
-  const primaryRobot = useMemo(() => robots[0] ?? null, [robots]);
   const robotController = useRobotManagementController({
     connectionInfo,
     loadAll,
@@ -115,12 +112,6 @@ export function useControlCenterController({
     sensorSnapshotState,
     serverSensorLatest
   } = useMissionSamples({ appendLiveEvent, selectedLiveTarget });
-  const activeLiveStream = useMemo(() => {
-    if (!selectedLiveTarget) {
-      return null;
-    }
-    return selectedLiveTarget.liveStatus?.stream ?? null;
-  }, [selectedLiveTarget]);
   const selectedRobotCode = selectedLiveTarget?.robotCode ?? "";
   const latestServerTelemetryFromSensors = useMemo(
     () => createTelemetryFromSensorLatest(serverSensorLatest, selectedRobotCode),
@@ -140,7 +131,6 @@ export function useControlCenterController({
   );
   const latestTelemetry = selectedLiveSession.telemetry ?? latestServerTelemetryFromSensors;
   const latestSensor = sensorPanelState.sensor;
-  const latestPositionState = getTelemetryPositionState(latestTelemetry);
   const recordingsController = useRecordingsController();
 
   const clearSystemObjectStorage = useCallback(async () => {
@@ -300,15 +290,6 @@ export function useControlCenterController({
     };
   }, [loadMissionLiveStatus, missionControlCode]);
 
-  const operationStatuses = useOperationStatuses({
-    activeLiveStream,
-    latestPositionState,
-    primaryRobot,
-    selectedLiveSession,
-    selectedLiveTarget,
-    statusError
-  });
-
   const pageChrome = useMemo(() => {
     if (routeMissionControlCode) {
       return createMissionControlPageChrome({
@@ -402,7 +383,6 @@ export function useControlCenterController({
       onRefreshSensorSnapshot: refreshSensorSnapshot,
       onSelectMission: missionController.setSelectedMissionManagementCode,
       onStartMission: missionController.startMission,
-      operationStatuses,
       replayMission: missionReplayMission,
       replayMissionCode: routeMissionReplayCode,
       robots,

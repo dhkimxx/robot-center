@@ -34,7 +34,6 @@ export function MissionControlView({
   onOpenMissionReplay,
   onReconnectSelectedMissionTarget,
   onRefreshSensorSnapshot,
-  operationStatuses,
   selectedMissionTargetKey,
   setSelectedMissionTargetKey
 }) {
@@ -77,7 +76,7 @@ export function MissionControlView({
       data-testid="live-control-layout"
     >
       <div
-        className="relative z-30 grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(300px,0.35fr)] gap-3 max-[900px]:grid-cols-1"
+        className="relative z-30 grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(520px,0.46fr)] gap-3 max-[1320px]:grid-cols-1"
         data-testid="live-control-topbar"
       >
         <MissionControlToolbar
@@ -94,7 +93,7 @@ export function MissionControlView({
           selectedStreamTimingLabel={selectedStreamTimingLabel}
           setSelectedMissionTargetKey={setSelectedMissionTargetKey}
         />
-        <ControlStatusSummary diagnostics={selectedDiagnostics} statuses={operationStatuses} />
+        <ControlStatusSummary diagnostics={selectedDiagnostics} />
       </div>
 
       <div className="relative z-0 grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2" data-testid="live-control-video-grid">

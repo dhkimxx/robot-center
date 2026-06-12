@@ -30,7 +30,6 @@ export default function MissionsScreen({
   onRefreshSensorSnapshot,
   onSelectMission,
   onStartMission,
-  operationStatuses,
   replayMission,
   replayMissionCode,
   robots,
@@ -91,7 +90,6 @@ export default function MissionsScreen({
         onOpenMissionReplay={onOpenMissionReplay}
         onReconnectSelectedMissionTarget={onReconnectSelectedMissionTarget}
         onRefreshSensorSnapshot={onRefreshSensorSnapshot}
-        operationStatuses={operationStatuses}
         isSensorSnapshotRefreshing={isSensorSnapshotRefreshing}
         selectedMissionTargetKey={selectedMissionTargetKey}
         setSelectedMissionTargetKey={setSelectedMissionTargetKey}
