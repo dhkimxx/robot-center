@@ -4,7 +4,9 @@ import { fetchMissions } from "../api/missionsApi.js";
 import { fetchRobots } from "../api/robotsApi.js";
 import { fetchSystemStatus } from "../api/systemApi.js";
 
-export function useControlCenterData() {
+export function useControlCenterData({
+  includeActiveMissionLiveStatuses = true
+} = {}) {
   const [systemStatus, setSystemStatus] = useState(null);
   const [robots, setRobots] = useState([]);
   const [missions, setMissions] = useState([]);
@@ -45,32 +47,27 @@ export function useControlCenterData() {
     }
     const [statusPayload, robotPayload, missionPayload] = payloads;
     const nextMissions = missionPayload.missions ?? [];
-    const liveStatusResults = await Promise.allSettled(
-      nextMissions
-        .filter((mission) => mission.status === "active")
-        .map(async (mission) => [mission.missionCode, await fetchMissionLiveStatus(mission.missionCode)])
-    );
+    const shouldLoadActiveMissionLiveStatuses = options.includeActiveMissionLiveStatuses
+      ?? includeActiveMissionLiveStatuses;
+    const nextLiveStatuses = shouldLoadActiveMissionLiveStatuses
+      ? await fetchActiveMissionLiveStatuses(nextMissions)
+      : null;
     if (requestSequence !== requestSequenceRef.current || options.isCancelled?.()) {
       return false;
     }
-    const nextLiveStatuses = {};
-    liveStatusResults.forEach((result) => {
-      if (result.status === "fulfilled") {
-        const [missionCode, liveStatus] = result.value;
-        nextLiveStatuses[missionCode] = liveStatus;
-      }
-    });
     setSystemStatus(statusPayload);
     setRobots(robotPayload.robots ?? []);
     setMissions(nextMissions);
-    setMissionLiveStatuses(nextLiveStatuses);
+    if (nextLiveStatuses) {
+      setMissionLiveStatuses(nextLiveStatuses);
+    }
     setStatusError("");
     setDataLoadState({
       hasLoaded: true,
       isLoading: false
     });
     return true;
-  }, []);
+  }, [includeActiveMissionLiveStatuses]);
 
   const loadMissionLiveStatus = useCallback(async (missionCode, options = {}) => {
     if (!missionCode) {
@@ -132,4 +129,20 @@ export function useControlCenterData() {
     loadAll,
     loadMissionLiveStatus
   };
+}
+
+async function fetchActiveMissionLiveStatuses(missions) {
+  const liveStatusResults = await Promise.allSettled(
+    missions
+      .filter((mission) => mission.status === "active")
+      .map(async (mission) => [mission.missionCode, await fetchMissionLiveStatus(mission.missionCode)])
+  );
+  const liveStatuses = {};
+  liveStatusResults.forEach((result) => {
+    if (result.status === "fulfilled") {
+      const [missionCode, liveStatus] = result.value;
+      liveStatuses[missionCode] = liveStatus;
+    }
+  });
+  return liveStatuses;
 }

@@ -10,6 +10,8 @@ import {
 } from "../../../utils/formatters.js";
 import "leaflet/dist/leaflet.css";
 
+const positionFreshnessRefreshIntervalMs = 5000;
+
 function MapRecenter({ position }) {
   const map = useMap();
 
@@ -24,7 +26,7 @@ export function RobotMap({ className = "", isPreviewDisabled = false, telemetry 
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    const timer = window.setInterval(() => setNow(Date.now()), positionFreshnessRefreshIntervalMs);
     return () => window.clearInterval(timer);
   }, []);
 

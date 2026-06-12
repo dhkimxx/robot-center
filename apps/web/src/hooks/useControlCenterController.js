@@ -36,6 +36,7 @@ export function useControlCenterController({
   selectedMissionCode: routeSelectedMissionCode = "",
   navigateToPath = null
 } = {}) {
+  const shouldPollActiveMissionLiveStatuses = !routeMissionControlCode && !routeMissionReplayCode;
   const {
     systemStatus,
     robots,
@@ -45,7 +46,9 @@ export function useControlCenterController({
     dataLoadState,
     loadAll,
     loadMissionLiveStatus
-  } = useControlCenterData();
+  } = useControlCenterData({
+    includeActiveMissionLiveStatuses: shouldPollActiveMissionLiveStatuses
+  });
   const {
     notifications,
     showNotification,

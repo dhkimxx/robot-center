@@ -83,21 +83,18 @@ export function VideoPane({
     }
 
     let cancelled = false;
-    let callbackId = 0;
     let intervalId = 0;
-    let frameCount = 0;
-    let sampleStartedAt = 0;
-    let previousTotalFrames = 0;
+    let previousTotalFrames = null;
     let previousMeasuredAt = 0;
 
-    const publishMetrics = (fps = 0) => {
+    const publishMetrics = (fps = null) => {
       if (cancelled) {
         return;
       }
       const width = video.videoWidth || 0;
       const height = video.videoHeight || 0;
       setVideoMetrics((current) => {
-        const roundedFPS = fps > 0 ? Math.round(fps) : current.fps;
+        const roundedFPS = Number.isFinite(fps) ? Math.max(0, Math.round(fps)) : current.fps;
         if (current.width === width && current.height === height && current.fps === roundedFPS) {
           return current;
         }
@@ -105,57 +102,41 @@ export function VideoPane({
       });
     };
 
-    const onVideoFrame = (now) => {
-      if (cancelled) {
-        return;
-      }
-      frameCount += 1;
-      if (!sampleStartedAt) {
-        sampleStartedAt = now;
-        publishMetrics();
-      }
-      const elapsedMs = now - sampleStartedAt;
-      if (elapsedMs >= 1000) {
-        publishMetrics((frameCount * 1000) / elapsedMs);
-        frameCount = 0;
-        sampleStartedAt = now;
-      }
-      callbackId = video.requestVideoFrameCallback(onVideoFrame);
-    };
-
-    const updateFromPlaybackQuality = () => {
+    const readDecodedFrameCount = () => {
       const quality = typeof video.getVideoPlaybackQuality === "function"
         ? video.getVideoPlaybackQuality()
         : null;
-      const now = Date.now();
-      if (!quality || !previousMeasuredAt) {
-        previousMeasuredAt = now;
-        previousTotalFrames = quality?.totalVideoFrames ?? 0;
+      const qualityFrames = Number(quality?.totalVideoFrames);
+      if (Number.isFinite(qualityFrames)) {
+        return qualityFrames;
+      }
+      const legacyFrames = Number(video.webkitDecodedFrameCount);
+      return Number.isFinite(legacyFrames) ? legacyFrames : null;
+    };
+
+    const updateFromDecodedFrames = () => {
+      const now = performance.now();
+      const totalFrames = readDecodedFrameCount();
+      if (!Number.isFinite(totalFrames)) {
         publishMetrics();
         return;
       }
-      const elapsedMs = now - previousMeasuredAt;
-      const frameDelta = (quality.totalVideoFrames ?? 0) - previousTotalFrames;
+      const fps = previousMeasuredAt > 0 && Number.isFinite(previousTotalFrames)
+        ? ((totalFrames - previousTotalFrames) * 1000) / Math.max(1, now - previousMeasuredAt)
+        : null;
       previousMeasuredAt = now;
-      previousTotalFrames = quality.totalVideoFrames ?? previousTotalFrames;
-      publishMetrics(elapsedMs > 0 ? (frameDelta * 1000) / elapsedMs : 0);
+      previousTotalFrames = totalFrames;
+      publishMetrics(fps);
     };
 
     const publishCurrentMetrics = () => publishMetrics();
     video.addEventListener("loadedmetadata", publishCurrentMetrics);
     video.addEventListener("resize", publishCurrentMetrics);
-    if (typeof video.requestVideoFrameCallback === "function") {
-      callbackId = video.requestVideoFrameCallback(onVideoFrame);
-    } else {
-      updateFromPlaybackQuality();
-      intervalId = window.setInterval(updateFromPlaybackQuality, 1000);
-    }
+    updateFromDecodedFrames();
+    intervalId = window.setInterval(updateFromDecodedFrames, 1000);
 
     return () => {
       cancelled = true;
-      if (callbackId && typeof video.cancelVideoFrameCallback === "function") {
-        video.cancelVideoFrameCallback(callbackId);
-      }
       if (intervalId) {
         window.clearInterval(intervalId);
       }
