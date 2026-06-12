@@ -38,30 +38,44 @@ func (s *Store) ListRecordingChunks(ctx context.Context) ([]domain.RecordingChun
 func (s *Store) SummarizeMissionRecordings(ctx context.Context, missionCode string) (repo.MissionRecordingSummary, error) {
 	missionCode = strings.TrimSpace(missionCode)
 	rows, err := s.sqlDB.QueryContext(ctx, `
-		WITH chunk_files AS (
+		WITH target_mission AS (
+			SELECT id
+			FROM missions
+			WHERE mission_code = $1
+		),
+		mission_chunks AS (
 			SELECT
 				r.robot_code,
 				rc.id,
 				rc.status,
 				rc.started_at,
 				rc.ended_at,
-				rc.updated_at,
+				rc.updated_at
+			FROM target_mission tm
+			JOIN recording_chunks rc ON rc.mission_id = tm.id
+			JOIN recording_sessions rs ON rs.id = rc.recording_session_id
+			JOIN robots r ON r.id = rc.robot_id
+			WHERE NOT (
+				rs.ended_at IS NOT NULL
+				AND rc.status IN ('recording', 'pending')
+			)
+		),
+		chunk_files AS (
+			SELECT
+				mc.robot_code,
+				mc.id,
+				mc.status,
+				mc.started_at,
+				mc.ended_at,
+				mc.updated_at,
 				COALESCE(BOOL_OR(so.object_type = 'rgb_audio_mp4'), false) AS has_rgb_audio_mp4,
 				COALESCE(BOOL_OR(so.object_type = 'thermal_mp4'), false) AS has_thermal_mp4,
 				COALESCE(BOOL_OR(so.object_type = 'sensor_jsonl'), false) AS has_sensor_jsonl,
 				COALESCE(BOOL_OR(so.object_type = 'telemetry_jsonl'), false) AS has_telemetry_jsonl,
 				COALESCE(BOOL_OR(so.object_type = 'manifest'), false) AS has_manifest
-			FROM recording_chunks rc
-			JOIN recording_sessions rs ON rs.id = rc.recording_session_id
-			JOIN missions m ON m.id = rc.mission_id
-			JOIN robots r ON r.id = rc.robot_id
-			LEFT JOIN storage_objects so ON so.recording_chunk_id = rc.id
-			WHERE m.mission_code = $1
-				AND NOT (
-					rs.ended_at IS NOT NULL
-					AND rc.status IN ('recording', 'pending')
-				)
-			GROUP BY r.robot_code, rc.id, rc.status, rc.started_at, rc.ended_at, rc.updated_at
+			FROM mission_chunks mc
+			LEFT JOIN storage_objects so ON so.recording_chunk_id = mc.id
+			GROUP BY mc.robot_code, mc.id, mc.status, mc.started_at, mc.ended_at, mc.updated_at
 		)
 		SELECT
 			robot_code,

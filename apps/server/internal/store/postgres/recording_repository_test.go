@@ -194,10 +194,12 @@ func TestRecordingRepositoryListsMissionChunksWithPagination(t *testing.T) {
 func TestRecordingRepositorySummarizesMissionRecordings(t *testing.T) {
 	store := newPostgresTestStore(t)
 	fixture := createActiveMissionFixture(t, store)
+	otherFixture := createActiveMissionFixture(t, store)
 	ctx := context.Background()
 	base := time.Date(2026, 6, 8, 2, 0, 0, 0, time.UTC)
 	firstChunk := createRecordingChunkFixture(t, store, fixture, base)
 	secondChunk := createRecordingChunkFixture(t, store, fixture, base.Add(10*time.Minute))
+	otherMissionChunk := createRecordingChunkFixture(t, store, otherFixture, base.Add(20*time.Minute))
 
 	if _, err := store.MarkRecordingChunkUploaded(ctx, firstChunk.ID, repo.RecordingUploadMetadata{}); err != nil {
 		t.Fatalf("mark first chunk uploaded: %v", err)
@@ -207,6 +209,12 @@ func TestRecordingRepositorySummarizesMissionRecordings(t *testing.T) {
 	}
 	if _, err := store.MarkRecordingChunkUploaded(ctx, secondChunk.ID, repo.RecordingUploadMetadata{}); err != nil {
 		t.Fatalf("mark second chunk uploaded: %v", err)
+	}
+	if _, err := store.MarkRecordingFileUploaded(ctx, otherMissionChunk.ID, "thermal_mp4", repo.RecordingUploadMetadata{}); err != nil {
+		t.Fatalf("mark other mission chunk thermal uploaded: %v", err)
+	}
+	if _, err := store.MarkRecordingChunkUploaded(ctx, otherMissionChunk.ID, repo.RecordingUploadMetadata{}); err != nil {
+		t.Fatalf("mark other mission chunk uploaded: %v", err)
 	}
 
 	summary, err := store.SummarizeMissionRecordings(ctx, fixture.Mission.MissionCode)
@@ -223,8 +231,36 @@ func TestRecordingRepositorySummarizesMissionRecordings(t *testing.T) {
 	if robotSummary.AvailableFileCounts["rgb_audio_mp4"] != 1 || robotSummary.AvailableFileCounts["manifest"] != 2 {
 		t.Fatalf("unexpected available file counts: %#v", robotSummary.AvailableFileCounts)
 	}
+	if robotSummary.AvailableFileCounts["thermal_mp4"] != 0 {
+		t.Fatalf("other mission files leaked into summary: %#v", robotSummary.AvailableFileCounts)
+	}
 	if robotSummary.MissingFileCounts["rgb_audio_mp4"] != 1 {
 		t.Fatalf("unexpected missing file counts: %#v", robotSummary.MissingFileCounts)
+	}
+}
+
+func TestRecordingRepositorySummarySkipsClosedSessionOpenChunks(t *testing.T) {
+	store := newPostgresTestStore(t)
+	fixture := createActiveMissionFixture(t, store)
+	ctx := context.Background()
+	now := time.Date(2026, 6, 8, 3, 0, 0, 0, time.UTC)
+	chunk := createRecordingChunkFixture(t, store, fixture, now)
+
+	_, err := store.sqlDB.Exec(`
+		UPDATE recording_sessions
+		SET status = 'finalizing', ended_at = $2
+		WHERE id = $1::uuid
+	`, chunk.RecordingSessionID, now.Add(time.Minute))
+	if err != nil {
+		t.Fatalf("force close recording session: %v", err)
+	}
+
+	summary, err := store.SummarizeMissionRecordings(ctx, fixture.Mission.MissionCode)
+	if err != nil {
+		t.Fatalf("summarize mission recordings: %v", err)
+	}
+	if summary.TotalChunks != 0 || len(summary.Robots) != 0 {
+		t.Fatalf("stale open chunk from closed session was summarized: %#v", summary)
 	}
 }
 
