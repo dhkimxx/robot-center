@@ -230,26 +230,13 @@ func (s *Store) ApplyHeartbeat(ctx context.Context, input repo.HeartbeatInput, b
 		reportedState = string(domain.RobotDeviceStateOnline)
 	}
 	deviceState := domain.NormalizeRobotDeviceState(reportedState)
-	var storedDeviceState string
-	err = tx.QueryRowContext(ctx, `
-		UPDATE robots
-		SET device_state = $2, last_seen_at = now(), updated_at = now()
-		WHERE id = $1::uuid
-		RETURNING id::text, robot_code, display_name, COALESCE(model_name, ''), device_state, last_seen_at, created_at, updated_at
-	`, robot.ID, string(deviceState)).Scan(
-		&robot.ID,
-		&robot.RobotCode,
-		&robot.DisplayName,
-		&robot.ModelName,
-		&storedDeviceState,
-		nullableTimeScanner(&robot.LastSeenAt),
-		&robot.CreatedAt,
-		&robot.UpdatedAt,
-	)
+	updatedRobot, updated, err := s.updateRobotHeartbeatIfDue(ctx, tx, robot.ID, deviceState)
 	if err != nil {
 		return domain.Robot{}, err
 	}
-	robot.DeviceState = domain.NormalizeRobotDeviceState(storedDeviceState)
+	if updated {
+		robot = updatedRobot
+	}
 	if err := tx.Commit(); err != nil {
 		return domain.Robot{}, err
 	}
@@ -271,6 +258,36 @@ func (s *Store) ResolveRobotByBearerToken(ctx context.Context, bearerToken strin
 		return domain.Robot{}, err
 	}
 	return robot, nil
+}
+
+func (s *Store) updateRobotHeartbeatIfDue(ctx context.Context, tx *sql.Tx, robotID string, deviceState domain.RobotDeviceState) (domain.Robot, bool, error) {
+	row := tx.QueryRowContext(ctx, `
+		WITH candidate AS (
+			SELECT id
+			FROM robots
+			WHERE id = $1::uuid
+			  AND archived_at IS NULL
+			  AND (
+				device_state IS DISTINCT FROM $2
+				OR last_seen_at IS NULL
+				OR last_seen_at < now() - interval '2 seconds'
+			  )
+			FOR UPDATE SKIP LOCKED
+		)
+		UPDATE robots AS r
+		SET device_state = $2, last_seen_at = now(), updated_at = now()
+		FROM candidate
+		WHERE r.id = candidate.id
+		RETURNING r.id::text, r.robot_code, r.display_name, COALESCE(r.model_name, ''), r.device_state, r.last_seen_at, r.created_at, r.updated_at
+	`, robotID, string(deviceState))
+	robot, err := scanRobot(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.Robot{}, false, nil
+	}
+	if err != nil {
+		return domain.Robot{}, false, err
+	}
+	return robot, true, nil
 }
 
 func (s *Store) findRobotRecordByCodeWithGorm(tx *gorm.DB, robotCode string) (model.RobotModel, error) {

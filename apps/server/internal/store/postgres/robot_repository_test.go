@@ -36,6 +36,18 @@ func TestRobotRepositoryPersistsRobotMissionAndHeartbeat(t *testing.T) {
 	if !updatedRobot.IsOnline(time.Now().UTC(), domain.DefaultRobotHeartbeatTTL) {
 		t.Fatalf("expected heartbeat robot to be online, got %#v", updatedRobot)
 	}
+	coalescedRobot, err := store.ApplyHeartbeat(ctx, repo.HeartbeatInput{
+		State:          string(domain.RobotDeviceStateOnline),
+		BatteryPercent: 87,
+		NetworkQuality: "test",
+		SentAt:         time.Now().UTC(),
+	}, connectionInfo.RobotToken)
+	if err != nil {
+		t.Fatalf("apply coalesced heartbeat: %v", err)
+	}
+	if updatedRobot.LastSeenAt == nil || coalescedRobot.LastSeenAt == nil || !coalescedRobot.LastSeenAt.Equal(*updatedRobot.LastSeenAt) {
+		t.Fatalf("expected immediate same-state heartbeat to reuse lastSeenAt, first=%v second=%v", updatedRobot.LastSeenAt, coalescedRobot.LastSeenAt)
+	}
 
 	mission, err := store.CreateMission(ctx, repo.CreateMissionInput{
 		Name:        "Repository Mission",
